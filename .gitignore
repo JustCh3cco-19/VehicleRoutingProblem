@@ -53,3 +53,10 @@ dkms.conf
 
 # debug information files
 *.dwo
+
+# Project build outputs
+/aco_vrp_seq
+/tests/test_aco
+*.gcno
+*.gcda
+*.gcov
