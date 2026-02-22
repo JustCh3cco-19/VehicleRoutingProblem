@@ -60,3 +60,9 @@ dkms.conf
 *.gcno
 *.gcda
 *.gcov
+/aco_vrp_omp
+/aco_vrp_mpi
+/aco_vrp_cuda
+
+.vscode/*
+reports/*.csv

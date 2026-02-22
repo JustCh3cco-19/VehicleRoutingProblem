@@ -6,7 +6,7 @@
 #include <string.h>
 
 static void route_init(Route *r, int cap) {
-  r->nodes = malloc((size_t)cap * sizeof(int));
+  r->nodes = (int *)malloc((size_t)cap * sizeof(int));
   r->cap = cap;
   r->len = 0;
 }
@@ -19,6 +19,7 @@ static void route_free(Route *r) {
 }
 
 void route_append(Route *r, int node) {
+  /* Keep append non-allocating for deterministic runtime behavior. */
   if (r->len >= r->cap) {
     return;
   }
@@ -26,17 +27,18 @@ void route_append(Route *r, int node) {
 }
 
 Solution *solution_create(int K, int n) {
-  Solution *s = malloc(sizeof(*s));
+  Solution *s = (Solution *)malloc(sizeof(*s));
   if (!s) return NULL;
 
   s->K = K;
-  s->routes = calloc((size_t)K, sizeof(Route));
+  s->routes = (Route *)calloc((size_t)K, sizeof(Route));
   if (!s->routes) {
     free(s);
     return NULL;
   }
 
   int cap = n + 2;
+  /* Worst-case route is depot + n customers + depot. */
   for (int i = 0; i < K; ++i) {
     route_init(&s->routes[i], cap);
     if (!s->routes[i].nodes) {
@@ -68,6 +70,7 @@ void solution_free(Solution *s) {
 }
 
 void solution_copy(Solution *dst, const Solution *src) {
+  /* Same K/capacity contract is guaranteed by caller/allocation path. */
   for (int i = 0; i < src->K; ++i) {
     const Route *r_src = &src->routes[i];
     Route *r_dst = &dst->routes[i];
@@ -113,7 +116,7 @@ bool solution_validate(const Solution *s, int n, int K, char *err,
     return false;
   }
 
-  bool *seen = calloc((size_t)(n + 1), sizeof(bool));
+  bool *seen = (bool *)calloc((size_t)(n + 1), sizeof(bool));
   if (!seen) {
     set_err(err, err_len, "allocation failure in solution_validate");
     return false;
@@ -140,6 +143,7 @@ bool solution_validate(const Solution *s, int n, int K, char *err,
         return false;
       }
       if (node == 0) {
+        /* Depot can only appear at route boundaries. */
         if (t != 0 && t != r->len - 1) {
           free(seen);
           set_err(err, err_len, "route contains depot inside the path");

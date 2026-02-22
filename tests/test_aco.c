@@ -181,12 +181,18 @@ static void test_exact_solver_known(void) {
       c[i][j] = 0.0;
     }
   }
-  c[0][1] = 1.0; c[1][0] = 1.0;
-  c[0][2] = 5.0; c[2][0] = 5.0;
-  c[0][3] = 4.0; c[3][0] = 4.0;
-  c[1][2] = 1.0; c[2][1] = 1.0;
-  c[1][3] = 10.0; c[3][1] = 10.0;
-  c[2][3] = 1.0; c[3][2] = 1.0;
+  c[0][1] = 1.0;
+  c[1][0] = 1.0;
+  c[0][2] = 5.0;
+  c[2][0] = 5.0;
+  c[0][3] = 4.0;
+  c[3][0] = 4.0;
+  c[1][2] = 1.0;
+  c[2][1] = 1.0;
+  c[1][3] = 10.0;
+  c[3][1] = 10.0;
+  c[2][3] = 1.0;
+  c[3][2] = 1.0;
 
   double opt = exact_vrp_cost(n, K, c);
   assert_close(opt, 7.0, 1e-9);
@@ -229,12 +235,53 @@ static void test_aco_vs_exact_small(void) {
   matrix_free(c);
 }
 
+static void test_openmp_matches_sequential(void) {
+  int n = 5;
+  int K = 2;
+  int m = 24;
+  int T = 60;
+
+  double **c = matrix_alloc(n);
+  assert(c);
+  for (int i = 0; i <= n; ++i) {
+    for (int j = 0; j <= n; ++j) {
+      if (i == j) {
+        c[i][j] = 0.0;
+      } else {
+        c[i][j] = 1.0 + fabs((double)i - (double)j);
+      }
+    }
+  }
+
+  Solution *best_seq = solution_create(K, n);
+  Solution *best_omp = solution_create(K, n);
+  assert(best_seq && best_omp);
+
+  double cost_seq = 0.0;
+  double cost_omp = 0.0;
+
+  aco_vrp_sequential(n, K, m, T, c, 1.0, 2.0, 0.5, 1.0, 1.0, 2026,
+                     best_seq, &cost_seq);
+  aco_vrp_openmp(n, K, m, T, c, 1.0, 2.0, 0.5, 1.0, 1.0, 2026,
+                 4, best_omp, &cost_omp);
+
+  assert_valid_solution(best_seq, n, K);
+  assert_valid_solution(best_omp, n, K);
+  assert_close(cost_seq, cost_omp, 1e-9);
+  assert_close(solution_cost(best_omp, c), cost_omp, 1e-9);
+
+  solution_free(best_seq);
+  solution_free(best_omp);
+  matrix_free(c);
+}
+
 int main(void) {
   test_single_customer();
   test_two_customers_two_vehicles();
   test_solution_validation();
   test_exact_solver_known();
   test_aco_vs_exact_small();
+  test_openmp_matches_sequential();
   printf("All tests passed.\n");
   return 0;
 }
