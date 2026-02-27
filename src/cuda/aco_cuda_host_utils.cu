@@ -84,6 +84,10 @@ cudaError_t aco_cuda_buffers_alloc(AcoCudaBuffers *b, int n, int K, int m,
   err = cudaMalloc((void **)&b->d_reduce_ids_b,
                    (size_t)b->reduce_capacity * sizeof(int));
   if (err != cudaSuccess) return err;
+  err = cudaMalloc((void **)&b->d_iter_best_ant, sizeof(int));
+  if (err != cudaSuccess) return err;
+  err = cudaMalloc((void **)&b->d_iter_best_cost, sizeof(float));
+  if (err != cudaSuccess) return err;
 
   err = cudaStreamCreateWithFlags(&b->stream_compute, cudaStreamNonBlocking);
   if (err != cudaSuccess) return err;
@@ -94,6 +98,13 @@ cudaError_t aco_cuda_buffers_alloc(AcoCudaBuffers *b, int n, int K, int m,
 void aco_cuda_buffers_free(AcoCudaBuffers *b) {
   if (b->stream_compute) {
     cudaStreamDestroy(b->stream_compute);
+  }
+
+  if (b->d_iter_best_cost) {
+    cudaFree(b->d_iter_best_cost);
+  }
+  if (b->d_iter_best_ant) {
+    cudaFree(b->d_iter_best_ant);
   }
 
   if (b->d_reduce_ids_b) {

@@ -43,6 +43,8 @@ typedef struct {
   float *d_reduce_costs_b;
   int *d_reduce_ids_a;
   int *d_reduce_ids_b;
+  int *d_iter_best_ant;
+  float *d_iter_best_cost;
 
   cudaStream_t stream_compute;
 } AcoCudaBuffers;

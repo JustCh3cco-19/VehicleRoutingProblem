@@ -71,7 +71,9 @@ tests/
   test_aco.c            # unit tests for core correctness and invariants
 
 scripts/
-  benchmark_scaling.py  # Python benchmark runner + CSV/Markdown report
+  benchmark_pipeline.py # Single entrypoint: benchmark + plot generation
+  benchmark_scaling.py  # Core benchmark runner (used by pipeline)
+  plot_scaling_results.py # Plot generator (used by pipeline)
 ```
 
 ## 3. Parallelization Design
@@ -117,6 +119,7 @@ Build targets:
 make seq
 make omp
 make mpi
+make mpi-cuda
 make cuda
 make test
 make benchmark
@@ -166,6 +169,12 @@ mpirun -np 4 ./aco_vrp_mpi 2 1 100 8 256 120
 ./aco_vrp_cuda [n K m T]
 ```
 
+### MPI + CUDA (multi-GPU)
+
+```bash
+mpirun -np <ranks> ./aco_vrp_mpi_cuda [n K m T]
+```
+
 All binaries print at least:
 
 - backend mode
@@ -190,24 +199,24 @@ The test suite covers:
 
 ## 7. Scaling Benchmark Workflow (Python)
 
-The script `scripts/benchmark_scaling.py` automates:
+The script `scripts/benchmark_pipeline.py` is the single entrypoint and automates:
 
-- build (`seq`, `omp`, `mpi`; optional `cuda`)
+- build (via `make` targets; include `cuda` with `--include-cuda`)
 - repeated runs with warmups
 - strong scaling for OpenMP and MPI+OpenMP
 - weak scaling for MPI+OpenMP
-- CSV and Markdown report generation
+- CSV generation + plot generation
 
 ### Default run
 
 ```bash
-python3 scripts/benchmark_scaling.py
+python3 scripts/benchmark_pipeline.py
 ```
 
 ### Example custom run
 
 ```bash
-python3 scripts/benchmark_scaling.py \
+python3 scripts/benchmark_pipeline.py \
   --repeats 4 \
   --warmups 1 \
   --n 120 --k 8 --m 320 --t 150 \
@@ -220,17 +229,33 @@ python3 scripts/benchmark_scaling.py \
 
 - `reports/scaling_results_raw.csv`: every run (including warmups and failures)
 - `reports/scaling_summary.csv`: aggregated mean/std/speedup/efficiency
-- `reports/scaling_report.md`: human-readable experiment summary
+- `reports/plots/*.png`: benchmark plots
 
-### Plot generation
+## 8. Reporting (in README)
 
-```bash
-python3 scripts/plot_scaling_results.py
-```
+The benchmark report is kept in this README, while raw/summary CSV data stays in `reports/`.
 
-This creates performance figures in `reports/plots/` and can be embedded in the scaling report.
+Generated plot files:
 
-## 8. Code Quality Notes
+- `reports/plots/backend_comparison.png`
+- `reports/plots/seq_vs_parallel_speedup.png`
+- `reports/plots/strong_runtime.png`
+- `reports/plots/strong_speedup.png`
+- `reports/plots/strong_efficiency.png`
+- `reports/plots/weak_runtime.png`
+- `reports/plots/weak_time_per_ant.png`
+
+### Plots
+
+![Best backend comparison](reports/plots/backend_comparison.png)
+![Seq vs parallel speedup](reports/plots/seq_vs_parallel_speedup.png)
+![Strong scaling runtime](reports/plots/strong_runtime.png)
+![Strong scaling speedup](reports/plots/strong_speedup.png)
+![Strong scaling efficiency](reports/plots/strong_efficiency.png)
+![Weak scaling runtime](reports/plots/weak_runtime.png)
+![Weak scaling time per ant](reports/plots/weak_time_per_ant.png)
+
+## 9. Code Quality Notes
 
 Key practices applied in this codebase:
 
@@ -242,15 +267,14 @@ Key practices applied in this codebase:
 - pinned memory and stream/event synchronization in CUDA path
 - comments added around non-trivial concurrency and memory logic
 
-## 9. Known Limitations
+## 10. Known Limitations
 
-- The current CUDA backend uses host-side pheromone deposit for clarity; this keeps logic simple but limits full-GPU speedup.
+- CUDA still copies back best route metadata each iteration to keep `best_solution` on host synchronized.
 - CUDA execution requires a compatible driver/runtime environment.
-- Input instances are currently generated in code (synthetic distance matrix); no file parser is included yet.
+- TSPLIB parser currently supports EUC_2D coordinates (minimal subset), not full CVRP constraints handling.
 
-## 10. Suggested Next Extensions
+## 11. Suggested Next Extensions
 
-- move pheromone deposit fully to GPU
-- add parser for standard VRP instance formats
-- add multi-GPU MPI+CUDA execution mode
+- extend TSPLIB parser support (demands/capacity/edge-weight variants)
+- add cooperative pheromone exchange across ranks in MPI+CUDA mode
 - add automated plot generation (speedup/efficiency charts) from CSV results

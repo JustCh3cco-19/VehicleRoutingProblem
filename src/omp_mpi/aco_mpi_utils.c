@@ -14,32 +14,46 @@ void aco_mpi_ant_range_for_rank(int m, int rank, int world_size,
   }
 }
 
-void aco_mpi_solution_to_flat(const Solution *s, int K, int n,
-                              int *lens, int *flat_nodes) {
-  /* Flatten variable-size routes into fixed-size slots for MPI_Bcast. */
-  int max_route_len = n + 2;
-  for (int i = 0; i < K; ++i) {
-    const Route *r = &s->routes[i];
-    int base = i * max_route_len;
-    lens[i] = r->len;
-    for (int t = 0; t < r->len; ++t) {
-      flat_nodes[base + t] = r->nodes[t];
-    }
-    for (int t = r->len; t < max_route_len; ++t) {
-      flat_nodes[base + t] = 0;
-    }
+int aco_mpi_rank_for_ant(int m, int world_size, int ant_id) {
+  int base = m / world_size;
+  int rem = m % world_size;
+  int first_block = rem * (base + 1);
+
+  if (ant_id < 0 || ant_id >= m) {
+    return world_size;
   }
+  if (ant_id < first_block) {
+    return ant_id / (base + 1);
+  }
+  if (base == 0) {
+    return world_size;
+  }
+  return rem + (ant_id - first_block) / base;
 }
 
-void aco_mpi_flat_to_solution(Solution *dst, int K, int n,
-                              const int *lens, const int *flat_nodes) {
-  int max_route_len = n + 2;
+int aco_mpi_solution_to_flat_packed(const Solution *s, int K,
+                                    int *lens, int *flat_nodes) {
+  int pos = 0;
+  for (int i = 0; i < K; ++i) {
+    const Route *r = &s->routes[i];
+    lens[i] = r->len;
+    for (int t = 0; t < r->len; ++t) {
+      flat_nodes[pos++] = r->nodes[t];
+    }
+  }
+  return pos;
+}
+
+void aco_mpi_flat_packed_to_solution(Solution *dst, int K,
+                                     const int *lens, int total_nodes,
+                                     const int *flat_nodes) {
+  int pos = 0;
   solution_reset(dst);
   for (int i = 0; i < K; ++i) {
-    int base = i * max_route_len;
     Route *r = &dst->routes[i];
-    for (int t = 0; t < lens[i]; ++t) {
-      route_append(r, flat_nodes[base + t]);
+    int len = lens[i];
+    for (int t = 0; t < len && pos < total_nodes; ++t) {
+      route_append(r, flat_nodes[pos++]);
     }
   }
 }

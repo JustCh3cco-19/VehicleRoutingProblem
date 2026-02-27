@@ -50,4 +50,17 @@ __global__ void aco_cuda_deposit_best_tau_kernel(float *tau, int n,
                                                  int best_ant,
                                                  float deposit);
 
+/* Read reduced best pair and write device scalars (best ant + best cost). */
+__global__ void aco_cuda_extract_best_pair_kernel(const float *best_cost_in,
+                                                  const int *best_id_in,
+                                                  int *best_ant_out,
+                                                  float *best_cost_out);
+
+/* Deposit pheromone using device-side best pair directly. */
+__global__ void aco_cuda_deposit_best_tau_from_device_kernel(
+    float *tau, int n, int K, int max_route_len,
+    const int *routes, const int *route_lens,
+    const int *best_ant_dev, const float *best_cost_dev,
+    float Q);
+
 #endif

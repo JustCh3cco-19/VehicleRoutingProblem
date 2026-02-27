@@ -275,6 +275,47 @@ static void test_openmp_matches_sequential(void) {
   matrix_free(c);
 }
 
+static void test_openmp_consistent_across_threads(void) {
+  int n = 6;
+  int K = 2;
+  int m = 40;
+  int T = 70;
+
+  double **c = matrix_alloc(n);
+  assert(c);
+  for (int i = 0; i <= n; ++i) {
+    for (int j = 0; j <= n; ++j) {
+      if (i == j) {
+        c[i][j] = 0.0;
+      } else {
+        c[i][j] = 1.0 + fabs((double)i - (double)j);
+      }
+    }
+  }
+
+  Solution *best_omp1 = solution_create(K, n);
+  Solution *best_omp4 = solution_create(K, n);
+  assert(best_omp1 && best_omp4);
+
+  double cost_omp1 = 0.0;
+  double cost_omp4 = 0.0;
+
+  aco_vrp_openmp(n, K, m, T, c, 1.0, 2.0, 0.5, 1.0, 1.0, 1337,
+                 1, best_omp1, &cost_omp1);
+  aco_vrp_openmp(n, K, m, T, c, 1.0, 2.0, 0.5, 1.0, 1.0, 1337,
+                 4, best_omp4, &cost_omp4);
+
+  assert_valid_solution(best_omp1, n, K);
+  assert_valid_solution(best_omp4, n, K);
+  assert_close(cost_omp1, cost_omp4, 1e-9);
+  assert_close(solution_cost(best_omp1, c), cost_omp1, 1e-9);
+  assert_close(solution_cost(best_omp4, c), cost_omp4, 1e-9);
+
+  solution_free(best_omp1);
+  solution_free(best_omp4);
+  matrix_free(c);
+}
+
 int main(void) {
   test_single_customer();
   test_two_customers_two_vehicles();
@@ -282,6 +323,7 @@ int main(void) {
   test_exact_solver_known();
   test_aco_vs_exact_small();
   test_openmp_matches_sequential();
+  test_openmp_consistent_across_threads();
   printf("All tests passed.\n");
   return 0;
 }

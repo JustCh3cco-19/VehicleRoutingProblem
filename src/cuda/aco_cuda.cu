@@ -106,29 +106,30 @@ int aco_vrp_cuda(int n, int K, int m, int T, double **c,
       reduce_in = reduce_out;
     }
 
-    float iter_best_cost_f = FLT_MAX;
-    int iter_best_ant = m;
-
-    CUDA_CHECK_GOTO(cudaStreamSynchronize(buf.stream_compute), cleanup);
-    CUDA_CHECK_GOTO(cudaMemcpy(&iter_best_cost_f, reduce_cost_in,
-                               sizeof(float), cudaMemcpyDeviceToHost),
-                    cleanup);
-    CUDA_CHECK_GOTO(cudaMemcpy(&iter_best_ant, reduce_id_in,
-                               sizeof(int), cudaMemcpyDeviceToHost),
-                    cleanup);
+    aco_cuda_extract_best_pair_kernel<<<1, 1, 0, buf.stream_compute>>>(
+        reduce_cost_in, reduce_id_in, buf.d_iter_best_ant, buf.d_iter_best_cost);
+    CUDA_CHECK_GOTO(cudaGetLastError(), cleanup);
 
     aco_cuda_evaporate_tau_kernel<<<grid_matrix, block, 0, buf.stream_compute>>>(
         buf.d_tau, n, rho_f);
     CUDA_CHECK_GOTO(cudaGetLastError(), cleanup);
 
-    if (iter_best_ant < m && iter_best_cost_f < FLT_MAX) {
-      float deposit = Q_f / iter_best_cost_f;
-      aco_cuda_deposit_best_tau_kernel<<<1, 1, 0, buf.stream_compute>>>(
-          buf.d_tau, n, K, buf.max_route_len,
-          buf.d_routes, buf.d_lens,
-          iter_best_ant, deposit);
-      CUDA_CHECK_GOTO(cudaGetLastError(), cleanup);
-    }
+    aco_cuda_deposit_best_tau_from_device_kernel<<<1, 1, 0, buf.stream_compute>>>(
+        buf.d_tau, n, K, buf.max_route_len,
+        buf.d_routes, buf.d_lens,
+        buf.d_iter_best_ant, buf.d_iter_best_cost,
+        Q_f);
+    CUDA_CHECK_GOTO(cudaGetLastError(), cleanup);
+
+    float iter_best_cost_f = FLT_MAX;
+    int iter_best_ant = m;
+    CUDA_CHECK_GOTO(cudaStreamSynchronize(buf.stream_compute), cleanup);
+    CUDA_CHECK_GOTO(cudaMemcpy(&iter_best_cost_f, buf.d_iter_best_cost,
+                               sizeof(float), cudaMemcpyDeviceToHost),
+                    cleanup);
+    CUDA_CHECK_GOTO(cudaMemcpy(&iter_best_ant, buf.d_iter_best_ant,
+                               sizeof(int), cudaMemcpyDeviceToHost),
+                    cleanup);
 
     if (iter_best_ant < m && iter_best_cost_f < FLT_MAX) {
       double iter_cost = (double)iter_best_cost_f;

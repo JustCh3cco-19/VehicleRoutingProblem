@@ -3,6 +3,10 @@
 
 #include "solution.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /*
  * Sequential baseline: single process, single thread.
  */
@@ -38,8 +42,8 @@ int aco_vrp_mpi_openmp(int n, int K, int m, int T, double **c,
 
 /*
  * CUDA version:
- * - ant construction and evaporation run on device
- * - best-ant selection and pheromone deposit run on host.
+ * - ant construction, reduction, evaporation and pheromone deposit run on device
+ * - host performs orchestration and best-solution copy-back.
  *
  * Returns 0 on success, non-zero on failure.
  */
@@ -47,5 +51,9 @@ int aco_vrp_cuda(int n, int K, int m, int T, double **c,
                  double alpha, double beta, double rho,
                  double tau0, double Q, unsigned int seed,
                  Solution *best_solution, double *best_cost);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

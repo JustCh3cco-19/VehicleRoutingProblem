@@ -339,3 +339,48 @@ __global__ void aco_cuda_deposit_best_tau_kernel(float *tau, int n,
     }
   }
 }
+
+__global__ void aco_cuda_extract_best_pair_kernel(const float *best_cost_in,
+                                                  const int *best_id_in,
+                                                  int *best_ant_out,
+                                                  float *best_cost_out) {
+  if (blockIdx.x != 0 || threadIdx.x != 0) {
+    return;
+  }
+  *best_ant_out = best_id_in[0];
+  *best_cost_out = best_cost_in[0];
+}
+
+__global__ void aco_cuda_deposit_best_tau_from_device_kernel(
+    float *tau, int n, int K, int max_route_len,
+    const int *routes, const int *route_lens,
+    const int *best_ant_dev, const float *best_cost_dev,
+    float Q) {
+  if (blockIdx.x != 0 || threadIdx.x != 0) {
+    return;
+  }
+  int best_ant = best_ant_dev[0];
+  float best_cost = best_cost_dev[0];
+  if (best_ant < 0 || best_cost <= 0.0f || !isfinite(best_cost)) {
+    return;
+  }
+  float deposit = Q / best_cost;
+  if (deposit <= 0.0f || !isfinite(deposit)) {
+    return;
+  }
+
+  int size = n + 1;
+  int ant_route_base = best_ant * K * max_route_len;
+  int ant_len_base = best_ant * K;
+
+  for (int vehicle = 0; vehicle < K; ++vehicle) {
+    int route_base = ant_route_base + vehicle * max_route_len;
+    int len = route_lens[ant_len_base + vehicle];
+    for (int t = 0; t + 1 < len; ++t) {
+      int u = routes[route_base + t];
+      int v = routes[route_base + t + 1];
+      tau[u * size + v] += deposit;
+      tau[v * size + u] += deposit;
+    }
+  }
+}

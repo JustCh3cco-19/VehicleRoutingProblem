@@ -57,6 +57,8 @@ dkms.conf
 # Project build outputs
 /aco_vrp_seq
 /tests/test_aco
+/tests/test_parallel_mpi
+/tests/test_cuda
 *.gcno
 *.gcda
 *.gcov
