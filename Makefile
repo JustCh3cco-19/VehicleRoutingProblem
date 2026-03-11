@@ -55,24 +55,25 @@ TEST_CUDA_OBJ=tests/test_cuda.o
 all: $(SEQ_BIN) $(OMP_BIN) $(MPI_BIN) $(CUDA_BIN)
 
 help:
-	@echo
-	@echo "Ant Colony Optimization for VRP"
-	@echo
-	@echo "make all      Build seq + OpenMP + MPI+OpenMP + CUDA"
-	@echo "make seq      Build sequential binary"
-	@echo "make omp      Build OpenMP binary"
-	@echo "make mpi      Build MPI+OpenMP binary"
-	@echo "make mpi-cuda Build MPI+CUDA multi-GPU binary"
-	@echo "make cuda     Build CUDA binary (if nvcc is available)"
-	@echo "make test     Build and run tests (seq + OpenMP)"
-	@echo "make test-mpi Build and run MPI smoke test"
-	@echo "make test-parallel Build and run MPI/OpenMP parallel tests"
-	@echo "make test-cuda Build and run CUDA tests"
-	@echo "make benchmark Run benchmark+plot pipeline"
-	@echo "make coverage Build with gcov and run tests"
-	@echo "make debug    Build with -DDEBUG"
-	@echo "make clean    Remove targets"
-	@echo
+	@printf "\nAnt Colony Optimization for VRP\n\n"
+	@printf "Build targets:\n"
+	@printf "  %-20s %s\n" "make all" "Build seq + OpenMP + MPI+OpenMP + CUDA"
+	@printf "  %-20s %s\n" "make seq" "Build sequential binary"
+	@printf "  %-20s %s\n" "make omp" "Build OpenMP binary"
+	@printf "  %-20s %s\n" "make mpi" "Build MPI+OpenMP binary"
+	@printf "  %-20s %s\n" "make mpi-cuda" "Build MPI+CUDA multi-GPU binary"
+	@printf "  %-20s %s\n" "make cuda" "Build CUDA binary (if nvcc is available)"
+	@printf "\nTest targets:\n"
+	@printf "  %-20s %s\n" "make test" "Build and run all tests"
+	@printf "  %-20s %s\n" "make test-unit" "Build and run unit tests (seq + OpenMP)"
+	@printf "  %-20s %s\n" "make test-mpi" "Build and run MPI smoke test"
+	@printf "  %-20s %s\n" "make test-parallel" "Build and run MPI/OpenMP parallel tests"
+	@printf "  %-20s %s\n" "make test-cuda" "Build and run CUDA tests"
+	@printf "\nUtility targets:\n"
+	@printf "  %-20s %s\n" "make benchmark" "Run benchmark+plot pipeline"
+	@printf "  %-20s %s\n" "make coverage" "Build with gcov and run tests"
+	@printf "  %-20s %s\n" "make debug" "Build with -DDEBUG"
+	@printf "  %-20s %s\n\n" "make clean" "Remove targets"
 
 $(SRC_SEQ)/main_seq.o: $(SRC_SEQ)/main_seq.c include/aco.h include/matrix.h include/solution.h
 	$(CC) $(DEBUG) $(CFLAGS) -c $< -o $@
@@ -171,7 +172,9 @@ $(TEST_MPI_BIN): $(TEST_MPI_OBJ) $(SEQ_OBJ) $(MPI_OBJ) $(CORE_OBJ)
 $(TEST_CUDA_BIN): $(TEST_CUDA_OBJ) $(CUDA_OBJ) $(CUDA_LIB_OBJ)
 	$(CUDACC) $(CUDAFLAGS) $^ $(CUDALIBS) -o $@
 
-test: $(TEST_BIN)
+test: test-unit test-mpi test-parallel test-cuda
+
+test-unit: $(TEST_BIN)
 	./$(TEST_BIN)
 
 test-mpi: $(MPI_BIN)
@@ -188,7 +191,7 @@ benchmark: all
 
 coverage:
 	$(MAKE) clean
-	$(MAKE) test CFLAGS="$(CFLAGS) $(COVERAGE_FLAGS)" LIBS="$(LIBS) $(COVERAGE_LIBS)"
+	$(MAKE) test-unit CFLAGS="$(CFLAGS) $(COVERAGE_FLAGS)" LIBS="$(LIBS) $(COVERAGE_LIBS)"
 
 debug:
 	$(MAKE) DEBUG=-DDEBUG all
@@ -197,4 +200,4 @@ clean:
 	rm -f $(SEQ_BIN) $(OMP_BIN) $(MPI_BIN) $(CUDA_BIN) $(MPI_CUDA_BIN) $(TEST_BIN) $(TEST_MPI_BIN) $(TEST_CUDA_BIN)
 	find src tests -type f \( -name '*.o' -o -name '*.gcno' -o -name '*.gcda' \) -delete
 
-.PHONY: all help clean debug test test-mpi test-parallel test-cuda benchmark coverage seq omp mpi mpi-cuda cuda
+.PHONY: all help clean debug test test-unit test-mpi test-parallel test-cuda benchmark coverage seq omp mpi mpi-cuda cuda
