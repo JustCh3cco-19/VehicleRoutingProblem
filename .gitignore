@@ -60,3 +60,5 @@ dkms.conf
 *.gcno
 *.gcda
 *.gcov
+
+.vscode/
