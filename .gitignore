@@ -62,3 +62,9 @@ dkms.conf
 *.gcov
 
 .vscode/
+
+report/
+
+results/
+
+scripts/
