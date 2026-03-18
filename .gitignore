@@ -68,3 +68,4 @@ dkms.conf
 
 .vscode/*
 reports/*.csv
+*.pyc
