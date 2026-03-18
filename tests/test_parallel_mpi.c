@@ -8,6 +8,18 @@
 #include <stdbool.h>
 #include <stdio.h>
 
+/*
+ * Function:  assert_close
+ * -----------------------
+ * checks that two doubles differ by at most tol and aborts test execution on
+ * mismatch.
+ *
+ *  a: first value
+ *  b: second value
+ *  tol: absolute tolerance
+ *
+ *  returns: nothing; aborts via assert on failure
+ */
 static void assert_close(double a, double b, double tol) {
   if (fabs(a - b) > tol) {
     fprintf(stderr, "assert_close failed: %.12f vs %.12f\n", a, b);
@@ -15,6 +27,15 @@ static void assert_close(double a, double b, double tol) {
   }
 }
 
+/*
+ * Function:  main
+ * --------------
+ * integration test for the MPI/OpenMP configuration of aco_vrp on a tiny
+ * instance; validates solution correctness and inter-rank consistency.
+ *
+ *  returns: 0 when all checks pass
+ *           non-zero if MPI init fails or any assert triggers
+ */
 int main(void) {
   int provided = 0;
   int rc = MPI_Init_thread(NULL, NULL, MPI_THREAD_FUNNELED, &provided);
@@ -39,8 +60,7 @@ int main(void) {
   assert(best);
 
   double best_cost = 0.0;
-  aco_vrp_sequential(n, K, m, T, c, 1.0, 2.0, 0.5, 1.0, 1.0, 1234, best,
-                     &best_cost);
+  aco_vrp(n, K, m, T, c, 1.0, 2.0, 0.5, 1.0, 1.0, 1234, best, &best_cost);
 
   char err[128];
   bool ok = solution_validate(best, n, K, err, sizeof(err));

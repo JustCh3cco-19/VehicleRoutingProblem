@@ -5,12 +5,31 @@
 #include <stdlib.h>
 #include <string.h>
 
+/*
+ * Function:  route_init
+ * ---------------------
+ * initializes one route with fixed capacity and empty content.
+ *
+ *  r: route to initialize
+ *  cap: maximum number of nodes this route can store
+ *
+ *  returns: nothing; r->nodes is NULL if allocation fails
+ */
 static void route_init(Route *r, int cap) {
   r->nodes = malloc((size_t)cap * sizeof(int));
   r->cap = cap;
   r->len = 0;
 }
 
+/*
+ * Function:  route_free
+ * ---------------------
+ * releases memory owned by one route and resets its fields.
+ *
+ *  r: route to free
+ *
+ *  returns: nothing
+ */
 static void route_free(Route *r) {
   free(r->nodes);
   r->nodes = NULL;
@@ -18,6 +37,16 @@ static void route_free(Route *r) {
   r->len = 0;
 }
 
+/*
+ * Function:  route_append
+ * -----------------------
+ * appends one node to a route if there is free capacity.
+ *
+ *  r: destination route
+ *  node: node id to append
+ *
+ *  returns: nothing; if capacity is exhausted, the route is unchanged
+ */
 void route_append(Route *r, int node) {
   if (r->len >= r->cap) {
     return;
@@ -25,6 +54,18 @@ void route_append(Route *r, int node) {
   r->nodes[r->len++] = node;
 }
 
+/*
+ * Function:  solution_create
+ * --------------------------
+ * allocates a Solution with K routes. each route gets capacity n+2 to hold
+ * depot start/end and up to all customers.
+ *
+ *  K: number of routes
+ *  n: number of customers
+ *
+ *  returns: allocated Solution pointer on success
+ *           NULL on allocation failure
+ */
 Solution *solution_create(int K, int n) {
   Solution *s = malloc(sizeof(*s));
   if (!s) return NULL;
@@ -52,12 +93,30 @@ Solution *solution_create(int K, int n) {
   return s;
 }
 
+/*
+ * Function:  solution_reset
+ * -------------------------
+ * clears all route lengths without reallocating memory.
+ *
+ *  s: solution to reset
+ *
+ *  returns: nothing
+ */
 void solution_reset(Solution *s) {
   for (int i = 0; i < s->K; ++i) {
     s->routes[i].len = 0;
   }
 }
 
+/*
+ * Function:  solution_free
+ * ------------------------
+ * frees all routes and the parent solution structure.
+ *
+ *  s: solution to free; NULL is accepted
+ *
+ *  returns: nothing
+ */
 void solution_free(Solution *s) {
   if (!s) return;
   for (int i = 0; i < s->K; ++i) {
@@ -67,6 +126,16 @@ void solution_free(Solution *s) {
   free(s);
 }
 
+/*
+ * Function:  solution_copy
+ * ------------------------
+ * copies route lengths and node sequences from src to dst.
+ *
+ *  dst: destination solution
+ *  src: source solution
+ *
+ *  returns: nothing
+ */
 void solution_copy(Solution *dst, const Solution *src) {
   for (int i = 0; i < src->K; ++i) {
     const Route *r_src = &src->routes[i];
@@ -76,6 +145,16 @@ void solution_copy(Solution *dst, const Solution *src) {
   }
 }
 
+/*
+ * Function:  solution_cost
+ * ------------------------
+ * computes sum of arc costs over all consecutive node pairs in all routes.
+ *
+ *  s: solution to evaluate
+ *  c: cost matrix
+ *
+ *  returns: total route traversal cost
+ */
 double solution_cost(const Solution *s, double **c) {
   double cost = 0.0;
   for (int i = 0; i < s->K; ++i) {
@@ -89,11 +168,40 @@ double solution_cost(const Solution *s, double **c) {
   return cost;
 }
 
+/*
+ * Function:  set_err
+ * ------------------
+ * writes an error message into the output buffer if it is valid.
+ *
+ *  err: destination buffer
+ *  err_len: buffer size in bytes
+ *  msg: message to write
+ *
+ *  returns: nothing
+ */
 static void set_err(char *err, size_t err_len, const char *msg) {
   if (!err || err_len == 0) return;
   snprintf(err, err_len, "%s", msg);
 }
 
+/*
+ * Function:  solution_validate
+ * ----------------------------
+ * checks structural validity of a VRP solution:
+ * 1) solution metadata and route pointers are coherent
+ * 2) each route starts/ends at depot and never uses depot internally
+ * 3) node ids are in range
+ * 4) each customer is visited exactly once globally
+ *
+ *  s: solution to validate
+ *  n: number of customers
+ *  K: expected route count
+ *  err: optional buffer for validation error text
+ *  err_len: size of err buffer
+ *
+ *  returns: true when solution is valid
+ *           false when any constraint is violated or on allocation failure
+ */
 bool solution_validate(const Solution *s, int n, int K, char *err,
                        size_t err_len) {
   if (!s) {

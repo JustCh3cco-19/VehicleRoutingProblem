@@ -19,117 +19,33 @@
 #include <mpi.h>
 #endif
 
-#define EPS 1e-9
-
-static double rand01(void) {
-  return (double)rand() / (double)RAND_MAX;
-}
-
-static double rand01_state(unsigned int *state) {
-  if (!state) {
-    return rand01();
-  }
-
-  unsigned int x = *state;
-  if (x == 0u) {
-    x = 1u;
-  }
-
-  x ^= x << 13;
-  x ^= x >> 17;
-  x ^= x << 5;
-  *state = x;
-
-  return (double)x / (double)UINT_MAX;
-}
-
-static unsigned int make_ant_seed(unsigned int base_seed, int iter,
-                                  int ant_index) {
-  unsigned int x = base_seed ? base_seed : 1u;
-  x ^= 0xa511e9b3u;
-  x ^= (unsigned int)(iter + 1) * 0x9e3779b1u;
-  x ^= (unsigned int)(ant_index + 1) * 0xc2b2ae3du;
-  return x ? x : 1u;
-}
-
-static int select_next(int current, const bool *visited, int n,
-                       double **tau, double **eta, double alpha, double beta,
-                       unsigned int *rng_state) {
-  double denom = 0.0;
-  for (int j = 1; j <= n; ++j) {
-    if (!visited[j]) {
-      double score = pow(tau[current][j], alpha) * pow(eta[current][j], beta);
-      denom += score;
-    }
-  }
-  if (denom <= 0.0) {
-    for (int j = 1; j <= n; ++j) {
-      if (!visited[j]) return j;
-    }
-    return 0;
-  }
-
-  double r = rand01_state(rng_state);
-  double cumulative = 0.0;
-  int last = 1;
-  for (int j = 1; j <= n; ++j) {
-    if (!visited[j]) {
-      double score = pow(tau[current][j], alpha) * pow(eta[current][j], beta);
-      double p = score / denom;
-      cumulative += p;
-      last = j;
-      if (cumulative >= r) {
-        return j;
-      }
-    }
-  }
-  return last;
-}
-
-static void build_ant_solution(Solution *sol, bool *visited, int n, int K,
-                               double **tau, double **eta, double alpha,
-                               double beta, unsigned int *rng_state) {
-  memset(visited, 0, (size_t)(n + 1) * sizeof(bool));
-  solution_reset(sol);
-
-  int unvisited_count = n;
-
-  for (int vehicle = 1; vehicle <= K; ++vehicle) {
-    Route *r = &sol->routes[vehicle - 1];
-    route_append(r, 0);
-    int current = 0;
-
-    while (unvisited_count > 0 && unvisited_count > (K - vehicle)) {
-      int next = select_next(current, visited, n, tau, eta, alpha, beta,
-                             rng_state);
-      route_append(r, next);
-      visited[next] = true;
-      --unvisited_count;
-      current = next;
-    }
-
-    route_append(r, 0);
-  }
-
-  if (unvisited_count > 0) {
-    Route *last = &sol->routes[K - 1];
-    int end_idx = last->len - 1;
-    for (int j = 1; j <= n; ++j) {
-      if (!visited[j]) {
-        last->nodes[end_idx++] = j;
-        visited[j] = true;
-      }
-    }
-    last->nodes[end_idx++] = 0;
-    last->len = end_idx;
-  }
-}
-
 #ifdef USE_MPI
+/*
+ * Function:  solution_pack_size_ints
+ * ----------------------------------
+ * computes the integer buffer length required to serialize a Solution with K
+ * routes and per-route capacity n+2.
+ *
+ *  K: number of routes
+ *  n: number of customers
+ *
+ *  returns: number of ints needed in packed representation
+ */
 static int solution_pack_size_ints(int K, int n) {
   return 1 + K + K * (n + 2);
 }
 
+/*
+ * Function:  solution_pack
+ * ------------------------
+ * serializes a Solution into an integer buffer for MPI broadcast.
+ *
+ *  sol: source solution
+ *  n: number of customers
+ *  buf: destination integer buffer with size solution_pack_size_ints(K, n)
+ *
+ *  returns: nothing
+ */
 static void solution_pack(const Solution *sol, int n, int *buf) {
   int route_cap = n + 2;
   buf[0] = sol->K;
@@ -154,6 +70,18 @@ static void solution_pack(const Solution *sol, int n, int *buf) {
   }
 }
 
+/*
+ * Function:  solution_unpack
+ * --------------------------
+ * deserializes a packed solution buffer into an existing Solution object.
+ *
+ *  sol: destination solution (already allocated with matching K/capacities)
+ *  n: number of customers
+ *  buf: serialized integer buffer
+ *
+ *  returns: true on successful unpack
+ *           false if packed metadata is inconsistent
+ */
 static bool solution_unpack(Solution *sol, int n, const int *buf) {
   int route_cap = n + 2;
   if (buf[0] != sol->K) {
@@ -178,10 +106,38 @@ static bool solution_unpack(Solution *sol, int n, const int *buf) {
 }
 #endif
 
-void aco_vrp_sequential(int n, int K, int m, int T, double **c,
-                        double alpha, double beta, double rho, double tau0,
-                        double Q, unsigned int seed, Solution *best_solution,
-                        double *best_cost) {
+/*
+ * Function:  aco_vrp
+ * ------------------
+ * runs the hybrid OpenMP+MPI ACO solver for VRP.
+ * algorithm outline:
+ * 1) split ants across MPI ranks
+ * 2) initialize shared eta/tau matrices
+ * 3) for each iteration, evaluate local ants (OpenMP in-rank parallelism)
+ * 4) reduce local iteration-best to global best with MPI collectives
+ * 5) synchronize winning solution across ranks
+ * 6) update pheromone matrix from global iteration-best solution
+ *
+ *  n: number of customers (1..n), with depot at 0
+ *  K: number of routes/vehicles
+ *  m: total ants per iteration across all ranks
+ *  T: number of iterations
+ *  c: cost matrix
+ *  alpha: pheromone exponent
+ *  beta: heuristic exponent
+ *  rho: evaporation factor
+ *  tau0: initial pheromone value
+ *  Q: deposit scale
+ *  seed: base random seed
+ *  best_solution: output container for best route set
+ *  best_cost: output best objective value
+ *
+ *  returns: nothing; on allocation or synchronization failure prints an error
+ *           and returns early
+ */
+void aco_vrp(int n, int K, int m, int T, double **c, double alpha,
+             double beta, double rho, double tau0, double Q,
+             unsigned int seed, Solution *best_solution, double *best_cost) {
   int mpi_rank = 0;
   int mpi_size = 1;
   bool mpi_enabled = false;
@@ -211,9 +167,8 @@ void aco_vrp_sequential(int n, int K, int m, int T, double **c,
 
 #ifdef USE_MPI
   int packed_len = mpi_enabled ? solution_pack_size_ints(K, n) : 0;
-  int *packed_solution = mpi_enabled
-                             ? calloc((size_t)packed_len, sizeof(int))
-                             : NULL;
+  int *packed_solution =
+      mpi_enabled ? calloc((size_t)packed_len, sizeof(int)) : NULL;
 #endif
 
   int local_ok = (eta && tau && iter_best) ? 1 : 0;
@@ -227,8 +182,9 @@ void aco_vrp_sequential(int n, int K, int m, int T, double **c,
     local_ok = global_ok;
   }
 #endif
+
   if (!local_ok) {
-    fprintf(stderr, "allocation failure in aco_vrp_sequential\n");
+    fprintf(stderr, "allocation failure in aco_vrp\n");
     matrix_free(eta);
     matrix_free(tau);
     solution_free(iter_best);
@@ -247,7 +203,7 @@ void aco_vrp_sequential(int n, int K, int m, int T, double **c,
         eta[i][j] = 0.0;
         tau[i][j] = 0.0;
       } else {
-        eta[i][j] = 1.0 / (c[i][j] + EPS);
+        eta[i][j] = 1.0 / (c[i][j] + ACO_EPS);
         tau[i][j] = tau0;
       }
     }
@@ -262,6 +218,8 @@ void aco_vrp_sequential(int n, int K, int m, int T, double **c,
   bool omp_enabled = false;
 #endif
 
+  size_t scratch_len = (n > 0) ? (size_t)n : 1u;
+
   for (int iter = 0; iter < T; ++iter) {
     double iter_best_cost = DBL_MAX;
     int iter_best_ant = INT_MAX;
@@ -275,23 +233,27 @@ void aco_vrp_sequential(int n, int K, int m, int T, double **c,
         int thread_best_ant = INT_MAX;
         Solution *sol = solution_create(K, n);
         Solution *thread_best = solution_create(K, n);
-        bool *visited = calloc((size_t)(n + 1), sizeof(bool));
+        int *unvisited_nodes = malloc(scratch_len * sizeof(int));
+        double *candidate_scores = malloc(scratch_len * sizeof(double));
+        double *random_draws = malloc(scratch_len * sizeof(double));
 
-        if (!sol || !thread_best || !visited) {
+        if (!sol || !thread_best || !unvisited_nodes ||
+            !candidate_scores || !random_draws) {
 #pragma omp critical
           { iter_failed = 1; }
         } else {
 #pragma omp for schedule(static)
           for (int ant = 0; ant < local_m; ++ant) {
             int global_ant = ant_offset + ant;
-            unsigned int rng_state = make_ant_seed(seed, iter, global_ant);
+            unsigned int rng_state = aco_make_ant_seed(seed, iter, global_ant);
 
-            build_ant_solution(sol, visited, n, K, tau, eta, alpha, beta,
-                               &rng_state);
+            aco_build_ant_solution(sol, n, K, tau, eta, alpha, beta,
+                                   &rng_state, unvisited_nodes,
+                                   candidate_scores, random_draws);
             double cost = solution_cost(sol, c);
 
             if (cost < thread_best_cost ||
-                (fabs(cost - thread_best_cost) <= EPS &&
+                (fabs(cost - thread_best_cost) <= ACO_EPS &&
                  global_ant < thread_best_ant)) {
               thread_best_cost = cost;
               thread_best_ant = global_ant;
@@ -303,7 +265,7 @@ void aco_vrp_sequential(int n, int K, int m, int T, double **c,
 #pragma omp critical
             {
               if (thread_best_cost < iter_best_cost ||
-                  (fabs(thread_best_cost - iter_best_cost) <= EPS &&
+                  (fabs(thread_best_cost - iter_best_cost) <= ACO_EPS &&
                    thread_best_ant < iter_best_ant)) {
                 iter_best_cost = thread_best_cost;
                 iter_best_ant = thread_best_ant;
@@ -313,27 +275,34 @@ void aco_vrp_sequential(int n, int K, int m, int T, double **c,
           }
         }
 
-        free(visited);
+        free(random_draws);
+        free(candidate_scores);
+        free(unvisited_nodes);
         solution_free(thread_best);
         solution_free(sol);
       }
 #endif
     } else {
       Solution *sol = solution_create(K, n);
-      bool *visited = calloc((size_t)(n + 1), sizeof(bool));
-      if (!sol || !visited) {
+      int *unvisited_nodes = malloc(scratch_len * sizeof(int));
+      double *candidate_scores = malloc(scratch_len * sizeof(double));
+      double *random_draws = malloc(scratch_len * sizeof(double));
+
+      if (!sol || !unvisited_nodes || !candidate_scores ||
+          !random_draws) {
         iter_failed = 1;
       } else {
         for (int ant = 0; ant < local_m; ++ant) {
           int global_ant = ant_offset + ant;
-          unsigned int rng_state = make_ant_seed(seed, iter, global_ant);
+          unsigned int rng_state = aco_make_ant_seed(seed, iter, global_ant);
 
-          build_ant_solution(sol, visited, n, K, tau, eta, alpha, beta,
-                             &rng_state);
+          aco_build_ant_solution(sol, n, K, tau, eta, alpha, beta, &rng_state,
+                                 unvisited_nodes,
+                                 candidate_scores, random_draws);
           double cost = solution_cost(sol, c);
 
           if (cost < iter_best_cost ||
-              (fabs(cost - iter_best_cost) <= EPS &&
+              (fabs(cost - iter_best_cost) <= ACO_EPS &&
                global_ant < iter_best_ant)) {
             iter_best_cost = cost;
             iter_best_ant = global_ant;
@@ -342,7 +311,9 @@ void aco_vrp_sequential(int n, int K, int m, int T, double **c,
         }
       }
 
-      free(visited);
+      free(random_draws);
+      free(candidate_scores);
+      free(unvisited_nodes);
       solution_free(sol);
     }
 
@@ -373,7 +344,7 @@ void aco_vrp_sequential(int n, int K, int m, int T, double **c,
                     MPI_COMM_WORLD);
 
       int local_ant = INT_MAX;
-      if (local_has_solution && fabs(iter_best_cost - global_best_cost) <= EPS) {
+      if (local_has_solution && fabs(iter_best_cost - global_best_cost) <= ACO_EPS) {
         local_ant = iter_best_ant;
       }
 
@@ -385,6 +356,7 @@ void aco_vrp_sequential(int n, int K, int m, int T, double **c,
       if (global_best_ant >= ant_offset && global_best_ant < ant_offset + local_m) {
         owner_rank = mpi_rank;
       }
+
       int winner_rank = mpi_size;
       MPI_Allreduce(&owner_rank, &winner_rank, 1, MPI_INT, MPI_MIN,
                     MPI_COMM_WORLD);
@@ -396,7 +368,8 @@ void aco_vrp_sequential(int n, int K, int m, int T, double **c,
       MPI_Bcast(packed_solution, packed_len, MPI_INT, winner_rank,
                 MPI_COMM_WORLD);
 
-      if (mpi_rank != winner_rank && !solution_unpack(iter_best, n, packed_solution)) {
+      if (mpi_rank != winner_rank &&
+          !solution_unpack(iter_best, n, packed_solution)) {
         fprintf(stderr, "solution synchronization failure\n");
         matrix_free(eta);
         matrix_free(tau);

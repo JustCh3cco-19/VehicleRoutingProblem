@@ -3,7 +3,7 @@
 Implementazione dell'Ant Colony Optimization (ACO) per il
 Vehicle Routing Problem (VRP) con supporto:
 - sequenziale (default)
-- ibrido MPI + OpenMP (stessa funzione `aco_vrp_sequential`)
+- ibrido MPI + OpenMP (`aco_vrp`)
 
 Il `main` esegue un esempio minimale senza argomenti e stampa il costo migliore
 trovato.

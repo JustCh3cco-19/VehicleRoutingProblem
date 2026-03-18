@@ -11,6 +11,17 @@
 #include <mpi.h>
 #endif
 
+/*
+ * Function:  fill_example_costs
+ * -----------------------------
+ * fills the cost matrix with a simple symmetric example:
+ * c[i][j] = 0 when i == j, otherwise 1 + |i-j|.
+ *
+ *  c: matrix to fill
+ *  n: number of customers (matrix size is n+1)
+ *
+ *  returns: nothing
+ */
 static void fill_example_costs(double **c, int n) {
   for (int i = 0; i <= n; ++i) {
     for (int j = 0; j <= n; ++j) {
@@ -23,6 +34,17 @@ static void fill_example_costs(double **c, int n) {
   }
 }
 
+/*
+ * Function:  parse_int_arg
+ * ------------------------
+ * parses one non-negative integer argument with bounds checking.
+ *
+ *  s: input string
+ *  out: output parsed integer when parsing succeeds
+ *
+ *  returns: 1 on success
+ *           0 on parsing/conversion/range error
+ */
 static int parse_int_arg(const char *s, int *out) {
   char *end = NULL;
   errno = 0;
@@ -37,6 +59,17 @@ static int parse_int_arg(const char *s, int *out) {
   return 1;
 }
 
+/*
+ * Function:  parse_uint_arg
+ * -------------------------
+ * parses one unsigned 32-bit integer argument.
+ *
+ *  s: input string
+ *  ok: output success flag (set to 1 on success, 0 on error)
+ *
+ *  returns: parsed unsigned value on success
+ *           0 on error (with *ok set to 0)
+ */
 static unsigned int parse_uint_arg(const char *s, int *ok) {
   char *end = NULL;
   errno = 0;
@@ -49,6 +82,18 @@ static unsigned int parse_uint_arg(const char *s, int *ok) {
   return (unsigned int)v;
 }
 
+/*
+ * Function:  main
+ * --------------
+ * parses CLI arguments, initializes optional MPI runtime, builds a demo cost
+ * matrix, runs aco_vrp, and prints the best cost.
+ *
+ *  argc: number of command-line arguments
+ *  argv: command-line argument array
+ *
+ *  returns: 0 on success
+ *           1 on usage/initialization/allocation failures
+ */
 int main(int argc, char **argv) {
   int status = 0;
   unsigned int seed = 1234u;
@@ -129,8 +174,7 @@ int main(int argc, char **argv) {
   }
 
   double best_cost = 0.0;
-  aco_vrp_sequential(n, K, m, T, c, alpha, beta, rho, tau0, Q, seed, best,
-                     &best_cost);
+  aco_vrp(n, K, m, T, c, alpha, beta, rho, tau0, Q, seed, best, &best_cost);
 
 #ifdef USE_MPI
   if (mpi_rank == 0) {
