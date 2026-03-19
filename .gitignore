@@ -1,6 +1,6 @@
 # Prerequisites
 *.d
-
+*.vrp
 # Object files
 *.o
 *.ko

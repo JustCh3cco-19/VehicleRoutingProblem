@@ -4,11 +4,10 @@
 
 double **matrix_alloc(int n) {
   int size = n + 1;
-  /* Single contiguous block improves cache locality and MPI/CUDA flattening. */
-  double *data = (double *)calloc((size_t)size * (size_t)size, sizeof(double));
+  double *data = calloc((size_t)size * (size_t)size, sizeof(double));
   if (!data) return NULL;
 
-  double **m = (double **)malloc((size_t)size * sizeof(double *));
+  double **m = malloc((size_t)size * sizeof(double *));
   if (!m) {
     free(data);
     return NULL;
@@ -23,7 +22,6 @@ double **matrix_alloc(int n) {
 
 void matrix_free(double **m) {
   if (!m) return;
-  /* m[0] points to the contiguous payload allocated in matrix_alloc. */
   free(m[0]);
   free(m);
 }

@@ -39,29 +39,16 @@ def generate_instance(name, num_clients, num_vehicles, capacity, grid_size=100, 
     
     return instance_data
 
-def save_reference_solution(instance_data, output_path, runtime=2.0):
+def save_reference_solution(instance_path, output_path, runtime=2.0):
     print(f"Solving instance for {runtime}s to create a reference solution...")
     
-    model = Model()
-    coords = instance_data["NODE_COORD_SECTION"]
-    demands = instance_data["DEMAND_SECTION"]
+    instance = vrplib.read_instance(instance_path)
+    # PyVRP works best if we load from file to ensure distance rounding matches
+    import pyvrp
+    from pyvrp import read, Model
+    pyvrp_instance = read(instance_path, round_func="round")
     
-    # Add Depot
-    model.add_depot(x=int(coords[0, 0]), y=int(coords[0, 1]))
-    
-    # Add Clients (starting from index 1)
-    for i in range(1, len(coords)):
-        model.add_client(
-            x=int(coords[i, 0]), 
-            y=int(coords[i, 1]), 
-            delivery=[int(demands[i])]
-        )
-    
-    # Add Vehicle Type
-    model.add_vehicle_type(
-        capacity=[int(instance_data["CAPACITY"])], 
-        num_available=int(instance_data["VEHICLES"])
-    )
+    model = Model.from_data(pyvrp_instance)
     
     # Solve
     res = model.solve(stop.MaxRuntime(runtime))
@@ -74,7 +61,6 @@ def save_reference_solution(instance_data, output_path, runtime=2.0):
     # Save in our validation format
     with open(output_path, 'w') as f:
         for i, route in enumerate(best.routes()):
-            # PyVRP Route.visits() returns 1-indexed customer IDs
             nodes_str = " ".join(map(str, route.visits()))
             f.write(f"Route {i+1}: {nodes_str}\n")
         f.write(f"Cost: {best.distance()}\n")
@@ -111,7 +97,7 @@ def main():
 
     if args.solve:
         sol_path = os.path.splitext(args.output)[0] + "_solution.txt"
-        save_reference_solution(instance, sol_path, args.runtime)
+        save_reference_solution(args.output, sol_path, args.runtime)
 
 if __name__ == "__main__":
     main()

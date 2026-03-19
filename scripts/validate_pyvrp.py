@@ -33,30 +33,21 @@ def parse_solution_file(filepath):
     
     return routes, cost
 
-def validate_solution(instance_path, solution_path, round_func="none"):
+def validate_solution(instance_path, solution_path, round_func="none", reference_path=None):
     print(f"Loading instance: {instance_path}")
     try:
-        # round_func="none" ensures distances are exact floats, 
-        # or use "round" for TSPLIB standard if your C code rounds.
         instance = read(instance_path, round_func=round_func)
     except Exception as e:
         print(f"Failed to load instance: {e}")
         sys.exit(1)
 
-    print(f"Loading solution: {solution_path}")
+    print(f"Loading CUDA solution: {solution_path}")
     routes_data, reported_cost = parse_solution_file(solution_path)
     
     if reported_cost is None:
         print("Error: Solution file does not contain a 'Cost: <value>' line.")
         sys.exit(1)
 
-    if not routes_data:
-        print("Warning: No routes found in the solution file.")
-    
-    # Construct PyVRP Routes
-    # Note: PyVRP Route expects the problem data instance and a list of client indices.
-    # In PyVRP, clients are 1-indexed (0 is depot). Assuming the C code output uses 
-    # 1-indexed customers and omits the depot in the route string.
     pyvrp_routes = []
     for r in routes_data:
         try:
@@ -66,45 +57,53 @@ def validate_solution(instance_path, solution_path, round_func="none"):
             print(f"Error creating route {r}: {e}")
             sys.exit(1)
 
-    # Construct the PyVRP Solution
     try:
         solution = Solution(instance, pyvrp_routes)
     except Exception as e:
         print(f"Error creating solution: {e}")
         sys.exit(1)
 
-    print(f"\nEvaluating Solution...")
-    print(f"Reported Cost: {reported_cost}")
+    print(f"\n--- EVALUATION ---")
+    print(f"CUDA Reported Cost:  {reported_cost:.3f}")
     
-    # Evaluate feasibility and cost
-    # PyVRP requires explicit penalties: [load_penalty], tw_penalty, dist_penalty
-    # Defaulting to high penalties for validation purposes.
     cost_evaluator = CostEvaluator(load_penalties=[1000], tw_penalty=1000, dist_penalty=1000)
     penalised_cost = cost_evaluator.penalised_cost(solution)
     is_feasible = solution.is_feasible()
-    
-    # Also calculate the raw distance (unpenalized cost)
-    # For a feasible solution, this should match the penalised_cost.
     raw_distance = solution.distance()
     
-    print(f"PyVRP Penalised Cost: {penalised_cost}")
-    print(f"PyVRP Raw Distance:   {raw_distance}")
-    print(f"Is Feasible:          {is_feasible}")
+    print(f"PyVRP Recalculated: {raw_distance:.3f}")
+    print(f"Is Feasible:         {is_feasible}")
     
     if not is_feasible:
-        print("\nValidation Failed: The solution is infeasible according to PyVRP constraints.")
-        # We check which cost matches the reported one to provide better feedback
-        if math.isclose(raw_distance, reported_cost, abs_tol=tolerance):
-            print("Note: The reported cost matches the raw distance, but the solution violates constraints (e.g. capacity).")
+        print("\nERROR: CUDA Solution is infeasible according to PyVRP constraints.")
         sys.exit(1)
 
-    # Allow a small tolerance for floating point comparisons
     tolerance = 1e-3
-    if not math.isclose(penalised_cost, reported_cost, abs_tol=tolerance):
-        print(f"\nValidation Failed: Cost mismatch! Reported: {reported_cost}, PyVRP calculated: {penalised_cost}")
+    if not math.isclose(raw_distance, reported_cost, abs_tol=tolerance):
+        print(f"\nERROR: Cost mismatch! CUDA: {reported_cost}, PyVRP: {raw_distance}")
         sys.exit(1)
 
-    print("\nValidation Successful: Solution is feasible and costs match.")
+    if reference_path:
+        print(f"\n--- REFERENCE COMPARISON ---")
+        ref_routes, ref_cost = parse_solution_file(reference_path)
+        print(f"Reference Solver (PyVRP) Cost: {ref_cost:.3f}")
+        
+        diff = reported_cost - ref_cost
+        gap = (diff / ref_cost) * 100
+        print(f"Relative Gap to Reference: {gap:+.2f}%")
+
+        if abs(gap) > 0.01:
+            print(f"Note: CUDA solution is {gap:.2f}% {'worse' if gap > 0 else 'better'} than Reference.")
+
+        print("\n--- Route Comparison (CUDA vs Reference) ---")
+        max_cmp = min(len(routes_data), len(ref_routes), 3)
+        for i in range(max_cmp):
+            c_r = routes_data[i]
+            r_r = ref_routes[i]
+            print(f"Route {i+1} CUDA:      {' '.join(map(str, c_r[:10]))}{'...' if len(c_r) > 10 else ''}")
+            print(f"Route {i+1} Reference: {' '.join(map(str, r_r[:10]))}{'...' if len(r_r) > 10 else ''}")
+    
+    print("\nVALIDATION SUCCESSFUL.")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Validate VRP solutions using PyVRP.")
@@ -112,7 +111,8 @@ if __name__ == "__main__":
     parser.add_argument("solution", help="Path to the solution text file")
     parser.add_argument("--round-func", default="none", choices=["none", "round", "trunc", "dimacs"], 
                         help="Rounding function used for distance matrix (default: none)")
+    parser.add_argument("--reference", help="Path to a reference solution for comparison")
     
     args = parser.parse_args()
     
-    validate_solution(args.instance, args.solution, args.round_func)
+    validate_solution(args.instance, args.solution, args.round_func, args.reference)
