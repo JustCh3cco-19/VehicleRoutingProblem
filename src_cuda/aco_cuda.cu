@@ -101,12 +101,17 @@ int aco_vrp_cuda(int n, int K, int m, int T, double **c,
             }
 
             launch_evaporate_pheromones(d_tau, n, rho, THREADS_PER_BLOCK);
-            cudaError_t err = cudaDeviceSynchronize();
-        if (err != cudaSuccess) printf("CUDA Error: %s\n", cudaGetErrorString(err));
+            
+            // Versione 3: Deposito feromoni direttamente su GPU
+            // Usiamo i puntatori d_routes e d_route_lens dell'ant migliore di questa iterazione
+            launch_deposit_pheromones(d_tau, n, K, 
+                                      d_routes + best_ant * K * (n + 2), 
+                                      d_route_lens + best_ant * K, 
+                                      Q / iter_best_cost, 
+                                      THREADS_PER_BLOCK);
 
-            cudaMemcpy(h_tau, d_tau, size * sizeof(double), cudaMemcpyDeviceToHost);
-            deposit_pheromones_host(h_tau, iter_best, Q / iter_best_cost, n);
-            cudaMemcpy(d_tau, h_tau, size * sizeof(double), cudaMemcpyHostToDevice);
+            cudaError_t err = cudaDeviceSynchronize();
+            if (err != cudaSuccess) printf("CUDA Error: %s\n", cudaGetErrorString(err));
         }
     }
 

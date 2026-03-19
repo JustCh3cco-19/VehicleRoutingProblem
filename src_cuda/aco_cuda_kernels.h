@@ -16,6 +16,8 @@ void launch_construct_solutions(int m, int K, int n, const double *d_scores,
 
 void launch_evaporate_pheromones(double *d_tau, int n, double rho, int threads_per_block);
 
+void launch_deposit_pheromones(double *d_tau, int n, int K, const int *d_routes, const int *d_route_lens, double deposit, int threads_per_block);
+
 void init_curand_states(void *d_curand_states, int m, unsigned int seed, int threads_per_block);
 
 #ifdef __cplusplus
