@@ -1,45 +1,48 @@
 # VehicleRoutingProblem
 
-Implementazione dell'Ant Colony Optimization (ACO) per il
-Vehicle Routing Problem (VRP) con supporto:
+Implementazione di Ant Colony Optimization (ACO) per il Vehicle Routing Problem (VRP), con supporto:
 - sequenziale (default)
-- ibrido MPI + OpenMP (`aco_vrp`)
+- ibrido MPI + OpenMP
 
-Il `main` esegue un esempio minimale senza argomenti e stampa il costo migliore
-trovato.
+Il `main` esegue un esempio minimale senza argomenti e stampa il costo migliore trovato.
 
 ## Requisiti
 - `gcc`
 - `make`
-- `mpicc` e `mpirun` (solo per versione ibrida/test MPI)
+- `mpicc` e `mpirun` (solo per versione ibrida / test MPI)
+- `python3` (per script test/scaling)
+- ambiente `VRP` con PyVRP (solo per baseline/golden e scaling PyVRP)
 
 ## Avvio rapido
-Compilazione ed esecuzione:
+Compilazione ed esecuzione sequenziale:
 ```sh
 make
-./aco_vrp_seq
+./aco_vrp_seq.out
 ```
 
 ## Esecuzione ibrida MPI + OpenMP
 Compilazione:
 ```sh
-make hybrid
+make openmp_mpi
 ```
 
 Esecuzione (esempio con 2 rank e 2 thread OpenMP per rank):
 ```sh
-OMP_NUM_THREADS=2 mpirun -np 2 ./aco_vrp_hybrid
+OMP_NUM_THREADS=2 mpirun -np 2 ./aco_vrp_openmp_mpi.out
 ```
 
-## Test
-Compila ed esegue i test:
+## Test di correttezza (C vs PyVRP golden offline)
+Compila ed esegue i test file-based:
 ```sh
 make test
 ```
-Il test confronta il solver C con una baseline PyVRP offline (`tests/files/golden_pyvrp.csv`),
-quindi e adatto anche al cluster senza installare PyVRP.
 
-Rigenera il golden in locale (venv `VRP`) con:
+Il test confronta il solver C con una baseline PyVRP offline in:
+- `tests/files/golden_pyvrp.csv`
+
+Quindi i test funzionano anche su cluster dove PyVRP non e installato (purche il CSV golden sia gia presente).
+
+Rigenerazione golden in locale (venv `VRP`):
 ```sh
 python3 tests/generate_pyvrp_golden.py
 ```
@@ -50,27 +53,59 @@ Compila ed esegue un test parallelo:
 make test_mpi
 ```
 
-## Esperimenti (correttezza + scaling)
-Esegue automaticamente benchmark con ripetizioni e genera CSV/grafici in
-`results/`:
+Test race-oriented su piu casi/rank:
 ```sh
-make experiments
+make test_mpi_race
 ```
 
-## Scaling progressivo fino a 40k clienti (solo PyVRP)
-Esegue test progressivi con PyVRP fino a `n=40000`, usando automaticamente il
-venv `VRP` (`VRP/bin/python`) e con skip automatico dei casi che eccedono la
-memoria disponibile stimata:
+## Scaling progressivo fino a 40k clienti (PyVRP)
+Esegue scenari progressivi fino a `n=40000` con PyVRP, usando automaticamente `VRP/bin/python`.
+
+Comando rapido:
 ```sh
 make scaling_tests
 ```
 
 Output CSV predefinito:
-`results/scaling_progressive_pyvrp.csv`
+- `results/scaling_progressive_pyvrp.csv`
 
 Esecuzione manuale (opzioni principali):
 ```sh
 python3 tests/pyvrp_tests.py --memory-utilization 0.70 --pyvrp-max-n 40000
+```
+
+Opzioni utili:
+- `--memory-utilization X` frazione RAM usabile prima di fare skip (`0 < X <= 1`)
+- `--pyvrp-max-n N` limite massimo di clienti da eseguire
+- `--csv PATH` percorso CSV output
+- `--force` disabilita skip basato su memoria stimata
+
+## Scaling progressivo fino a 40k clienti (solver C)
+Nuovo runner C dedicato per scenari progressivi fino a `n=40000`:
+```sh
+make c_scaling_tests
+```
+
+Output CSV predefinito:
+- `results/scaling_progressive_c.csv`
+
+Esecuzione manuale:
+```sh
+./tests/c_scaling_tests.out --memory-utilization 0.70 --c-max-n 40000
+```
+
+Opzioni utili:
+- `--memory-utilization X` frazione RAM usabile prima di fare skip (`0 < X <= 1`)
+- `--c-max-n N` limite massimo clienti eseguiti
+- `--csv PATH` percorso CSV output
+- `--force` forza l'esecuzione anche oltre la soglia memoria stimata
+
+Nota: la parte C usa matrici dense (`c`, `eta`, `tau`), quindi i casi molto grandi possono essere saltati automaticamente per evitare out-of-memory.
+
+## Esperimenti (correttezza + scaling)
+Esegue benchmark con ripetizioni e genera CSV/grafici in `results/`:
+```sh
+make experiments
 ```
 
 ## Report PDF

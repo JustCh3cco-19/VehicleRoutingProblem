@@ -87,7 +87,7 @@ def write_vrplib_file(path: Path, sc: Scenario):
         "TYPE : CVRP",
         f"DIMENSION : {sc.n + 1}",
         "EDGE_WEIGHT_TYPE : EUC_2D",
-        f"CAPACITY : {sc.n}",
+        f"CAPACITY : {(sc.n + sc.K - 1) // sc.K}",
         f"VEHICLES : {sc.K}",
         "NODE_COORD_SECTION",
     ]
@@ -132,7 +132,7 @@ def solve_pyvrp(vrp_path: Path, seed: int, iterations: int):
 
 def default_scenarios():
     return [
-        Scenario(500, 8, 64, 40, 9000, 19000, 0, 15.0),
+        Scenario(500, 8, 64, 40, 9000, 19000, 0, 30.0),
         Scenario(1000, 8, 64, 40, 9001, 19001, 1, 20.0),
         Scenario(2000, 8, 64, 40, 9002, 19002, 2, 25.0),
         Scenario(4000, 8, 32, 20, 9003, 19003, 3, 30.0),

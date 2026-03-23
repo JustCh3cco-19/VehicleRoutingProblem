@@ -147,8 +147,9 @@ static void generate_points(Point *pts, int n, unsigned int seed, int layout) {
 /*
  * Function:  fill_cost_matrix
  * ---------------------------
- * converts coordinates to a full symmetric Euclidean cost matrix:
- * c[i][j] = 0 if i == j, else 1 + euclidean_distance(i, j).
+ * converts coordinates to a full symmetric Euclidean cost matrix aligned
+ * with PyVRP EUC_2D + round_func="round":
+ * c[i][j] = 0 if i == j, else round(euclidean_distance(i, j)).
  *
  *  c: matrix to fill
  *  pts: node coordinates
@@ -162,9 +163,13 @@ static void fill_cost_matrix(double **c, const Point *pts, int n) {
       if (i == j) {
         c[i][j] = 0.0;
       } else {
-        double dx = pts[i].x - pts[j].x;
-        double dy = pts[i].y - pts[j].y;
-        c[i][j] = 1.0 + sqrt(dx * dx + dy * dy);
+        double xi = round(pts[i].x);
+        double yi = round(pts[i].y);
+        double xj = round(pts[j].x);
+        double yj = round(pts[j].y);
+        double dx = xi - xj;
+        double dy = yi - yj;
+        c[i][j] = round(sqrt(dx * dx + dy * dy));
       }
     }
   }
@@ -250,12 +255,17 @@ static void run_case(const GoldenCase *gc) {
   double gap_pct = ((best_cost - gc->pyvrp_cost) / gc->pyvrp_cost) * 100.0;
   if (gap_pct > gc->max_gap_pct + 1e-9) {
     fprintf(stderr,
-            "gap too large for n=%d: c=%.3f pyvrp=%.3f gap=%.3f%% max=%.3f%%\n",
-            gc->n, best_cost, gc->pyvrp_cost, gap_pct, gc->max_gap_pct);
+            "[FAIL] customers=%d, vehicles=%d, ants=%d, iterations=%d: "
+            "aco_cost=%.3f, pyvrp_baseline_cost=%.3f, gap_percent=%.3f%%, "
+            "max_allowed_gap_percent=%.3f%%\n",
+            gc->n, gc->K, gc->m, gc->T, best_cost, gc->pyvrp_cost, gap_pct,
+            gc->max_gap_pct);
     assert(0);
   }
 
-  printf("[OK] n=%d K=%d m=%d T=%d c=%.3f pyvrp=%.3f gap=%.3f%% (max=%.3f%%)\n",
+  printf("[OK] customers=%d, vehicles=%d, ants=%d, iterations=%d: "
+         "aco_cost=%.3f, pyvrp_baseline_cost=%.3f, gap_percent=%.3f%%, "
+         "max_allowed_gap_percent=%.3f%%\n",
          gc->n, gc->K, gc->m, gc->T, best_cost, gc->pyvrp_cost, gap_pct,
          gc->max_gap_pct);
 
@@ -292,6 +302,10 @@ int main(int argc, char **argv) {
     fprintf(stderr, "failed to open golden file: %s\n", path);
     return 1;
   }
+
+  printf("Running ACO vs PyVRP golden tests.\n");
+  printf("Field meanings: customers=n, vehicles=K, ants=m, iterations=T, "
+         "aco_cost=our solver objective, pyvrp_baseline_cost=reference objective.\n");
 
   char line[512];
   int cases = 0;

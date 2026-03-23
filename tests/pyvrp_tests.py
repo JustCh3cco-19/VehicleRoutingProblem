@@ -47,6 +47,24 @@ class Point:
     y: float
 
 
+def print_banner(title: str):
+    line = "=" * 72
+    print(line)
+    print(title)
+    print(line)
+
+
+def print_scenario_header(idx: int, total: int, sc: Scenario, est_gib: float):
+    print(
+        f"[RUN  {idx:02d}/{total:02d}] "
+        f"n={sc.n:<6} K={sc.K:<4} m={sc.m:<3} T={sc.T:<3} est_mem={est_gib:>6.2f} GiB"
+    )
+
+
+def print_scenario_status(status: str, detail: str):
+    print(f"  [{status:<4}] {detail}")
+
+
 def bytes_to_gib(x: int) -> float:
     # Utility to print memory values in a human-readable unit.
     return x / (1024.0 ** 3)
@@ -227,7 +245,7 @@ def write_vrplib_file(path: Path, sc: Scenario):
         "COMMENT : synthetic deterministic instance generated from tests/tests.c layout",
         f"DIMENSION : {sc.n + 1}",
         "EDGE_WEIGHT_TYPE : EUC_2D",
-        f"CAPACITY : {sc.n}",
+        f"CAPACITY : {(sc.n + sc.K - 1) // sc.K}",
         f"VEHICLES : {sc.K}",
         "NODE_COORD_SECTION",
     ]
@@ -318,9 +336,18 @@ def main():
     out_csv.parent.mkdir(parents=True, exist_ok=True)
 
     # Runtime context summary helps debugging runs from IDE/CI.
-    print(f"[info] python={sys.executable}")
-    print(f"[info] available_mem_gib={bytes_to_gib(available):.2f}")
-    print(f"[info] threshold_gib={bytes_to_gib(threshold):.2f} (utilization={args.memory_utilization:.2f})")
+    print_banner("PyVRP Progressive Scaling")
+    print(f"[INFO] python               : {sys.executable}")
+    print(f"[INFO] available_mem_gib    : {bytes_to_gib(available):.2f}")
+    print(f"[INFO] threshold_gib        : {bytes_to_gib(threshold):.2f}")
+    print(f"[INFO] memory_utilization   : {args.memory_utilization:.2f}")
+    print("")
+
+    total = len(scenarios)
+    ok_count = 0
+    failed_count = 0
+    skipped_count = 0
+    total_elapsed = 0.0
 
     with tempfile.TemporaryDirectory(prefix="vrp_scaling_pyvrp_") as td:
         case_dir = Path(td)
@@ -348,11 +375,12 @@ def main():
                 est_mem = estimate_pyvrp_memory_bytes(sc.n)
                 est_gib = bytes_to_gib(est_mem)
 
-                print(f"[scenario {i:02d}/{len(scenarios)}] n={sc.n} K={sc.K} est={est_gib:.2f}GiB")
+                print_scenario_header(i, total, sc, est_gib)
 
                 if sc.n > args.pyvrp_max_n:
                     # User-enforced n cap: useful for smoke tests.
-                    print(f"  -> skip (n > pyvrp-max-n={args.pyvrp_max_n})")
+                    skipped_count += 1
+                    print_scenario_status("SKIP", f"n > pyvrp-max-n ({args.pyvrp_max_n})")
                     writer.writerow(
                         {
                             "mode": "pyvrp",
@@ -371,7 +399,8 @@ def main():
 
                 if not (args.force or threshold == 0 or est_mem <= threshold):
                     # Safety skip based on current machine memory budget.
-                    print("  -> skip (estimated memory above threshold)")
+                    skipped_count += 1
+                    print_scenario_status("SKIP", "estimated memory above threshold")
                     writer.writerow(
                         {
                             "mode": "pyvrp",
@@ -394,7 +423,9 @@ def main():
                 try:
                     # Solve and record successful metrics.
                     cost, elapsed = solve_with_pyvrp(vrp_path, sc.solver_seed, args.timeout, sc.T)
-                    print(f"  -> pyvrp: ok ({elapsed:.2f}s) cost={cost:.3f}")
+                    ok_count += 1
+                    total_elapsed += elapsed
+                    print_scenario_status("OK", f"pyvrp solved in {elapsed:7.2f}s, cost={cost:10.3f}")
                     writer.writerow(
                         {
                             "mode": "pyvrp",
@@ -411,7 +442,8 @@ def main():
                     )
                 except Exception as exc:
                     # Keep the campaign running: log failure and continue.
-                    print(f"  -> pyvrp: failed ({type(exc).__name__})")
+                    failed_count += 1
+                    print_scenario_status("FAIL", f"pyvrp failed: {type(exc).__name__}")
                     writer.writerow(
                         {
                             "mode": "pyvrp",
@@ -427,7 +459,14 @@ def main():
                         }
                     )
 
-    print(f"[done] wrote {out_csv}")
+    print("")
+    print_banner("Run Summary")
+    print(f"[SUMMARY] scenarios_total : {total}")
+    print(f"[SUMMARY] ok              : {ok_count}")
+    print(f"[SUMMARY] failed          : {failed_count}")
+    print(f"[SUMMARY] skipped         : {skipped_count}")
+    print(f"[SUMMARY] total_solve_s   : {total_elapsed:.2f}")
+    print(f"[DONE] wrote {out_csv}")
 
 
 if __name__ == "__main__":

@@ -34,6 +34,10 @@ TEST_SRC=tests/tests.c
 TEST_BIN=tests/test.out
 TEST_OBJ=tests/test.o
 
+C_SCALING_SRC=tests/c_scaling_tests.c
+C_SCALING_OBJ=tests/c_scaling_tests.o
+C_SCALING_BIN=tests/c_scaling_tests.out
+
 OPENMP_MPI_BIN=aco_vrp_openmp_mpi.out
 MPI_TEST_BIN=tests/test_mpi.out
 OPENMP_MPI_SRC=src/main.c $(PAR_SRC) $(ACO_SHARED_SRC) $(SOLUTION_SRC) $(MATRIX_SRC)
@@ -46,7 +50,7 @@ MPI_OMP_THREADS=2
 RACE_CASE_FILES=test_03_a20_p4_w1 test_04_a20_p4_w1 test_05_a20_p4_w1 test_06_a20_p4_w1
 
 COVERAGE_FILES=src/*.gcno src/*.gcda src/seq/*.gcno src/seq/*.gcda src/openmp-mpi/*.gcno src/openmp-mpi/*.gcda src/common/*.gcno src/common/*.gcda tests/*.gcno tests/*.gcda
-LEGACY_BINARIES=aco_vrp_seq aco_vrp_hybrid aco_vrp_openmp_mpi tests/test tests/test_mpi tests/test_final tests/test_final.out tests/test_final_mpi.out
+LEGACY_BINARIES=aco_vrp_seq aco_vrp_hybrid aco_vrp_openmp_mpi tests/test tests/test_mpi tests/test_final tests/test_final.out tests/test_final_mpi.out tests/c_scaling_tests tests/c_scaling_tests.out
 
 all: $(BIN)
 
@@ -63,7 +67,8 @@ help:
 	@printf "  %-18s %s\n" "test" "Build and run final file-based tests"
 	@printf "  %-18s %s\n" "test_mpi" "Run one MPI test (uses MPI_CASE_FILE, MPI_NP, MPI_OMP_THREADS)"
 	@printf "  %-18s %s\n" "test_mpi_race" "Run race-oriented MPI cases (test_03..test_06)"
-	@printf "  %-18s %s\n\n" "scaling_tests" "Run progressive PyVRP-only scaling tests up to n=40000"
+	@printf "  %-18s %s\n" "scaling_tests" "Run progressive PyVRP-only scaling tests up to n=40000"
+	@printf "  %-18s %s\n\n" "c_scaling_tests" "Run progressive C scaling tests up to n=40000 (memory-aware)"
 	@printf "Analysis/Docs:\n"
 	@printf "  %-18s %s\n" "experiments" "Run correctness + scaling experiments"
 	@printf "  %-18s %s\n" "coverage" "Build with gcov and run sequential tests"
@@ -91,6 +96,12 @@ $(TEST_OBJ): $(TEST_SRC) include/aco.h include/matrix.h include/solution.h
 	$(CC) $(EXTRA_FLAGS) $(FLAGS) $(FORCE_OPT) -c $< -o $@
 
 $(TEST_BIN): $(TEST_OBJ) $(SEQ_OBJ) $(ACO_SHARED_OBJ) $(SOLUTION_OBJ) $(MATRIX_OBJ)
+	$(CC) $(EXTRA_FLAGS) $(FLAGS) $(FORCE_OPT) $^ $(LIBS) -o $@
+
+$(C_SCALING_OBJ): $(C_SCALING_SRC) include/aco.h include/matrix.h include/solution.h
+	$(CC) $(EXTRA_FLAGS) $(FLAGS) $(FORCE_OPT) -c $< -o $@
+
+$(C_SCALING_BIN): $(C_SCALING_OBJ) $(SEQ_OBJ) $(ACO_SHARED_OBJ) $(SOLUTION_OBJ) $(MATRIX_OBJ)
 	$(CC) $(EXTRA_FLAGS) $(FLAGS) $(FORCE_OPT) $^ $(LIBS) -o $@
 
 test: $(TEST_BIN)
@@ -121,6 +132,9 @@ experiments: $(BIN) $(OPENMP_MPI_BIN)
 scaling_tests:
 	python3 tests/pyvrp_tests.py
 
+c_scaling_tests: $(C_SCALING_BIN)
+	./$(C_SCALING_BIN)
+
 report: experiments
 	cd report && pdflatex -interaction=nonstopmode -halt-on-error report.tex >/dev/null
 	cd report && pdflatex -interaction=nonstopmode -halt-on-error report.tex >/dev/null
@@ -130,7 +144,7 @@ coverage:
 	$(MAKE) test FLAGS="$(FLAGS) $(COVERAGE_FLAGS)" LIBS="$(LIBS) $(COVERAGE_LIBS)"
 
 clean:
-	rm -f $(BIN) $(OBJ) $(TEST_BIN) $(TEST_OBJ) $(OPENMP_MPI_BIN) $(MPI_TEST_BIN) $(LEGACY_BINARIES) \
+	rm -f $(BIN) $(OBJ) $(TEST_BIN) $(TEST_OBJ) $(C_SCALING_BIN) $(C_SCALING_OBJ) $(OPENMP_MPI_BIN) $(MPI_TEST_BIN) $(LEGACY_BINARIES) \
 		src/*.o src/seq/*.o src/openmp-mpi/*.o src/common/*.o \
 		tests/*.o tests/*.out \
 		$(COVERAGE_FILES) \
@@ -139,4 +153,4 @@ clean:
 debug:
 	$(MAKE) EXTRA_FLAGS=-DDEBUG
 
-.PHONY: all help clean debug test test_mpi test_mpi_race coverage openmp_mpi experiments scaling_tests report
+.PHONY: all help clean debug test test_mpi test_mpi_race coverage openmp_mpi experiments scaling_tests c_scaling_tests report
