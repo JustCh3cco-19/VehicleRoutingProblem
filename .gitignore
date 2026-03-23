@@ -67,4 +67,6 @@ report/
 
 results/
 
-scripts/
+scripts/*
+!scripts/run_scaling_tests.py
+__pycache__/

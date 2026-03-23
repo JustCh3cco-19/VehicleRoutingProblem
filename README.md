@@ -36,6 +36,13 @@ Compila ed esegue i test:
 ```sh
 make test
 ```
+Il test confronta il solver C con una baseline PyVRP offline (`tests/files/golden_pyvrp.csv`),
+quindi e adatto anche al cluster senza installare PyVRP.
+
+Rigenera il golden in locale (venv `VRP`) con:
+```sh
+python3 tests/generate_pyvrp_golden.py
+```
 
 ## Test MPI + OpenMP
 Compila ed esegue un test parallelo:
@@ -48,6 +55,22 @@ Esegue automaticamente benchmark con ripetizioni e genera CSV/grafici in
 `results/`:
 ```sh
 make experiments
+```
+
+## Scaling progressivo fino a 40k clienti (solo PyVRP)
+Esegue test progressivi con PyVRP fino a `n=40000`, usando automaticamente il
+venv `VRP` (`VRP/bin/python`) e con skip automatico dei casi che eccedono la
+memoria disponibile stimata:
+```sh
+make scaling_tests
+```
+
+Output CSV predefinito:
+`results/scaling_progressive_pyvrp.csv`
+
+Esecuzione manuale (opzioni principali):
+```sh
+python3 tests/pyvrp_tests.py --memory-utilization 0.70 --pyvrp-max-n 40000
 ```
 
 ## Report PDF

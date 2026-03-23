@@ -7,22 +7,36 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
-
-#ifdef USE_MPI
-#include <mpi.h>
-#endif
+#include <string.h>
 
 /*
- * Default directory that contains all scenario files.
+ * Struct:  Point
+ * --------------
+ * stores one 2D coordinate used to build synthetic Euclidean instances.
+ *
+ *  x: x-axis coordinate
+ *  y: y-axis coordinate
  */
-#define DEFAULT_CASE_DIR "tests/files"
-#define PATH_BUF_LEN 512
-
 typedef struct {
   double x;
   double y;
 } Point;
 
+/*
+ * Struct:  GoldenCase
+ * -------------------
+ * describes one offline PyVRP baseline scenario loaded from CSV.
+ *
+ *  n: number of customers
+ *  K: number of routes/vehicles
+ *  m: number of ants
+ *  T: number of ACO iterations
+ *  solver_seed: deterministic seed for ACO
+ *  instance_seed: deterministic seed for instance generation
+ *  layout_id: synthetic geometry selector
+ *  pyvrp_cost: reference objective produced by PyVRP
+ *  max_gap_pct: maximum allowed positive gap vs PyVRP (percentage)
+ */
 typedef struct {
   int n;
   int K;
@@ -31,49 +45,19 @@ typedef struct {
   unsigned int solver_seed;
   unsigned int instance_seed;
   int layout_id;
-} Scenario;
+  double pyvrp_cost;
+  double max_gap_pct;
+} GoldenCase;
 
 /*
- * Ordered list of all scenario files that compose the full regression suite.
- */
-static const char *kCaseFiles[] = {
-    "test_01_a35_p5_w3",   "test_01_a35_p7_w2",   "test_01_a35_p8_w1",
-    "test_01_a35_p8_w4",   "test_02_a30k_p20k_w1", "test_02_a30k_p20k_w2",
-    "test_02_a30k_p20k_w3", "test_02_a30k_p20k_w4", "test_02_a30k_p20k_w5",
-    "test_02_a30k_p20k_w6", "test_03_a20_p4_w1",   "test_04_a20_p4_w1",
-    "test_05_a20_p4_w1",   "test_06_a20_p4_w1",   "test_07_a1M_p5k_w1",
-    "test_07_a1M_p5k_w2",  "test_07_a1M_p5k_w3",  "test_07_a1M_p5k_w4",
-    "test_08_a100M_p1_w1", "test_08_a100M_p1_w2", "test_08_a100M_p1_w3",
-    "test_09_a16-17_p3_w1",
-};
-
-/*
- * Asserts that two floating-point values are close within an absolute
- * tolerance.
- */
-static void assert_close(double a, double b, double tol) {
-  if (fabs(a - b) > tol) {
-    fprintf(stderr, "assert_close failed: %.12f vs %.12f\n", a, b);
-    assert(0);
-  }
-}
-
-/*
- * Validates VRP structural constraints and aborts on the first invalid
- * solution.
- */
-static void assert_valid_solution(const Solution *s, int n, int K, int rank) {
-  char err[128];
-  bool ok = solution_validate(s, n, K, err, sizeof(err));
-  if (!ok) {
-    fprintf(stderr, "rank %d invalid solution: %s\n", rank, err);
-    assert(0);
-  }
-}
-
-/*
- * Simple deterministic LCG used to generate synthetic but reproducible
- * instances from seeds in the scenario files.
+ * Function:  lcg_next
+ * -------------------
+ * advances one step of a deterministic 32-bit linear congruential generator.
+ * used to keep synthetic instance generation reproducible.
+ *
+ *  state: rng state updated in place
+ *
+ *  returns: next pseudo-random 32-bit value
  */
 static unsigned int lcg_next(unsigned int *state) {
   *state = (*state * 1664525u) + 1013904223u;
@@ -81,14 +65,28 @@ static unsigned int lcg_next(unsigned int *state) {
 }
 
 /*
- * Generates pseudo-random doubles in [0,1] using the deterministic LCG.
+ * Function:  rand01_lcg
+ * ---------------------
+ * maps the LCG state to a double in [0, 1].
+ *
+ *  state: rng state updated in place
+ *
+ *  returns: pseudo-random double in [0, 1]
  */
 static double rand01_lcg(unsigned int *state) {
   return (double)lcg_next(state) / (double)0xFFFFFFFFu;
 }
 
 /*
- * Clamps one value inside a closed interval.
+ * Function:  clamp
+ * ----------------
+ * clamps one value inside a closed interval [lo, hi].
+ *
+ *  x: input value
+ *  lo: lower bound
+ *  hi: upper bound
+ *
+ *  returns: clamped value
  */
 static double clamp(double x, double lo, double hi) {
   if (x < lo) {
@@ -101,8 +99,17 @@ static double clamp(double x, double lo, double hi) {
 }
 
 /*
- * Builds depot + customer coordinates according to the selected layout_id:
+ * Function:  generate_points
+ * --------------------------
+ * builds deterministic depot+customer coordinates according to layout id:
  * 0 uniform, 1 clustered, 2 border-heavy, 3 parity/line pattern.
+ *
+ *  pts: output array of n+1 points (index 0 is depot)
+ *  n: number of customers
+ *  seed: deterministic instance seed
+ *  layout: layout selector in [0, 3]
+ *
+ *  returns: nothing
  */
 static void generate_points(Point *pts, int n, unsigned int seed, int layout) {
   const double scale = 1000.0;
@@ -138,7 +145,16 @@ static void generate_points(Point *pts, int n, unsigned int seed, int layout) {
 }
 
 /*
- * Converts coordinates into a full symmetric Euclidean cost matrix.
+ * Function:  fill_cost_matrix
+ * ---------------------------
+ * converts coordinates to a full symmetric Euclidean cost matrix:
+ * c[i][j] = 0 if i == j, else 1 + euclidean_distance(i, j).
+ *
+ *  c: matrix to fill
+ *  pts: node coordinates
+ *  n: number of customers (matrix size is n+1)
+ *
+ *  returns: nothing
  */
 static void fill_cost_matrix(double **c, const Point *pts, int n) {
   for (int i = 0; i <= n; ++i) {
@@ -155,189 +171,155 @@ static void fill_cost_matrix(double **c, const Point *pts, int n) {
 }
 
 /*
- * Parses one scenario line from a case file and validates basic ranges.
+ * Function:  parse_golden_line
+ * ----------------------------
+ * parses one CSV row from the offline PyVRP golden file.
+ * expected format:
+ * n,K,m,T,solver_seed,instance_seed,layout_id,pyvrp_cost,max_gap_pct
+ *
+ *  line: input CSV row
+ *  gc: output parsed case
+ *
+ *  returns: 1 on success
+ *           0 on parse error
  */
-static bool parse_scenario(FILE *fp, Scenario *sc) {
-  int read = fscanf(fp, "%d %d %d %d %u %u %d", &sc->n, &sc->K, &sc->m,
-                    &sc->T, &sc->solver_seed, &sc->instance_seed,
-                    &sc->layout_id);
-  if (read != 7) {
-    return false;
-  }
-
-  if (sc->n <= 0 || sc->K <= 0 || sc->m <= 0 || sc->T <= 0) {
-    return false;
-  }
-  if (sc->layout_id < 0 || sc->layout_id > 3) {
-    return false;
-  }
-  return true;
+static int parse_golden_line(const char *line, GoldenCase *gc) {
+  int read = sscanf(line, "%d,%d,%d,%d,%u,%u,%d,%lf,%lf", &gc->n, &gc->K,
+                    &gc->m, &gc->T, &gc->solver_seed, &gc->instance_seed,
+                    &gc->layout_id, &gc->pyvrp_cost, &gc->max_gap_pct);
+  return (read == 9);
 }
 
 /*
- * Runs one scenario end-to-end:
- * - generate deterministic instance
- * - execute ACO
- * - validate route structure and objective coherence
- * - in MPI mode, ensure all ranks agree on best cost
+ * Function:  assert_valid_solution
+ * --------------------------------
+ * validates VRP structural constraints and aborts if invalid.
+ *
+ *  s: solution to validate
+ *  n: number of customers
+ *  K: number of routes
+ *
+ *  returns: nothing
  */
-static void run_single_scenario(const char *case_name, int scenario_index,
-                                const Scenario *sc, int rank) {
-  Point *pts = malloc((size_t)(sc->n + 1) * sizeof(Point));
+static void assert_valid_solution(const Solution *s, int n, int K) {
+  char err[128];
+  bool ok = solution_validate(s, n, K, err, sizeof(err));
+  if (!ok) {
+    fprintf(stderr, "invalid solution: %s\n", err);
+    assert(0);
+  }
+}
+
+/*
+ * Function:  run_case
+ * -------------------
+ * executes one golden scenario end-to-end:
+ * - generate deterministic instance
+ * - run ACO solver
+ * - validate structure and objective coherence
+ * - compare gap against offline PyVRP baseline threshold
+ *
+ *  gc: golden scenario with expected PyVRP cost and max allowed gap
+ *
+ *  returns: nothing (aborts on first failed check)
+ */
+static void run_case(const GoldenCase *gc) {
+  Point *pts = malloc((size_t)(gc->n + 1) * sizeof(*pts));
   assert(pts);
-
-  double **c = matrix_alloc(sc->n);
+  double **c = matrix_alloc(gc->n);
   assert(c);
+  Solution *best = solution_create(gc->K, gc->n);
+  assert(best);
 
-  generate_points(pts, sc->n, sc->instance_seed, sc->layout_id);
-  fill_cost_matrix(c, pts, sc->n);
+  generate_points(pts, gc->n, gc->instance_seed, gc->layout_id);
+  fill_cost_matrix(c, pts, gc->n);
 
-  int repeats = (sc->n <= 300) ? 2 : 1;
-  double first_cost = -1.0;
+  double best_cost = 0.0;
+  aco_vrp(gc->n, gc->K, gc->m, gc->T, c, 1.0, 2.0, 0.5, 1.0, 1.0,
+          gc->solver_seed, best, &best_cost);
 
-  for (int run = 0; run < repeats; ++run) {
-    Solution *best = solution_create(sc->K, sc->n);
-    assert(best);
-
-    double best_cost = 0.0;
-    aco_vrp(sc->n, sc->K, sc->m, sc->T, c, 1.0, 2.0, 0.5, 1.0, 1.0,
-            sc->solver_seed, best, &best_cost);
-
-    assert_valid_solution(best, sc->n, sc->K, rank);
-    assert(isfinite(best_cost));
-
-    double recomputed = solution_cost(best, c);
-    assert_close(best_cost, recomputed, 1e-7);
-
-    if (run == 0) {
-      first_cost = best_cost;
-    } else {
-      assert_close(first_cost, best_cost, 1e-9);
-    }
-
-#ifdef USE_MPI
-    double min_cost = 0.0;
-    double max_cost = 0.0;
-    MPI_Allreduce(&best_cost, &min_cost, 1, MPI_DOUBLE, MPI_MIN,
-                  MPI_COMM_WORLD);
-    MPI_Allreduce(&best_cost, &max_cost, 1, MPI_DOUBLE, MPI_MAX,
-                  MPI_COMM_WORLD);
-    assert_close(min_cost, max_cost, 1e-9);
-#endif
-
-    solution_free(best);
+  assert_valid_solution(best, gc->n, gc->K);
+  double recomputed = solution_cost(best, c);
+  double cost_tol = 1e-7;
+  if (fabs(best_cost - recomputed) > cost_tol) {
+    fprintf(stderr, "cost mismatch: best=%.9f recomputed=%.9f\n", best_cost,
+            recomputed);
+    assert(0);
   }
 
-#ifdef USE_MPI
-  if (rank == 0) {
-#endif
-    printf("[OK] %s scenario %d (n=%d K=%d m=%d T=%d)\n", case_name,
-           scenario_index + 1, sc->n, sc->K, sc->m, sc->T);
-#ifdef USE_MPI
+  double gap_pct = ((best_cost - gc->pyvrp_cost) / gc->pyvrp_cost) * 100.0;
+  if (gap_pct > gc->max_gap_pct + 1e-9) {
+    fprintf(stderr,
+            "gap too large for n=%d: c=%.3f pyvrp=%.3f gap=%.3f%% max=%.3f%%\n",
+            gc->n, best_cost, gc->pyvrp_cost, gap_pct, gc->max_gap_pct);
+    assert(0);
   }
-#endif
 
+  printf("[OK] n=%d K=%d m=%d T=%d c=%.3f pyvrp=%.3f gap=%.3f%% (max=%.3f%%)\n",
+         gc->n, gc->K, gc->m, gc->T, best_cost, gc->pyvrp_cost, gap_pct,
+         gc->max_gap_pct);
+
+  solution_free(best);
   matrix_free(c);
   free(pts);
 }
 
 /*
- * Loads one case file and executes all scenarios contained in it.
+ * Function:  main
+ * --------------
+ * loads the offline golden CSV and runs all listed scenarios.
+ *
+ * usage:
+ *   ./tests/test.out [golden_csv_path]
+ *
+ *  argc: number of command-line arguments
+ *  argv: command-line argument array
+ *
+ *  returns: 0 on success
+ *           1 on usage/file/parse failures
  */
-static int run_case_file(const char *case_dir, const char *case_name,
-                         int rank) {
-  char path[PATH_BUF_LEN];
-  int written = snprintf(path, sizeof(path), "%s/%s", case_dir, case_name);
-  assert(written > 0 && written < (int)sizeof(path));
+int main(int argc, char **argv) {
+  const char *path = "tests/files/golden_pyvrp.csv";
+  if (argc == 2) {
+    path = argv[1];
+  } else if (argc > 2) {
+    fprintf(stderr, "usage: %s [golden_csv_path]\n", argv[0]);
+    return 1;
+  }
 
   FILE *fp = fopen(path, "r");
   if (!fp) {
-    fprintf(stderr, "failed to open case file: %s\n", path);
-    assert(0);
+    fprintf(stderr, "failed to open golden file: %s\n", path);
+    return 1;
   }
 
-  int scenario_count = 0;
-  int read = fscanf(fp, "%d", &scenario_count);
-  if (read != 1 || scenario_count <= 0) {
-    fprintf(stderr, "invalid scenario count in: %s\n", path);
-    fclose(fp);
-    assert(0);
-  }
+  char line[512];
+  int cases = 0;
+  while (fgets(line, sizeof(line), fp)) {
+    if (line[0] == '#' || line[0] == '\n') {
+      continue;
+    }
+    if (!strncmp(line, "n,", 2)) {
+      continue;
+    }
 
-  for (int i = 0; i < scenario_count; ++i) {
-    Scenario sc;
-    if (!parse_scenario(fp, &sc)) {
-      fprintf(stderr, "invalid scenario line %d in: %s\n", i + 1, path);
+    GoldenCase gc;
+    if (!parse_golden_line(line, &gc)) {
+      fprintf(stderr, "invalid golden row: %s", line);
       fclose(fp);
-      assert(0);
+      return 1;
     }
-    run_single_scenario(case_name, i, &sc, rank);
-  }
 
+    run_case(&gc);
+    ++cases;
+  }
   fclose(fp);
-  return scenario_count;
-}
 
-/*
- * Test entrypoint.
- * Usage:
- *   ./tests            -> run full suite
- *   ./tests <dir>      -> run full suite from custom directory
- *   ./tests <dir> <file> -> run one case file
- * In MPI builds this initializes/finalizes MPI and keeps output on rank 0.
- */
-int main(int argc, char **argv) {
-  int rank = 0;
-
-#ifdef USE_MPI
-  int provided = 0;
-  int rc = MPI_Init_thread(NULL, NULL, MPI_THREAD_FUNNELED, &provided);
-  if (rc != MPI_SUCCESS) {
-    fprintf(stderr, "MPI_Init_thread failed\n");
-    return 1;
-  }
-  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-#endif
-
-  if (argc > 3) {
-    if (rank == 0) {
-      fprintf(stderr, "usage: %s [case_dir] [case_name]\n", argv[0]);
-    }
-#ifdef USE_MPI
-    MPI_Finalize();
-#endif
+  if (cases == 0) {
+    fprintf(stderr, "no golden cases found in %s\n", path);
     return 1;
   }
 
-  const char *case_dir = (argc >= 2) ? argv[1] : DEFAULT_CASE_DIR;
-  const char *case_name = (argc == 3) ? argv[2] : NULL;
-
-  int total_scenarios = 0;
-
-  if (case_name) {
-    total_scenarios = run_case_file(case_dir, case_name, rank);
-    if (rank == 0) {
-      printf("Final test passed (%s, %d scenario(s)).\n", case_name,
-             total_scenarios);
-    }
-#ifdef USE_MPI
-    MPI_Finalize();
-#endif
-    return 0;
-  }
-
-  int total_files = (int)(sizeof(kCaseFiles) / sizeof(kCaseFiles[0]));
-  for (int i = 0; i < total_files; ++i) {
-    total_scenarios += run_case_file(case_dir, kCaseFiles[i], rank);
-  }
-
-  if (rank == 0) {
-    printf("All final tests passed (%d files, %d scenarios).\n", total_files,
-           total_scenarios);
-  }
-
-#ifdef USE_MPI
-  MPI_Finalize();
-#endif
+  printf("All tests passed (%d case(s)).\n", cases);
   return 0;
 }

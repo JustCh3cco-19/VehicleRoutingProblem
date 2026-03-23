@@ -51,20 +51,23 @@ LEGACY_BINARIES=aco_vrp_seq aco_vrp_hybrid aco_vrp_openmp_mpi tests/test tests/t
 all: $(BIN)
 
 help:
-	@echo
-	@echo "Ant Colony Optimization for VRP"
-	@echo
-	@echo "make all         Build sequential binary"
-	@echo "make openmp_mpi  Build MPI+OpenMP binary"
-	@echo "make test        Build and run final file-based tests"
-	@echo "make test_mpi    Build and run one final MPI file-based test (set MPI_CASE_FILE, MPI_NP, MPI_OMP_THREADS)"
-	@echo "make test_mpi_race Run test_03..test_06 one file at a time with 2 and 4 processes"
-	@echo "make experiments Run correctness + scaling experiments"
-	@echo "make report      Build PDF report/report.pdf"
-	@echo "make coverage    Build with gcov and run sequential tests"
-	@echo "make debug       Build with -DDEBUG"
-	@echo "make clean       Remove targets"
-	@echo
+	@printf "\n"
+	@printf "Ant Colony Optimization for VRP\n"
+	@printf "================================\n\n"
+	@printf "Build Targets:\n"
+	@printf "  %-18s %s\n" "all" "Build sequential binary"
+	@printf "  %-18s %s\n" "openmp_mpi" "Build MPI+OpenMP binary"
+	@printf "  %-18s %s\n" "debug" "Build with -DDEBUG"
+	@printf "  %-18s %s\n\n" "clean" "Remove binaries, objects, and coverage artifacts"
+	@printf "Test Targets:\n"
+	@printf "  %-18s %s\n" "test" "Build and run final file-based tests"
+	@printf "  %-18s %s\n" "test_mpi" "Run one MPI test (uses MPI_CASE_FILE, MPI_NP, MPI_OMP_THREADS)"
+	@printf "  %-18s %s\n" "test_mpi_race" "Run race-oriented MPI cases (test_03..test_06)"
+	@printf "  %-18s %s\n\n" "scaling_tests" "Run progressive PyVRP-only scaling tests up to n=40000"
+	@printf "Analysis/Docs:\n"
+	@printf "  %-18s %s\n" "experiments" "Run correctness + scaling experiments"
+	@printf "  %-18s %s\n" "coverage" "Build with gcov and run sequential tests"
+	@printf "  %-18s %s\n\n" "report" "Build report/report.pdf"
 
 src/main.o: src/main.c include/aco.h include/matrix.h include/solution.h
 	$(CC) $(EXTRA_FLAGS) $(FLAGS) $(FORCE_OPT) -c $< -o $@
@@ -91,7 +94,7 @@ $(TEST_BIN): $(TEST_OBJ) $(SEQ_OBJ) $(ACO_SHARED_OBJ) $(SOLUTION_OBJ) $(MATRIX_O
 	$(CC) $(EXTRA_FLAGS) $(FLAGS) $(FORCE_OPT) $^ $(LIBS) -o $@
 
 test: $(TEST_BIN)
-	./$(TEST_BIN)
+	./$(TEST_BIN) tests/files/golden_pyvrp.csv
 
 openmp_mpi: $(OPENMP_MPI_BIN)
 
@@ -115,6 +118,9 @@ test_mpi_race: $(MPI_TEST_BIN)
 experiments: $(BIN) $(OPENMP_MPI_BIN)
 	MPLCONFIGDIR=/tmp/mpl python3 scripts/run_experiments.py
 
+scaling_tests:
+	python3 tests/pyvrp_tests.py
+
 report: experiments
 	cd report && pdflatex -interaction=nonstopmode -halt-on-error report.tex >/dev/null
 	cd report && pdflatex -interaction=nonstopmode -halt-on-error report.tex >/dev/null
@@ -133,4 +139,4 @@ clean:
 debug:
 	$(MAKE) EXTRA_FLAGS=-DDEBUG
 
-.PHONY: all help clean debug test test_mpi test_mpi_race coverage openmp_mpi experiments report
+.PHONY: all help clean debug test test_mpi test_mpi_race coverage openmp_mpi experiments scaling_tests report
