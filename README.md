@@ -77,6 +77,16 @@ Runner OpenMP+MPI progressivo:
 make openmp_mpi_tests
 ```
 
+Esecuzione su cluster con SLURM (batch, puoi disconnetterti):
+```sh
+./scripts/submit_openmp_mpi_tests.sh
+```
+
+Con argomenti opzionali passati al binario:
+```sh
+./scripts/submit_openmp_mpi_tests.sh "--memory-utilization 0.70 --c-max-n 100000"
+```
+
 ## Debug
 Compila con `-DDEBUG`:
 ```sh
