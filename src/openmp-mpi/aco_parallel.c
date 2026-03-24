@@ -212,6 +212,11 @@ void aco_vrp(int n, int K, int m, int T, double **c, double alpha,
   solution_reset(best_solution);
   *best_cost = DBL_MAX;
 
+  int vehicle_capacity_customers = (K > 0) ? ((n + K - 1) / K) : n;
+  if (vehicle_capacity_customers < 1) {
+    vehicle_capacity_customers = 1;
+  }
+
 #ifdef _OPENMP
   bool omp_enabled = (omp_get_max_threads() > 1 && local_m > 1);
 #else
@@ -248,6 +253,7 @@ void aco_vrp(int n, int K, int m, int T, double **c, double alpha,
             unsigned int rng_state = aco_make_ant_seed(seed, iter, global_ant);
 
             aco_build_ant_solution(sol, n, K, tau, eta, alpha, beta,
+                                   vehicle_capacity_customers,
                                    &rng_state, unvisited_nodes,
                                    candidate_scores, random_draws);
             double cost = solution_cost(sol, c);
@@ -296,7 +302,8 @@ void aco_vrp(int n, int K, int m, int T, double **c, double alpha,
           int global_ant = ant_offset + ant;
           unsigned int rng_state = aco_make_ant_seed(seed, iter, global_ant);
 
-          aco_build_ant_solution(sol, n, K, tau, eta, alpha, beta, &rng_state,
+          aco_build_ant_solution(sol, n, K, tau, eta, alpha, beta,
+                                 vehicle_capacity_customers, &rng_state,
                                  unvisited_nodes,
                                  candidate_scores, random_draws);
           double cost = solution_cost(sol, c);

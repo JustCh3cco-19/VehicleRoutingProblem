@@ -96,6 +96,8 @@ int aco_select_next(int current, const int *unvisited_nodes,
  *  eta: heuristic matrix
  *  alpha: pheromone influence exponent
  *  beta: heuristic influence exponent
+ *  vehicle_capacity_customers: max customers assignable to each vehicle;
+ *                              <=0 disables the limit
  *  rng_state: rng state for deterministic random draws
  *  unvisited_nodes: scratch array of size at least n
  *  candidate_scores: scratch array of size at least n
@@ -105,6 +107,7 @@ int aco_select_next(int current, const int *unvisited_nodes,
  */
 void aco_build_ant_solution(Solution *sol, int n, int K, double **tau,
                             double **eta, double alpha, double beta,
+                            int vehicle_capacity_customers,
                             unsigned int *rng_state, int *unvisited_nodes,
                             double *candidate_scores, double *random_draws);
 

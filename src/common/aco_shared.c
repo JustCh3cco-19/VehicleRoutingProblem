@@ -166,6 +166,7 @@ int aco_select_next(int current, const int *unvisited_nodes,
  *  eta: heuristic matrix
  *  alpha: pheromone exponent
  *  beta: heuristic exponent
+ *  vehicle_capacity_customers: max customers per route (unit demand); <=0 means unlimited
  *  rng_state: RNG state used to draw random numbers
  *  unvisited_nodes: scratch array of size >= n
  *  candidate_scores: scratch array of size >= n
@@ -175,9 +176,15 @@ int aco_select_next(int current, const int *unvisited_nodes,
  */
 void aco_build_ant_solution(Solution *sol, int n, int K, double **tau,
                             double **eta, double alpha, double beta,
+                            int vehicle_capacity_customers,
                             unsigned int *rng_state, int *unvisited_nodes,
                             double *candidate_scores, double *random_draws) {
   solution_reset(sol);
+
+  int route_customer_cap = vehicle_capacity_customers;
+  if (route_customer_cap <= 0) {
+    route_customer_cap = n;
+  }
 
   for (int i = 0; i < n; ++i) {
     unvisited_nodes[i] = i + 1;
@@ -191,8 +198,12 @@ void aco_build_ant_solution(Solution *sol, int n, int K, double **tau,
     Route *r = &sol->routes[vehicle - 1];
     route_append(r, 0);
     int current = 0;
+    int assigned_customers = 0;
+    int remaining_vehicles = K - vehicle;
+    int future_capacity = remaining_vehicles * route_customer_cap;
 
-    while (unvisited_count > 0 && unvisited_count > (K - vehicle)) {
+    while (unvisited_count > 0 && unvisited_count > future_capacity &&
+           assigned_customers < route_customer_cap) {
       double roulette_r = random_draws[draw_index++];
       int selected_idx = -1;
       int next = aco_select_next(current, unvisited_nodes, unvisited_count,
@@ -203,6 +214,7 @@ void aco_build_ant_solution(Solution *sol, int n, int K, double **tau,
       }
 
       route_append(r, next);
+      ++assigned_customers;
       --unvisited_count;
       unvisited_nodes[selected_idx] = unvisited_nodes[unvisited_count];
       current = next;
@@ -217,8 +229,11 @@ void aco_build_ant_solution(Solution *sol, int n, int K, double **tau,
       --last->len;
     }
 
-    while (unvisited_count > 0) {
+    int last_customers = last->len > 0 ? (last->len - 1) : 0;
+
+    while (unvisited_count > 0 && last_customers < route_customer_cap) {
       route_append(last, unvisited_nodes[--unvisited_count]);
+      ++last_customers;
     }
 
     route_append(last, 0);

@@ -81,7 +81,8 @@ static size_t estimate_c_memory_bytes(int n) {
 
 static void build_scenarios(Scenario *out, int *count) {
   static const int levels[] = {500, 1000, 2000, 4000, 8000,
-                               12000, 16000, 24000, 32000, 40000};
+                               12000, 16000, 24000, 32000, 40000,
+                               48000, 56000, 64000};
   const int total = (int)(sizeof(levels) / sizeof(levels[0]));
 
   for (int idx = 0; idx < total; ++idx) {
@@ -210,7 +211,7 @@ static double elapsed_seconds(const struct timespec *start,
 int main(int argc, char **argv) {
   const char *csv_path = "results/scaling_progressive_c.csv";
   double memory_utilization = 0.70;
-  int c_max_n = 40000;
+  int c_max_n = 64000;
   int force = 0;
 
   for (int i = 1; i < argc; ++i) {
@@ -263,7 +264,7 @@ int main(int argc, char **argv) {
   printf("[INFO] memory_utilization   : %.2f\n", memory_utilization);
   printf("[INFO] c_max_n              : %d\n\n", c_max_n);
 
-  Scenario scenarios[10];
+  Scenario scenarios[16];
   int total = 0;
   build_scenarios(scenarios, &total);
 

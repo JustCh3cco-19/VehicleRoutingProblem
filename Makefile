@@ -68,7 +68,7 @@ help:
 	@printf "  %-18s %s\n" "test_mpi" "Run one MPI test (uses MPI_CASE_FILE, MPI_NP, MPI_OMP_THREADS)"
 	@printf "  %-18s %s\n" "test_mpi_race" "Run race-oriented MPI cases (test_03..test_06)"
 	@printf "  %-18s %s\n" "scaling_tests" "Run progressive PyVRP-only scaling tests up to n=40000"
-	@printf "  %-18s %s\n\n" "c_scaling_tests" "Run progressive C scaling tests up to n=40000 (memory-aware)"
+	@printf "  %-18s %s\n\n" "c_scaling_tests" "Run progressive C scaling tests up to n=64000 (memory-aware)"
 	@printf "Analysis/Docs:\n"
 	@printf "  %-18s %s\n" "experiments" "Run correctness + scaling experiments"
 	@printf "  %-18s %s\n" "coverage" "Build with gcov and run sequential tests"

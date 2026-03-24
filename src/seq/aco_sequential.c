@@ -65,6 +65,11 @@ void aco_vrp(int n, int K, int m, int T, double **c, double alpha,
   solution_reset(best_solution);
   *best_cost = DBL_MAX;
 
+  int vehicle_capacity_customers = (K > 0) ? ((n + K - 1) / K) : n;
+  if (vehicle_capacity_customers < 1) {
+    vehicle_capacity_customers = 1;
+  }
+
   size_t scratch_len = (n > 0) ? (size_t)n : 1u;
 
   for (int iter = 0; iter < T; ++iter) {
@@ -84,7 +89,8 @@ void aco_vrp(int n, int K, int m, int T, double **c, double alpha,
       for (int ant = 0; ant < m; ++ant) {
         unsigned int rng_state = aco_make_ant_seed(seed, iter, ant);
 
-        aco_build_ant_solution(sol, n, K, tau, eta, alpha, beta, &rng_state,
+        aco_build_ant_solution(sol, n, K, tau, eta, alpha, beta,
+                   vehicle_capacity_customers, &rng_state,
                                unvisited_nodes, candidate_scores,
                                random_draws);
         double cost = solution_cost(sol, c);
