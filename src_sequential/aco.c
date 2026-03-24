@@ -52,6 +52,7 @@ static int select_next(int current, const bool *visited, int n,
 void aco_vrp_sequential(int n, int K, int m, int T, double **c,
                         double alpha, double beta, double rho,
                         double tau0, double Q, unsigned int seed,
+                        bool use_uniform_pheromone,
                         Solution *best_solution, double *best_cost) {
   srand(seed);
 
@@ -65,6 +66,8 @@ void aco_vrp_sequential(int n, int K, int m, int T, double **c,
     solution_free(iter_best);
     return;
   }
+
+  int capacity = n - K + 3;
 
   for (int i = 0; i <= n; ++i) {
     for (int j = 0; j <= n; ++j) {
@@ -102,13 +105,15 @@ void aco_vrp_sequential(int n, int K, int m, int T, double **c,
         Route *r = &sol->routes[vehicle - 1];
         route_append(r, 0);
         int current = 0;
+        int route_customers = 0;
 
-        while (unvisited_count > 0 && unvisited_count > (K - vehicle)) {
+        while (unvisited_count > 0 && unvisited_count > (K - vehicle) && route_customers < capacity) {
           int next = select_next(current, visited, n, tau, eta, alpha, beta);
           route_append(r, next);
           visited[next] = true;
           --unvisited_count;
           current = next;
+          route_customers++;
         }
 
         route_append(r, 0);
@@ -152,7 +157,7 @@ void aco_vrp_sequential(int n, int K, int m, int T, double **c,
         }
       }
 
-      double deposit = Q / iter_best_cost;
+      double deposit = use_uniform_pheromone ? Q : (Q / iter_best_cost);
       for (int i = 0; i < K; ++i) {
         Route *r = &iter_best->routes[i];
         for (int t = 0; t + 1 < r->len; ++t) {

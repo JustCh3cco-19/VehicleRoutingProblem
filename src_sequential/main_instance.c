@@ -35,19 +35,14 @@ int main(int argc, char **argv) {
     Solution *best = solution_create(K, n);
     double best_cost = 0.0;
 
-    if (aco_vrp_cuda(n, K, m, T, c, alpha, beta, rho, tau0, Q, seed, false, best, &best_cost) != 0) {
-        fprintf(stderr, "CUDA solver failed\n");
-        solution_free(best);
-        matrix_free(c);
-        return 1;
-    }
+    aco_vrp_sequential(n, K, m, T, c, alpha, beta, rho, tau0, Q, seed, false, best, &best_cost);
 
     for (int i = 0; i < K; ++i) {
         printf("Route %d: ", i + 1);
         Route *r = &best->routes[i];
         for (int t = 0; t < r->len; ++t) {
             int node = r->nodes[t];
-            if (node != 0) { // pyvrp assumes 1-indexed customer IDs excluding depot
+            if (node != 0) {
                 printf("%d ", node);
             }
         }

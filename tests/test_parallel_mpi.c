@@ -57,7 +57,7 @@ int main(int argc, char **argv) {
   double cost_mpi_s1 = DBL_MAX;
   double cost_mpi_s4 = DBL_MAX;
 
-  aco_vrp_sequential(n, K, m, T, c, 1.0, 2.0, 0.5, 1.0, 1.0, 2026,
+  aco_vrp_sequential(n, K, m, T, c, 1.0, 2.0, 0.5, 1.0, 1.0, 2026, false,
                      best_seq, &cost_seq);
   assert_valid_solution(best_seq, n, K);
 

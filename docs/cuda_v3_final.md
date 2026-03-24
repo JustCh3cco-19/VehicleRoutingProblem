@@ -23,4 +23,29 @@ Benchmark eseguito con 1024 formiche e 100 iterazioni.
 | 500 | 7.69 ms | 57.46 ms | 93.38 ms | 12.1x |
 | 1000 | **21.43 ms** | 220.74 ms | 366.23 ms | **17.1x** |
 
-**Verdetto Finale**: La Versione 3 ha abbattuto il tempo di esecuzione per problemi di grandi dimensioni del **94%** rispetto alla versione iniziale. Questa è la migliore implementazione possibile per scalabilità e performance su architettura CUDA.
+## 4. Limitazioni Identificate: Il Bug della Doppia Visita (Warp Synchronization)
+
+Durante test intensivi (512+ formiche, 2000+ iterazioni), è emerso un bug critico di correttezza legato alla parallelizzazione a livello di warp.
+
+### Analisi Tecnica del Problema
+Il solver CUDA può occasionalmente produrre soluzioni non valide in cui uno o più clienti vengono visitati più volte (es. `Route 1: ... 8 1 1`).
+
+**Root Cause (Analisi in Profondità):**
+Il problema risiede nella **mancata sincronizzazione della memoria globale** all'interno del warp tra le iterazioni del ciclo di costruzione del percorso (`while`).
+1. Il thread 0 del warp seleziona il `next_node` e aggiorna l'array `my_visited` in memoria globale: `my_visited[next_node] = true`.
+2. Il valore di `next_node` viene propagato agli altri thread tramite `__shfl_sync`.
+3. Tuttavia, la scrittura in memoria globale di `my_visited` **non è garantita come visibile** a tutti gli altri thread del warp all'inizio dell'iterazione successiva, quando viene ricalcolato il denominatore (`denom`) e viene eseguito il parallel scan.
+4. Se un thread legge `false` per un nodo già visitato, quel nodo rientra nel calcolo delle probabilità e può essere selezionato nuovamente.
+
+**Conseguenze:**
+- Soluzioni non fattibili (`Infeasible`) secondo i vincoli VRP.
+- Fallimento della validazione tramite `pyvrp`.
+- Instabilità dei risultati con carichi di lavoro elevati (molte formiche/iterazioni).
+
+### Strategia di Risoluzione (In Fase di Implementazione)
+Per garantire la correttezza atomica delle visite, sono necessarie le seguenti modifiche al kernel `construct_solutions_warp_v3_kernel`:
+1. **`__syncwarp()` forzato**: Inserire una barriera di sincronizzazione dopo ogni aggiornamento dell'array `visited`.
+2. **Shared Memory per `visited`**: Spostare l'array `visited` (attualmente in memoria globale per ogni formica) nella **Shared Memory** del blocco per ridurre la latenza e sfruttare la coerenza automatica dei dati a livello di warp/blocco.
+3. **Sincronizzazione Fallback**: Assicurarsi che le sezioni di "fallback" (quando `denom <= 0`) siano eseguite in modo atomico o protetto da sincronizzazioni warp-level.
+
+Questa scoperta evidenzia che, sebbene la Versione 3 sia estremamente veloce, richiede una gestione più rigorosa della coerenza della memoria per essere considerata affidabile in produzione.

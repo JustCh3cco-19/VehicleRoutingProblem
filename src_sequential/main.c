@@ -46,7 +46,7 @@ int main(void) {
 
   double best_cost = 0.0;
   aco_vrp_sequential(n, K, m, T, c, alpha, beta, rho, tau0, Q, 1234,
-                     best, &best_cost);
+                     false, best, &best_cost);
 
   printf("best cost: %.3f\n", best_cost);
 

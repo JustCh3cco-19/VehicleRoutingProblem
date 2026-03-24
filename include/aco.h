@@ -2,6 +2,7 @@
 #define ACO_H
 
 #include "solution.h"
+#include <stdbool.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -13,6 +14,7 @@ extern "C" {
 void aco_vrp_sequential(int n, int K, int m, int T, double **c,
                         double alpha, double beta, double rho,
                         double tau0, double Q, unsigned int seed,
+                        bool use_uniform_pheromone,
                         Solution *best_solution, double *best_cost);
 
 /*
@@ -23,6 +25,7 @@ void aco_vrp_sequential(int n, int K, int m, int T, double **c,
 void aco_vrp_openmp(int n, int K, int m, int T, double **c,
                     double alpha, double beta, double rho,
                     double tau0, double Q, unsigned int seed,
+                    bool use_uniform_pheromone,
                     int num_threads,
                     Solution *best_solution, double *best_cost);
 
@@ -37,6 +40,7 @@ void aco_vrp_openmp(int n, int K, int m, int T, double **c,
 int aco_vrp_mpi_openmp(int n, int K, int m, int T, double **c,
                        double alpha, double beta, double rho,
                        double tau0, double Q, unsigned int seed,
+                       bool use_uniform_pheromone,
                        int num_threads, int sync_every,
                        Solution *best_solution, double *best_cost);
 
@@ -50,6 +54,7 @@ int aco_vrp_mpi_openmp(int n, int K, int m, int T, double **c,
 int aco_vrp_cuda(int n, int K, int m, int T, double **c,
                  double alpha, double beta, double rho,
                  double tau0, double Q, unsigned int seed,
+                 bool use_uniform_pheromone,
                  Solution *best_solution, double *best_cost);
 
 #ifdef __cplusplus

@@ -92,14 +92,16 @@ __global__ void construct_solutions_warp_v3_kernel(int m, int K, int n, const do
     int *my_route_lens = &route_lens[global_warp_id * K];
     double total_cost = 0.0;
     int unvisited_count = n;
+    int capacity = n - K + 3;
 
     for (int vehicle = 0; vehicle < K; ++vehicle) {
         int *r = &my_routes[vehicle * (n + 2)];
         int len = 0;
         if (lane_id == 0) r[len++] = 0;
         int current = 0;
+        int route_customers = 0;
 
-        while (unvisited_count > 0 && unvisited_count > (K - 1 - vehicle)) {
+        while (unvisited_count > 0 && unvisited_count > (K - 1 - vehicle) && route_customers < capacity) {
             // 1. CALCOLO DENOMINATORE (Somma Totale)
             double local_sum = 0.0;
             for (int j = 1 + lane_id; j <= n; j += 32) {
@@ -145,9 +147,11 @@ __global__ void construct_solutions_warp_v3_kernel(int m, int K, int n, const do
                 my_visited[next_node] = true;
                 total_cost += c[current * (n + 1) + next_node];
                 unvisited_count--;
+                route_customers++;
             }
             next_node = __shfl_sync(0xFFFFFFFF, next_node, 0);
             unvisited_count = __shfl_sync(0xFFFFFFFF, unvisited_count, 0);
+            route_customers = __shfl_sync(0xFFFFFFFF, route_customers, 0);
             current = next_node;
         }
         if (lane_id == 0) {
@@ -156,8 +160,40 @@ __global__ void construct_solutions_warp_v3_kernel(int m, int K, int n, const do
             my_route_lens[vehicle] = len;
         }
     }
+    // Fallback per clienti rimasti (anche se viola capacity, come nella versione seq)
+    if (unvisited_count > 0 && lane_id == 0) {
+        int *last_r = &my_routes[(K - 1) * (n + 2)];
+        int last_len = my_route_lens[K - 1];
+        if (last_len > 0 && last_r[last_len - 1] == 0) last_len--;
+        int last_node = last_r[last_len - 1];
+
+        for (int j = 1; j <= n; ++j) {
+            if (!my_visited[j]) {
+                last_r[last_len++] = j;
+                total_cost += c[last_node * (n + 1) + j];
+                last_node = j;
+                my_visited[j] = true;
+            }
+        }
+        last_r[last_len++] = 0;
+        total_cost += c[last_node * (n + 1) + 0];
+        // Sottraiamo il costo del vecchio ritorno al deposito
+        // total_cost -= c[...]; // Complesso da ricalcolare qui, ma per correttezza dovremmo.
+        // In realtà la versione seq ricalcola solution_cost alla fine.
+        my_route_lens[K - 1] = last_len;
+    }
+    // Ricalcolo costo corretto se abbiamo aggiunto nodi nel fallback
     if (lane_id == 0) {
-        costs[global_warp_id] = total_cost;
+        // Per semplicità ricalcoliamo il costo totale
+        double final_cost = 0.0;
+        for (int v = 0; v < K; ++v) {
+            int *r = &my_routes[v * (n + 2)];
+            int l = my_route_lens[v];
+            for (int t = 0; t + 1 < l; ++t) {
+                final_cost += c[r[t] * (n + 1) + r[t+1]];
+            }
+        }
+        costs[global_warp_id] = final_cost;
         states[global_warp_id] = local_state;
     }
 }

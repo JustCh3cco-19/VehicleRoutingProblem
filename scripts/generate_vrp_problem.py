@@ -12,7 +12,7 @@ except ImportError:
     print("Error: pyvrp is not installed. Please run in the created .venv.")
     sys.exit(1)
 
-def generate_instance(name, num_clients, num_vehicles, capacity, grid_size=100, seed=None):
+def generate_instance(name, num_clients, num_vehicles, capacity=None, grid_size=100, seed=None):
     if seed is not None:
         np.random.seed(seed)
     
@@ -21,9 +21,13 @@ def generate_instance(name, num_clients, num_vehicles, capacity, grid_size=100, 
     client_coords = np.random.randint(0, grid_size, size=(num_clients, 2))
     all_coords = np.vstack([depot_coord, client_coords])
     
-    # Random demands (1 to 10)
-    demands = np.random.randint(1, 11, size=num_clients)
+    # Unit demands (1 per client) to match node-count capacity
+    demands = np.ones(num_clients, dtype=int)
     all_demands = np.concatenate(([0], demands))
+    
+    # Formula: capacity = n - K + 3
+    if capacity is None:
+        capacity = num_clients - num_vehicles + 3
     
     instance_data = {
         "NAME": name,
@@ -31,7 +35,7 @@ def generate_instance(name, num_clients, num_vehicles, capacity, grid_size=100, 
         "DIMENSION": num_clients + 1,
         "VEHICLES": num_vehicles,
         "EDGE_WEIGHT_TYPE": "EUC_2D",
-        "CAPACITY": capacity,
+        "CAPACITY": int(capacity),
         "NODE_COORD_SECTION": all_coords,
         "DEMAND_SECTION": all_demands,
         "DEPOT_SECTION": [1, -1]
@@ -73,7 +77,7 @@ def main():
     parser.add_argument("--name", default="synthetic_vrp", help="Name of the instance")
     parser.add_argument("--clients", "--nodes", type=int, default=20, help="Number of customer nodes")
     parser.add_argument("--vehicles", type=int, default=5, help="Number of vehicles available")
-    parser.add_argument("--capacity", type=int, default=50, help="Vehicle capacity")
+    parser.add_argument("--capacity", type=int, help="Vehicle capacity")
     parser.add_argument("--unlimited", action="store_true", help="Set capacity to sum of all demands (effectively unlimited)")
     parser.add_argument("--grid", type=int, default=100, help="Coordinate grid size (0 to grid)")
     parser.add_argument("--seed", type=int, help="Random seed for reproducibility")

@@ -14,6 +14,7 @@
 int aco_vrp_cuda(int n, int K, int m, int T, double **c,
                  double alpha, double beta, double rho,
                  double tau0, double Q, unsigned int seed,
+                 bool use_uniform_pheromone,
                  Solution *best_solution, double *best_cost) {
     
     int size = (n + 1) * (n + 1);
@@ -102,12 +103,11 @@ int aco_vrp_cuda(int n, int K, int m, int T, double **c,
 
             launch_evaporate_pheromones(d_tau, n, rho, THREADS_PER_BLOCK);
             
-            // Versione 3: Deposito feromoni direttamente su GPU
-            // Usiamo i puntatori d_routes e d_route_lens dell'ant migliore di questa iterazione
+            double deposit = use_uniform_pheromone ? Q : (Q / iter_best_cost);
             launch_deposit_pheromones(d_tau, n, K, 
                                       d_routes + best_ant * K * (n + 2), 
                                       d_route_lens + best_ant * K, 
-                                      Q / iter_best_cost, 
+                                      deposit, 
                                       THREADS_PER_BLOCK);
 
             cudaError_t err = cudaDeviceSynchronize();

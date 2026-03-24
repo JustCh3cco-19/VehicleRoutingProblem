@@ -11,7 +11,7 @@ SOLUTION="solution.txt"
 
 # 1. Generate problem and reference solution
 echo "--- Generating problem and reference solution ---"
-python3 scripts/generate_vrp_problem.py --nodes $NODES --vehicles $VEHICLES --unlimited --output $INSTANCE --seed 42 --solve --runtime 5.0
+python3 scripts/generate_vrp_problem.py --nodes $NODES --vehicles $VEHICLES --output $INSTANCE --seed 42 --solve --runtime 5.0
 REF_SOLUTION="problem_solution.txt"
 
 # 2. Build solver
