@@ -58,8 +58,8 @@ Test race-oriented su piu casi/rank:
 make test_mpi_race
 ```
 
-## Scaling progressivo fino a 40k clienti (PyVRP)
-Esegue scenari progressivi fino a `n=40000` con PyVRP, usando automaticamente `VRP/bin/python`.
+## Scaling progressivo fino a 100k clienti (PyVRP)
+Esegue scenari progressivi fino a `n=100000` con PyVRP, usando automaticamente `VRP/bin/python`.
 
 Comando rapido:
 ```sh
@@ -71,7 +71,7 @@ Output CSV predefinito:
 
 Esecuzione manuale (opzioni principali):
 ```sh
-python3 tests/pyvrp_tests.py --memory-utilization 0.70 --pyvrp-max-n 40000
+python3 tests/pyvrp_tests.py --memory-utilization 0.70 --pyvrp-max-n 100000
 ```
 
 Opzioni utili:
@@ -80,10 +80,10 @@ Opzioni utili:
 - `--csv PATH` percorso CSV output
 - `--force` disabilita skip basato su memoria stimata
 
-## Scaling progressivo fino a 40k clienti (solver C)
-Nuovo runner C dedicato per scenari progressivi fino a `n=40000`:
+## Scaling progressivo fino a 100k clienti (solver C)
+Nuovo runner C dedicato per scenari progressivi fino a `n=100000`:
 ```sh
-make c_scaling_tests
+make sequential_tests
 ```
 
 Output CSV predefinito:
@@ -91,7 +91,7 @@ Output CSV predefinito:
 
 Esecuzione manuale:
 ```sh
-./tests/c_scaling_tests.out --memory-utilization 0.70 --c-max-n 40000
+./tests/sequential_tests.out --memory-utilization 0.70 --c-max-n 100000
 ```
 
 Opzioni utili:

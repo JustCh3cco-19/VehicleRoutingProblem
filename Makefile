@@ -34,9 +34,13 @@ TEST_SRC=tests/tests.c
 TEST_BIN=tests/test.out
 TEST_OBJ=tests/test.o
 
-C_SCALING_SRC=tests/c_scaling_tests.c
-C_SCALING_OBJ=tests/c_scaling_tests.o
-C_SCALING_BIN=tests/c_scaling_tests.out
+SEQUENTIAL_TESTS_SRC=tests/sequential_tests.c
+SEQUENTIAL_TESTS_OBJ=tests/sequential_tests.o
+SEQUENTIAL_TESTS_BIN=tests/sequential_tests.out
+
+OPENMP_MPI_SCALING_SRC=tests/openmp_mpi_scaling_tests.c
+OPENMP_MPI_SCALING_BIN=tests/openmp_mpi_scaling_tests.out
+OPENMP_MPI_SCALING_TEST_SRC=$(OPENMP_MPI_SCALING_SRC) $(PAR_SRC) $(ACO_SHARED_SRC) $(SOLUTION_SRC) $(MATRIX_SRC)
 
 OPENMP_MPI_BIN=aco_vrp_openmp_mpi.out
 MPI_TEST_BIN=tests/test_mpi.out
@@ -67,8 +71,9 @@ help:
 	@printf "  %-18s %s\n" "test" "Build and run final file-based tests"
 	@printf "  %-18s %s\n" "test_mpi" "Run one MPI test (uses MPI_CASE_FILE, MPI_NP, MPI_OMP_THREADS)"
 	@printf "  %-18s %s\n" "test_mpi_race" "Run race-oriented MPI cases (test_03..test_06)"
-	@printf "  %-18s %s\n" "scaling_tests" "Run progressive PyVRP-only scaling tests up to n=40000"
-	@printf "  %-18s %s\n\n" "c_scaling_tests" "Run progressive C scaling tests up to n=64000 (memory-aware)"
+	@printf "  %-18s %s\n" "scaling_tests" "Run progressive PyVRP-only scaling tests up to n=100000"
+	@printf "  %-18s %s\n" "sequential_tests" "Run progressive C scaling tests up to n=100000 (memory-aware)"
+	@printf "  %-18s %s\n\n" "openmp_mpi_scaling_tests" "Run progressive OpenMP+MPI scaling tests up to n=100000 (uses MPI_NP, MPI_OMP_THREADS)"
 	@printf "Analysis/Docs:\n"
 	@printf "  %-18s %s\n" "experiments" "Run correctness + scaling experiments"
 	@printf "  %-18s %s\n" "coverage" "Build with gcov and run sequential tests"
@@ -98,10 +103,10 @@ $(TEST_OBJ): $(TEST_SRC) include/aco.h include/matrix.h include/solution.h
 $(TEST_BIN): $(TEST_OBJ) $(SEQ_OBJ) $(ACO_SHARED_OBJ) $(SOLUTION_OBJ) $(MATRIX_OBJ)
 	$(CC) $(EXTRA_FLAGS) $(FLAGS) $(FORCE_OPT) $^ $(LIBS) -o $@
 
-$(C_SCALING_OBJ): $(C_SCALING_SRC) include/aco.h include/matrix.h include/solution.h
+$(SEQUENTIAL_TESTS_OBJ): $(SEQUENTIAL_TESTS_SRC) include/aco.h include/matrix.h include/solution.h
 	$(CC) $(EXTRA_FLAGS) $(FLAGS) $(FORCE_OPT) -c $< -o $@
 
-$(C_SCALING_BIN): $(C_SCALING_OBJ) $(SEQ_OBJ) $(ACO_SHARED_OBJ) $(SOLUTION_OBJ) $(MATRIX_OBJ)
+$(SEQUENTIAL_TESTS_BIN): $(SEQUENTIAL_TESTS_OBJ) $(SEQ_OBJ) $(ACO_SHARED_OBJ) $(SOLUTION_OBJ) $(MATRIX_OBJ)
 	$(CC) $(EXTRA_FLAGS) $(FLAGS) $(FORCE_OPT) $^ $(LIBS) -o $@
 
 test: $(TEST_BIN)
@@ -114,6 +119,9 @@ $(OPENMP_MPI_BIN): $(OPENMP_MPI_SRC) include/aco.h include/matrix.h include/solu
 
 $(MPI_TEST_BIN): $(MPI_TEST_SRC) include/aco.h include/matrix.h include/solution.h
 	$(MPICC) $(EXTRA_FLAGS) $(FLAGS) $(FORCE_OPT) $(OMPFLAG) -DUSE_MPI $(MPI_TEST_SRC) $(LIBS) -o $@
+
+$(OPENMP_MPI_SCALING_BIN): $(OPENMP_MPI_SCALING_TEST_SRC) include/aco.h include/matrix.h include/solution.h
+	$(MPICC) $(EXTRA_FLAGS) $(FLAGS) $(FORCE_OPT) $(OMPFLAG) -DUSE_MPI $(OPENMP_MPI_SCALING_TEST_SRC) $(LIBS) -o $@
 
 test_mpi: $(MPI_TEST_BIN)
 	OMP_NUM_THREADS=$(MPI_OMP_THREADS) mpirun -np $(MPI_NP) ./$(MPI_TEST_BIN) $(MPI_CASE_DIR) $(MPI_CASE_FILE)
@@ -132,8 +140,11 @@ experiments: $(BIN) $(OPENMP_MPI_BIN)
 scaling_tests:
 	python3 tests/pyvrp_tests.py
 
-c_scaling_tests: $(C_SCALING_BIN)
-	./$(C_SCALING_BIN)
+sequential_tests: $(SEQUENTIAL_TESTS_BIN)
+	./$(SEQUENTIAL_TESTS_BIN)
+
+openmp_mpi_scaling_tests: $(OPENMP_MPI_SCALING_BIN)
+	OMP_NUM_THREADS=$(MPI_OMP_THREADS) mpirun -np $(MPI_NP) ./$(OPENMP_MPI_SCALING_BIN)
 
 report: experiments
 	cd report && pdflatex -interaction=nonstopmode -halt-on-error report.tex >/dev/null
@@ -144,7 +155,8 @@ coverage:
 	$(MAKE) test FLAGS="$(FLAGS) $(COVERAGE_FLAGS)" LIBS="$(LIBS) $(COVERAGE_LIBS)"
 
 clean:
-	rm -f $(BIN) $(OBJ) $(TEST_BIN) $(TEST_OBJ) $(C_SCALING_BIN) $(C_SCALING_OBJ) $(OPENMP_MPI_BIN) $(MPI_TEST_BIN) $(LEGACY_BINARIES) \
+	rm -f $(BIN) $(OBJ) $(TEST_BIN) $(TEST_OBJ) $(SEQUENTIAL_TESTS_BIN) $(SEQUENTIAL_TESTS_OBJ) $(OPENMP_MPI_BIN) $(MPI_TEST_BIN) $(LEGACY_BINARIES) \
+		$(OPENMP_MPI_SCALING_BIN) \
 		src/*.o src/seq/*.o src/openmp-mpi/*.o src/common/*.o \
 		tests/*.o tests/*.out \
 		$(COVERAGE_FILES) \
@@ -153,4 +165,4 @@ clean:
 debug:
 	$(MAKE) EXTRA_FLAGS=-DDEBUG
 
-.PHONY: all help clean debug test test_mpi test_mpi_race coverage openmp_mpi experiments scaling_tests c_scaling_tests report
+.PHONY: all help clean debug test test_mpi test_mpi_race coverage openmp_mpi experiments scaling_tests sequential_tests openmp_mpi_scaling_tests report

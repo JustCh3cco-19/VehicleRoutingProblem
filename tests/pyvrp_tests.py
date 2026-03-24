@@ -134,7 +134,25 @@ def build_scenarios() -> List[Scenario]:
     reduced as n grows to keep runtime bounded. K grows with n (capped) to
     avoid unrealistically overloaded routes in very large instances.
     """
-    levels = [500, 1000, 2000, 4000, 8000, 12000, 16000, 24000, 32000, 40000]
+    levels = [
+        500,
+        1000,
+        2000,
+        4000,
+        8000,
+        12000,
+        16000,
+        24000,
+        32000,
+        40000,
+        48000,
+        56000,
+        64000,
+        72000,
+        80000,
+        90000,
+        100000,
+    ]
     out: List[Scenario] = []
 
     for idx, n in enumerate(levels):
@@ -316,13 +334,13 @@ def solve_with_pyvrp(vrp_path: Path, seed: int, timeout_s: int, iterations: int)
 def main():
     # CLI is intentionally compact: this script has one primary mode (PyVRP).
     parser = argparse.ArgumentParser(
-        description="Progressive scaling tests (PyVRP-only) up to n=40000, using VRP uv venv."
+        description="Progressive scaling tests (PyVRP-only) up to n=100000, using VRP uv venv."
     )
     parser.add_argument("--memory-utilization", type=float, default=0.70)
     parser.add_argument("--timeout", type=int, default=0, help="PyVRP per-scenario timeout in seconds")
     parser.add_argument("--csv", default="results/scaling_progressive_pyvrp.csv")
     parser.add_argument("--force", action="store_true")
-    parser.add_argument("--pyvrp-max-n", type=int, default=40000)
+    parser.add_argument("--pyvrp-max-n", type=int, default=100000)
     args = parser.parse_args()
 
     # Force venv consistency before importing/using PyVRP internals.
