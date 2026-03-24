@@ -122,7 +122,7 @@ int main(int argc, char **argv) {
     ok = ok && parse_int_arg(argv[4], &T);
     seed = parse_uint_arg(argv[5], &ok);
 
-    if (!ok || n <= 0 || K <= 0 || m <= 0 || T <= 0) {
+    if (!ok || n <= 0 || K <= 0 || m < 0 || T <= 0) {
       if (
 #ifdef USE_MPI
           mpi_rank == 0 &&
@@ -130,7 +130,7 @@ int main(int argc, char **argv) {
           1) {
         fprintf(stderr,
                 "usage: %s [n K m T seed]\n"
-                "example: %s 200 16 1024 100 1234\n",
+                "example: %s 200 16 0 100 1234   (m=0 => auto ants)\n",
                 argv[0], argv[0]);
       }
       status = 1;
@@ -144,7 +144,7 @@ int main(int argc, char **argv) {
         1) {
       fprintf(stderr,
               "usage: %s [n K m T seed]\n"
-              "example: %s 200 16 1024 100 1234\n",
+              "example: %s 200 16 0 100 1234   (m=0 => auto ants)\n",
               argv[0], argv[0]);
     }
     status = 1;

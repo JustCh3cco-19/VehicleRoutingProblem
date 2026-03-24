@@ -35,7 +35,8 @@ typedef struct {
  *
  *  n: number of customers (customer ids are 1..n, depot is 0)
  *  K: number of vehicles/routes
- *  m: number of ants per iteration
+ *  m: number of ants per iteration; when m <= 0 the solver auto-selects
+ *     a value based on available workers and problem size
  *  T: number of iterations
  *  c: cost matrix
  *  alpha: pheromone influence exponent

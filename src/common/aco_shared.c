@@ -149,6 +149,18 @@ static const double *score_cache_get_row(AcoScoreCache *cache, int current,
   return l1_line;
 }
 
+/*
+ * Function:  aco_score_cache_create
+ * ---------------------------------
+ * allocates and initializes layered score-cache storage.
+ *
+ *  n: highest node index
+ *  l1_lines: number of L1 cache lines
+ *  l2_lines: number of L2 cache lines
+ *
+ *  returns: cache pointer on success
+ *           NULL on allocation failure or invalid input
+ */
 AcoScoreCache *aco_score_cache_create(int n, int l1_lines, int l2_lines) {
   if (n < 0) {
     return NULL;
@@ -193,6 +205,15 @@ AcoScoreCache *aco_score_cache_create(int n, int l1_lines, int l2_lines) {
   return cache;
 }
 
+/*
+ * Function:  aco_score_cache_invalidate
+ * -------------------------------------
+ * marks all L1/L2 cache lines as invalid after pheromone updates.
+ *
+ *  cache: cache instance
+ *
+ *  returns: nothing
+ */
 void aco_score_cache_invalidate(AcoScoreCache *cache) {
   if (!cache) {
     return;
@@ -206,6 +227,15 @@ void aco_score_cache_invalidate(AcoScoreCache *cache) {
   }
 }
 
+/*
+ * Function:  aco_score_cache_reset_stats
+ * --------------------------------------
+ * resets hit/miss counters to zero.
+ *
+ *  cache: cache instance
+ *
+ *  returns: nothing
+ */
 void aco_score_cache_reset_stats(AcoScoreCache *cache) {
   if (!cache) {
     return;
@@ -215,6 +245,16 @@ void aco_score_cache_reset_stats(AcoScoreCache *cache) {
   cache->l3_misses = 0;
 }
 
+/*
+ * Function:  aco_score_cache_get_stats
+ * ------------------------------------
+ * snapshots cache statistics into the provided output structure.
+ *
+ *  cache: cache instance
+ *  out: destination stats structure
+ *
+ *  returns: nothing
+ */
 void aco_score_cache_get_stats(const AcoScoreCache *cache, AcoCacheStats *out) {
   if (!out) {
     return;
@@ -232,6 +272,15 @@ void aco_score_cache_get_stats(const AcoScoreCache *cache, AcoCacheStats *out) {
   out->l3_misses = cache->l3_misses;
 }
 
+/*
+ * Function:  aco_score_cache_free
+ * -------------------------------
+ * releases all memory owned by a score cache instance.
+ *
+ *  cache: cache instance to free; NULL is accepted
+ *
+ *  returns: nothing
+ */
 void aco_score_cache_free(AcoScoreCache *cache) {
   if (!cache) {
     return;

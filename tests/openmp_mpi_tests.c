@@ -16,6 +16,10 @@
 #error "openmp_mpi_tests.c must be compiled with -DUSE_MPI"
 #endif
 
+#ifdef _OPENMP
+#include <omp.h>
+#endif
+
 typedef struct {
   int n;
   int K;
@@ -88,6 +92,48 @@ static size_t estimate_c_memory_bytes(int n) {
   return (size_t)((double)base * 1.2);
 }
 
+static int clamp_int(int x, int lo, int hi) {
+  if (x < lo) {
+    return lo;
+  }
+  if (x > hi) {
+    return hi;
+  }
+  return x;
+}
+
+/* Mirrors solver auto-ant policy only for user-facing reporting in this runner. */
+static int estimate_auto_ants_for_log(int n, int mpi_ranks) {
+  int omp_threads = 1;
+#ifdef _OPENMP
+  omp_threads = omp_get_max_threads();
+#endif
+  if (omp_threads < 1) {
+    omp_threads = 1;
+  }
+
+  int workers = mpi_ranks * omp_threads;
+  if (workers < 1) {
+    workers = 1;
+  }
+
+  int ants_per_worker;
+  if (n <= 2000) {
+    ants_per_worker = 4;
+  } else if (n <= 8000) {
+    ants_per_worker = 3;
+  } else if (n <= 16000) {
+    ants_per_worker = 2;
+  } else {
+    ants_per_worker = 1;
+  }
+
+  int total_ants = workers * ants_per_worker;
+  total_ants = clamp_int(total_ants, workers, workers * 16);
+  total_ants = clamp_int(total_ants, 8, n > 8 ? n : 8);
+  return total_ants;
+}
+
 static void build_scenarios(Scenario *out, int *count) {
   static const int levels[] = {500, 1000, 2000, 4000, 8000,
                                12000, 16000, 24000, 32000, 40000,
@@ -100,20 +146,20 @@ static void build_scenarios(Scenario *out, int *count) {
     int m, T;
 
     if (n <= 2000) {
+      m = 64;
+      T = 40;
+    } else if (n <= 8000) {
       m = 32;
       T = 20;
-    } else if (n <= 8000) {
-      m = 16;
-      T = 10;
     } else if (n <= 16000) {
-      m = 8;
-      T = 6;
+      m = 16;
+      T = 12;
     } else if (n <= 32000) {
-      m = 4;
-      T = 4;
+      m = 8;
+      T = 8;
     } else {
-      m = 3;
-      T = 3;
+      m = 4;
+      T = 6;
     }
 
     out[idx].n = n;
@@ -221,7 +267,9 @@ int main(int argc, char **argv) {
   const char *csv_path = "results/scaling_progressive_openmp_mpi.csv";
   double memory_utilization = 0.70;
   int c_max_n = 100000;
+  int enforce_c_max_n = 0;
   int force = 0;
+  int auto_ants = 1;
 
   for (int i = 1; i < argc; ++i) {
     if (strcmp(argv[i], "--csv") == 0 && i + 1 < argc) {
@@ -244,12 +292,18 @@ int main(int argc, char **argv) {
         MPI_Finalize();
         return 1;
       }
+    } else if (strcmp(argv[i], "--enforce-c-max-n") == 0) {
+      enforce_c_max_n = 1;
     } else if (strcmp(argv[i], "--force") == 0) {
       force = 1;
+    } else if (strcmp(argv[i], "--auto-ants") == 0) {
+      auto_ants = 1;
+    } else if (strcmp(argv[i], "--fixed-ants") == 0) {
+      auto_ants = 0;
     } else {
       if (rank == 0) {
         fprintf(stderr,
-                "usage: %s [--csv PATH] [--memory-utilization X] [--c-max-n N] [--force]\n",
+          "usage: %s [--csv PATH] [--memory-utilization X] [--c-max-n N] [--enforce-c-max-n] [--force] [--auto-ants|--fixed-ants]\n",
                 argv[0]);
       }
       MPI_Finalize();
@@ -280,14 +334,23 @@ int main(int argc, char **argv) {
   size_t threshold = (size_t)((double)available * memory_utilization);
 
   if (rank == 0) {
+    int omp_threads = 1;
+  #ifdef _OPENMP
+    omp_threads = omp_get_max_threads();
+  #endif
     printf("========================================================================\n");
     printf("OpenMP+MPI Progressive Scaling\n");
     printf("========================================================================\n");
     printf("[INFO] mpi_ranks            : %d\n", size);
+    printf("[INFO] omp_threads/rank     : %d\n", omp_threads);
+        printf("[INFO] ants_mode            : %s\n",
+          auto_ants ? "auto(solver,m=0)" : "fixed(scenario)");
     printf("[INFO] available_mem_gib    : %.2f\n", bytes_to_gib(available));
     printf("[INFO] threshold_gib        : %.2f\n", bytes_to_gib(threshold));
     printf("[INFO] memory_utilization   : %.2f\n", memory_utilization);
     printf("[INFO] c_max_n              : %d\n\n", c_max_n);
+            printf("[INFO] enforce_c_max_n      : %s\n\n",
+              enforce_c_max_n ? "yes" : "no");
   }
 
   Scenario scenarios[24];
@@ -301,21 +364,23 @@ int main(int argc, char **argv) {
 
   for (int i = 0; i < total; ++i) {
     const Scenario *sc = &scenarios[i];
+    int run_m = auto_ants ? 0 : sc->m;
+    int run_m_effective = auto_ants ? estimate_auto_ants_for_log(sc->n, size) : sc->m;
     size_t est_mem = estimate_c_memory_bytes(sc->n);
     double est_gib = bytes_to_gib(est_mem);
 
     if (rank == 0) {
       printf("[RUN  %02d/%02d] customers=%-6d vehicles=%-4d ants=%-3d iterations=%-3d est_mem=%6.2f GiB\n",
-             i + 1, total, sc->n, sc->K, sc->m, sc->T, est_gib);
+              i + 1, total, sc->n, sc->K, run_m_effective, sc->T, est_gib);
     }
 
-    if (sc->n > c_max_n) {
+    if (enforce_c_max_n && sc->n > c_max_n) {
       if (rank == 0) {
         ++skipped_count;
         printf("  [SKIP] customers > c-max-n (%d)\n", c_max_n);
         fprintf(csv,
                 "openmp_mpi,%d,%d,%d,%d,%d,%.4f,skipped_c_max_n,,,\n",
-                size, sc->n, sc->K, sc->m, sc->T, est_gib);
+          size, sc->n, sc->K, run_m_effective, sc->T, est_gib);
       }
       continue;
     }
@@ -326,7 +391,7 @@ int main(int argc, char **argv) {
         printf("  [SKIP] estimated memory above threshold\n");
         fprintf(csv,
                 "openmp_mpi,%d,%d,%d,%d,%d,%.4f,skipped_memory,,,\n",
-                size, sc->n, sc->K, sc->m, sc->T, est_gib);
+          size, sc->n, sc->K, run_m_effective, sc->T, est_gib);
       }
       continue;
     }
@@ -347,7 +412,7 @@ int main(int argc, char **argv) {
         printf("  [FAIL] allocation failure before solve\n");
         fprintf(csv,
                 "openmp_mpi,%d,%d,%d,%d,%d,%.4f,failed_alloc,,,allocation_failure\n",
-                size, sc->n, sc->K, sc->m, sc->T, est_gib);
+          size, sc->n, sc->K, run_m_effective, sc->T, est_gib);
       }
       solution_free(best);
       matrix_free(c);
@@ -360,7 +425,7 @@ int main(int argc, char **argv) {
 
     MPI_Barrier(MPI_COMM_WORLD);
     double start_s = MPI_Wtime();
-    aco_vrp(sc->n, sc->K, sc->m, sc->T, c, 1.0, 2.0, 0.5, 1.0, 1.0,
+    aco_vrp(sc->n, sc->K, run_m, sc->T, c, 1.0, 3.0, 0.3, 1.0, 1.0,
             sc->solver_seed, best, &best_cost);
     MPI_Barrier(MPI_COMM_WORLD);
     double elapsed = MPI_Wtime() - start_s;
@@ -380,7 +445,7 @@ int main(int argc, char **argv) {
         printf("  [FAIL] solver did not produce a finite objective\n");
         fprintf(csv,
                 "openmp_mpi,%d,%d,%d,%d,%d,%.4f,failed_solver,%.6f,,non_finite_objective\n",
-                size, sc->n, sc->K, sc->m, sc->T, est_gib, elapsed);
+          size, sc->n, sc->K, run_m_effective, sc->T, est_gib, elapsed);
       } else {
         ++ok_count;
         total_elapsed += elapsed;
@@ -388,7 +453,7 @@ int main(int argc, char **argv) {
                elapsed, global_best_cost);
         fprintf(csv,
                 "openmp_mpi,%d,%d,%d,%d,%d,%.4f,ok,%.6f,%.6f,\n",
-                size, sc->n, sc->K, sc->m, sc->T, est_gib, elapsed,
+          size, sc->n, sc->K, run_m_effective, sc->T, est_gib, elapsed,
                 global_best_cost);
       }
     }

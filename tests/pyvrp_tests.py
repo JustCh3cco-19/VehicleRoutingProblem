@@ -341,6 +341,7 @@ def main():
     parser.add_argument("--csv", default="results/scaling_progressive_pyvrp.csv")
     parser.add_argument("--force", action="store_true")
     parser.add_argument("--pyvrp-max-n", type=int, default=100000)
+    parser.add_argument("--enforce-pyvrp-max-n", action="store_true")
     args = parser.parse_args()
 
     # Force venv consistency before importing/using PyVRP internals.
@@ -359,6 +360,8 @@ def main():
     print(f"[INFO] available_mem_gib    : {bytes_to_gib(available):.2f}")
     print(f"[INFO] threshold_gib        : {bytes_to_gib(threshold):.2f}")
     print(f"[INFO] memory_utilization   : {args.memory_utilization:.2f}")
+    print(f"[INFO] pyvrp_max_n          : {args.pyvrp_max_n}")
+    print(f"[INFO] enforce_pyvrp_max_n  : {'yes' if args.enforce_pyvrp_max_n else 'no'}")
     print("")
 
     total = len(scenarios)
@@ -395,7 +398,7 @@ def main():
 
                 print_scenario_header(i, total, sc, est_gib)
 
-                if sc.n > args.pyvrp_max_n:
+                if args.enforce_pyvrp_max_n and sc.n > args.pyvrp_max_n:
                     # User-enforced n cap: useful for smoke tests.
                     skipped_count += 1
                     print_scenario_status("SKIP", f"n > pyvrp-max-n ({args.pyvrp_max_n})")

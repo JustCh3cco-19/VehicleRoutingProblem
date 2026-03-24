@@ -39,6 +39,288 @@ static int choose_l2_lines(int n) {
   return (side < 64) ? side : 64;
 }
 
+/*
+ * Function:  clamp_int
+ * --------------------
+ * Clamps an integer value between a lower and an upper bound.
+ *
+ *  x:  the value to clamp
+ *  lo: the lower bound
+ *  hi: the upper bound
+ *
+ *  returns: the clamped value
+ */
+static int clamp_int(int x, int lo, int hi) {
+  if (x < lo) {
+    return lo;
+  }
+  if (x > hi) {
+    return hi;
+  }
+  return x;
+}
+
+/*
+ * Function:  choose_auto_total_ants
+ * ---------------------------------
+ * estimates a robust ant count from problem size and total worker count
+ * (MPI ranks x OpenMP threads).
+ *
+ *  n: number of customers
+ *  mpi_size: number of MPI ranks
+ *
+ *  returns: total ants per global iteration
+ */
+static int choose_auto_total_ants(int n, int mpi_size) {
+  int omp_threads = 1;
+#ifdef _OPENMP
+  omp_threads = omp_get_max_threads();
+#endif
+  if (omp_threads < 1) {
+    omp_threads = 1;
+  }
+
+  int workers = mpi_size * omp_threads;
+  if (workers < 1) {
+    workers = 1;
+  }
+
+  int ants_per_worker;
+  if (n <= 2000) {
+    ants_per_worker = 4;
+  } else if (n <= 8000) {
+    ants_per_worker = 3;
+  } else if (n <= 16000) {
+    ants_per_worker = 2;
+  } else {
+    ants_per_worker = 1;
+  }
+
+  int total_ants = workers * ants_per_worker;
+  total_ants = clamp_int(total_ants, workers, workers * 16);
+  total_ants = clamp_int(total_ants, 8, n > 8 ? n : 8);
+  return total_ants;
+}
+
+/*
+ * Function:  route_reverse_segment
+ * --------------------------------
+ * reverses an in-place route segment between inclusive endpoints.
+ *
+ *  r: route to modify
+ *  i: segment start index
+ *  k: segment end index
+ *
+ *  returns: nothing
+ */
+static void route_reverse_segment(Route *r, int i, int k) {
+  while (i < k) {
+    int tmp = r->nodes[i];
+    r->nodes[i] = r->nodes[k];
+    r->nodes[k] = tmp;
+    ++i;
+    --k;
+  }
+}
+
+/*
+ * Function:  route_remove_at
+ * --------------------------
+ * removes one node at a valid position by shifting tail elements left.
+ *
+ *  r: route to modify
+ *  pos: position to remove
+ *
+ *  returns: nothing; invalid positions are ignored
+ */
+static void route_remove_at(Route *r, int pos) {
+  if (pos < 0 || pos >= r->len) {
+    return;
+  }
+  for (int i = pos; i + 1 < r->len; ++i) {
+    r->nodes[i] = r->nodes[i + 1];
+  }
+  --r->len;
+}
+
+/*
+ * Function:  route_insert_at
+ * --------------------------
+ * inserts a node at a valid position by shifting tail elements right.
+ *
+ *  r: route to modify
+ *  pos: insertion index
+ *  node: node id to insert
+ *
+ *  returns: nothing; invalid positions/full route are ignored
+ */
+static void route_insert_at(Route *r, int pos, int node) {
+  if (pos < 0 || pos > r->len || r->len >= r->cap) {
+    return;
+  }
+  for (int i = r->len; i > pos; --i) {
+    r->nodes[i] = r->nodes[i - 1];
+  }
+  r->nodes[pos] = node;
+  ++r->len;
+}
+
+/*
+ * Function:  route_customer_count
+ * -------------------------------
+ * counts customers in a route excluding start/end depot nodes.
+ *
+ *  r: route to inspect
+ *
+ *  returns: number of customer nodes in the route
+ */
+static int route_customer_count(const Route *r) { return (r->len >= 2) ? (r->len - 2) : 0; }
+
+/*
+ * Function:  local_search_two_opt_intra
+ * -------------------------------------
+ * applies bounded 2-opt improvement independently within each route.
+ *
+ *  sol: solution to refine
+ *  K: route count
+ *  c: cost matrix
+ *
+ *  returns: nothing
+ */
+static void local_search_two_opt_intra(Solution *sol, int K, double **c) {
+#ifdef _OPENMP
+#pragma omp parallel for schedule(static) if (K > 4)
+#endif
+  for (int ri = 0; ri < K; ++ri) {
+    Route *r = &sol->routes[ri];
+    if (r->len < 5) {
+      continue;
+    }
+
+    int improved = 1;
+    int pass = 0;
+    while (improved && pass < 3) {
+      improved = 0;
+      ++pass;
+
+      for (int i = 1; i + 2 < r->len; ++i) {
+        for (int k = i + 1; k + 1 < r->len; ++k) {
+          int a = r->nodes[i - 1];
+          int b = r->nodes[i];
+          int cc = r->nodes[k];
+          int d = r->nodes[k + 1];
+          double delta = c[a][cc] + c[b][d] - c[a][b] - c[cc][d];
+          if (delta < -ACO_EPS) {
+            route_reverse_segment(r, i, k);
+            improved = 1;
+          }
+        }
+      }
+    }
+  }
+}
+
+/*
+ * Function:  local_search_relocate
+ * --------------------------------
+ * performs best-improving single-customer relocations across routes under
+ * simple per-vehicle customer-capacity constraints.
+ *
+ *  sol: solution to refine
+ *  K: route count
+ *  vehicle_capacity_customers: max customers allowed in a route when > 0
+ *  c: cost matrix
+ *
+ *  returns: nothing
+ */
+static void local_search_relocate(Solution *sol, int K, int vehicle_capacity_customers,
+                                  double **c) {
+  int move_budget = 64;
+  for (int moves = 0; moves < move_budget; ++moves) {
+    double best_delta = -ACO_EPS;
+    int best_from_r = -1;
+    int best_from_pos = -1;
+    int best_to_r = -1;
+    int best_to_pos = -1;
+
+    for (int ri = 0; ri < K; ++ri) {
+      Route *from = &sol->routes[ri];
+      if (from->len <= 2) {
+        continue;
+      }
+
+      for (int pos = 1; pos + 1 < from->len; ++pos) {
+        int x = from->nodes[pos];
+        int prev = from->nodes[pos - 1];
+        int next = from->nodes[pos + 1];
+        double remove_delta = c[prev][next] - c[prev][x] - c[x][next];
+
+        for (int rj = 0; rj < K; ++rj) {
+          Route *to = &sol->routes[rj];
+          if (ri != rj && vehicle_capacity_customers > 0 &&
+              route_customer_count(to) >= vehicle_capacity_customers) {
+            continue;
+          }
+
+          for (int ins = 1; ins < to->len; ++ins) {
+            if (ri == rj && (ins == pos || ins == pos + 1)) {
+              continue;
+            }
+
+            int u = to->nodes[ins - 1];
+            int v = to->nodes[ins];
+            double insert_delta = c[u][x] + c[x][v] - c[u][v];
+            double delta = remove_delta + insert_delta;
+
+            if (delta < best_delta) {
+              best_delta = delta;
+              best_from_r = ri;
+              best_from_pos = pos;
+              best_to_r = rj;
+              best_to_pos = ins;
+            }
+          }
+        }
+      }
+    }
+
+    if (best_from_r < 0) {
+      break;
+    }
+
+    Route *from = &sol->routes[best_from_r];
+    Route *to = &sol->routes[best_to_r];
+    int node = from->nodes[best_from_pos];
+    route_remove_at(from, best_from_pos);
+
+    if (best_from_r == best_to_r && best_to_pos > best_from_pos) {
+      --best_to_pos;
+    }
+
+    route_insert_at(to, best_to_pos, node);
+  }
+}
+
+/*
+ * Function:  local_search_refine_solution
+ * ---------------------------------------
+ * runs a lightweight local-search pipeline: 2-opt, relocate, then 2-opt.
+ *
+ *  sol: solution to refine
+ *  K: route count
+ *  vehicle_capacity_customers: max customers per route when > 0
+ *  c: cost matrix
+ *
+ *  returns: nothing
+ */
+static void local_search_refine_solution(Solution *sol, int K,
+                                         int vehicle_capacity_customers,
+                                         double **c) {
+  local_search_two_opt_intra(sol, K, c);
+  local_search_relocate(sol, K, vehicle_capacity_customers, c);
+  local_search_two_opt_intra(sol, K, c);
+}
+
 #ifdef USE_MPI
 /*
  * Function:  solution_pack_size_ints
@@ -172,11 +454,16 @@ void aco_vrp(int n, int K, int m, int T, double **c, double alpha,
   }
 #endif
 
-  int local_m = m;
+  int total_m = m;
+  if (total_m <= 0) {
+    total_m = choose_auto_total_ants(n, mpi_size);
+  }
+
+  int local_m = total_m;
   int ant_offset = 0;
   if (mpi_enabled) {
-    int base = (mpi_size > 0) ? (m / mpi_size) : m;
-    int rem = (mpi_size > 0) ? (m % mpi_size) : 0;
+    int base = (mpi_size > 0) ? (total_m / mpi_size) : total_m;
+    int rem = (mpi_size > 0) ? (total_m % mpi_size) : 0;
     local_m = base + ((mpi_rank < rem) ? 1 : 0);
     ant_offset = mpi_rank * base + ((mpi_rank < rem) ? mpi_rank : rem);
   }
@@ -250,6 +537,15 @@ void aco_vrp(int n, int K, int m, int T, double **c, double alpha,
   }
 
   size_t scratch_len = (n > 0) ? (size_t)n : 1u;
+  const double iter_deposit_weight = 0.3;
+  const double global_deposit_weight = 0.7;
+  int stagnation_iters = 0;
+  int stagnation_trigger = T / 4;
+  if (stagnation_trigger < 4) {
+    stagnation_trigger = 4;
+  }
+  double tau_max = tau0;
+  double tau_min = tau0 * 0.05;
 
   for (int iter = 0; iter < T; ++iter) {
     double iter_best_cost = DBL_MAX;
@@ -434,9 +730,22 @@ void aco_vrp(int n, int K, int m, int T, double **c, double alpha,
       return;
     }
 
+    if (iter_best_cost < DBL_MAX) {
+      local_search_refine_solution(iter_best, K, vehicle_capacity_customers, c);
+      iter_best_cost = solution_cost(iter_best, c);
+    }
+
     if (iter_best_cost < *best_cost) {
       *best_cost = iter_best_cost;
       solution_copy(best_solution, iter_best);
+      stagnation_iters = 0;
+
+      if (*best_cost > ACO_EPS) {
+        tau_max = 1.0 / ((1.0 - rho) * (*best_cost));
+        tau_min = tau_max * 0.05;
+      }
+    } else {
+      ++stagnation_iters;
     }
 
     if (iter_best_cost < DBL_MAX) {
@@ -451,15 +760,52 @@ void aco_vrp(int n, int K, int m, int T, double **c, double alpha,
         }
       }
 
-      double deposit = Q / iter_best_cost;
+      double iter_deposit = (iter_deposit_weight * Q) / iter_best_cost;
       for (int i = 0; i < K; ++i) {
         Route *r = &iter_best->routes[i];
         for (int t = 0; t + 1 < r->len; ++t) {
           int u = r->nodes[t];
           int v = r->nodes[t + 1];
-          tau[u][v] += deposit;
-          tau[v][u] += deposit;
+          tau[u][v] += iter_deposit;
+          tau[v][u] += iter_deposit;
         }
+      }
+
+      if (*best_cost < DBL_MAX) {
+        double global_deposit = (global_deposit_weight * Q) / (*best_cost);
+        for (int i = 0; i < K; ++i) {
+          Route *r = &best_solution->routes[i];
+          for (int t = 0; t + 1 < r->len; ++t) {
+            int u = r->nodes[t];
+            int v = r->nodes[t + 1];
+            tau[u][v] += global_deposit;
+            tau[v][u] += global_deposit;
+          }
+        }
+      }
+
+      for (int i = 0; i <= n; ++i) {
+        for (int j = 0; j <= n; ++j) {
+          if (i == j) {
+            continue;
+          }
+          if (tau[i][j] < tau_min) {
+            tau[i][j] = tau_min;
+          } else if (tau[i][j] > tau_max) {
+            tau[i][j] = tau_max;
+          }
+        }
+      }
+
+      if (stagnation_iters >= stagnation_trigger) {
+        for (int i = 0; i <= n; ++i) {
+          for (int j = 0; j <= n; ++j) {
+            if (i != j) {
+              tau[i][j] = 0.5 * tau[i][j] + 0.5 * tau0;
+            }
+          }
+        }
+        stagnation_iters = 0;
       }
     }
   }

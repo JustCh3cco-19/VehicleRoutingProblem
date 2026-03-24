@@ -9,6 +9,66 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#ifdef _OPENMP
+#include <omp.h>
+#endif
+
+/*
+ * Function:  clamp_int
+ * --------------------
+ * clamps an integer value within an inclusive [lo, hi] interval.
+ *
+ *  x: value to clamp
+ *  lo: lower bound
+ *  hi: upper bound
+ *
+ *  returns: clamped value
+ */
+static int clamp_int(int x, int lo, int hi) {
+  if (x < lo) {
+    return lo;
+  }
+  if (x > hi) {
+    return hi;
+  }
+  return x;
+}
+
+/*
+ * Function:  choose_auto_total_ants
+ * ---------------------------------
+ * selects an automatic ant count based on problem size and available workers.
+ *
+ *  n: number of customers
+ *
+ *  returns: total ants to use per iteration
+ */
+static int choose_auto_total_ants(int n) {
+  int workers = 1;
+#ifdef _OPENMP
+  workers = omp_get_max_threads();
+#endif
+  if (workers < 1) {
+    workers = 1;
+  }
+
+  int ants_per_worker;
+  if (n <= 2000) {
+    ants_per_worker = 4;
+  } else if (n <= 8000) {
+    ants_per_worker = 3;
+  } else if (n <= 16000) {
+    ants_per_worker = 2;
+  } else {
+    ants_per_worker = 1;
+  }
+
+  int total_ants = workers * ants_per_worker;
+  total_ants = clamp_int(total_ants, workers, workers * 16);
+  total_ants = clamp_int(total_ants, 8, n > 8 ? n : 8);
+  return total_ants;
+}
+
 /*
  * Function:  aco_vrp
  * ------------------
@@ -38,6 +98,11 @@
 void aco_vrp(int n, int K, int m, int T, double **c, double alpha,
              double beta, double rho, double tau0, double Q,
              unsigned int seed, Solution *best_solution, double *best_cost) {
+  int total_m = m;
+  if (total_m <= 0) {
+    total_m = choose_auto_total_ants(n);
+  }
+
   double **eta = matrix_alloc(n);
   double **tau = matrix_alloc(n);
   Solution *iter_best = solution_create(K, n);
@@ -91,7 +156,7 @@ void aco_vrp(int n, int K, int m, int T, double **c, double alpha,
         !random_draws) {
       iter_failed = 1;
     } else {
-      for (int ant = 0; ant < m; ++ant) {
+      for (int ant = 0; ant < total_m; ++ant) {
         unsigned int rng_state = aco_make_ant_seed(seed, iter, ant);
 
         aco_build_ant_solution(sol, n, K, tau, eta, alpha, beta,
