@@ -19,6 +19,26 @@
 #include <mpi.h>
 #endif
 
+/*
+ * Function:  choose_l1_lines
+ * --------------------------
+ * picks L1 cache line count for desirability-row cache.
+ */
+static int choose_l1_lines(int n) {
+  int side = n + 1;
+  return (side < 8) ? side : 8;
+}
+
+/*
+ * Function:  choose_l2_lines
+ * --------------------------
+ * picks L2 cache line count for desirability-row cache.
+ */
+static int choose_l2_lines(int n) {
+  int side = n + 1;
+  return (side < 64) ? side : 64;
+}
+
 #ifdef USE_MPI
 /*
  * Function:  solution_pack_size_ints
@@ -223,6 +243,12 @@ void aco_vrp(int n, int K, int m, int T, double **c, double alpha,
   bool omp_enabled = false;
 #endif
 
+  AcoScoreCache *serial_cache = NULL;
+  if (!omp_enabled) {
+    serial_cache =
+        aco_score_cache_create(n, choose_l1_lines(n), choose_l2_lines(n));
+  }
+
   size_t scratch_len = (n > 0) ? (size_t)n : 1u;
 
   for (int iter = 0; iter < T; ++iter) {
@@ -238,6 +264,8 @@ void aco_vrp(int n, int K, int m, int T, double **c, double alpha,
         int thread_best_ant = INT_MAX;
         Solution *sol = solution_create(K, n);
         Solution *thread_best = solution_create(K, n);
+        AcoScoreCache *score_cache =
+            aco_score_cache_create(n, choose_l1_lines(n), choose_l2_lines(n));
         int *unvisited_nodes = malloc(scratch_len * sizeof(int));
         double *candidate_scores = malloc(scratch_len * sizeof(double));
         double *random_draws = malloc(scratch_len * sizeof(double));
@@ -253,7 +281,7 @@ void aco_vrp(int n, int K, int m, int T, double **c, double alpha,
             unsigned int rng_state = aco_make_ant_seed(seed, iter, global_ant);
 
             aco_build_ant_solution(sol, n, K, tau, eta, alpha, beta,
-                                   vehicle_capacity_customers,
+                                   vehicle_capacity_customers, score_cache,
                                    &rng_state, unvisited_nodes,
                                    candidate_scores, random_draws);
             double cost = solution_cost(sol, c);
@@ -284,11 +312,13 @@ void aco_vrp(int n, int K, int m, int T, double **c, double alpha,
         free(random_draws);
         free(candidate_scores);
         free(unvisited_nodes);
+        aco_score_cache_free(score_cache);
         solution_free(thread_best);
         solution_free(sol);
       }
 #endif
     } else {
+      aco_score_cache_invalidate(serial_cache);
       Solution *sol = solution_create(K, n);
       int *unvisited_nodes = malloc(scratch_len * sizeof(int));
       double *candidate_scores = malloc(scratch_len * sizeof(double));
@@ -303,8 +333,8 @@ void aco_vrp(int n, int K, int m, int T, double **c, double alpha,
           unsigned int rng_state = aco_make_ant_seed(seed, iter, global_ant);
 
           aco_build_ant_solution(sol, n, K, tau, eta, alpha, beta,
-                                 vehicle_capacity_customers, &rng_state,
-                                 unvisited_nodes,
+                                 vehicle_capacity_customers, serial_cache,
+                                 &rng_state, unvisited_nodes,
                                  candidate_scores, random_draws);
           double cost = solution_cost(sol, c);
 
@@ -334,6 +364,7 @@ void aco_vrp(int n, int K, int m, int T, double **c, double alpha,
         matrix_free(eta);
         matrix_free(tau);
         solution_free(iter_best);
+        aco_score_cache_free(serial_cache);
         free(packed_solution);
         return;
       }
@@ -381,6 +412,7 @@ void aco_vrp(int n, int K, int m, int T, double **c, double alpha,
         matrix_free(eta);
         matrix_free(tau);
         solution_free(iter_best);
+        aco_score_cache_free(serial_cache);
         free(packed_solution);
         return;
       }
@@ -395,6 +427,7 @@ void aco_vrp(int n, int K, int m, int T, double **c, double alpha,
       matrix_free(eta);
       matrix_free(tau);
       solution_free(iter_best);
+      aco_score_cache_free(serial_cache);
 #ifdef USE_MPI
       free(packed_solution);
 #endif
@@ -434,6 +467,7 @@ void aco_vrp(int n, int K, int m, int T, double **c, double alpha,
   solution_free(iter_best);
   matrix_free(eta);
   matrix_free(tau);
+  aco_score_cache_free(serial_cache);
 #ifdef USE_MPI
   free(packed_solution);
 #endif

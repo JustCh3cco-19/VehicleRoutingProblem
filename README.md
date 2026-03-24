@@ -31,57 +31,26 @@ Esecuzione (esempio con 2 rank e 2 thread OpenMP per rank):
 OMP_NUM_THREADS=2 mpirun -np 2 ./aco_vrp_openmp_mpi.out
 ```
 
-## Test di correttezza (C vs PyVRP golden offline)
-Compila ed esegue i test file-based:
+## Test (background di default)
+I target di test partono in background (`TEST_MODE=background`) per uso su cluster.
+I log sono salvati in `results/detached/` con file `.log`, `.pid`, `.cmd`.
+
+Per esecuzione in foreground:
 ```sh
-make test
+make <target> TEST_MODE=foreground
 ```
 
-Il test confronta il solver C con una baseline PyVRP offline in:
-- `tests/files/golden_pyvrp.csv`
-
-Quindi i test funzionano anche su cluster dove PyVRP non e installato (purche il CSV golden sia gia presente).
-
-Rigenerazione golden in locale (venv `VRP`):
+Per cambiare directory dei log:
 ```sh
-python3 tests/generate_pyvrp_golden.py
+make <target> TEST_LOGS_DIR=/path/to/logs
 ```
 
-## Test MPI + OpenMP
-Compila ed esegue un test parallelo:
-```sh
-make test_mpi
-```
+Target disponibili:
+- `sequential_tests`
+- `openmp_mpi_tests`
 
-Test race-oriented su piu casi/rank:
-```sh
-make test_mpi_race
-```
-
-## Scaling progressivo fino a 100k clienti (PyVRP)
-Esegue scenari progressivi fino a `n=100000` con PyVRP, usando automaticamente `VRP/bin/python`.
-
-Comando rapido:
-```sh
-make scaling_tests
-```
-
-Output CSV predefinito:
-- `results/scaling_progressive_pyvrp.csv`
-
-Esecuzione manuale (opzioni principali):
-```sh
-python3 tests/pyvrp_tests.py --memory-utilization 0.70 --pyvrp-max-n 100000
-```
-
-Opzioni utili:
-- `--memory-utilization X` frazione RAM usabile prima di fare skip (`0 < X <= 1`)
-- `--pyvrp-max-n N` limite massimo di clienti da eseguire
-- `--csv PATH` percorso CSV output
-- `--force` disabilita skip basato su memoria stimata
-
-## Scaling progressivo fino a 100k clienti (solver C)
-Nuovo runner C dedicato per scenari progressivi fino a `n=100000`:
+## Sequential Tests (fino a 100k clienti)
+Runner C dedicato per scenari progressivi fino a `n=100000`:
 ```sh
 make sequential_tests
 ```
@@ -102,22 +71,10 @@ Opzioni utili:
 
 Nota: la parte C usa matrici dense (`c`, `eta`, `tau`), quindi i casi molto grandi possono essere saltati automaticamente per evitare out-of-memory.
 
-## Esperimenti (correttezza + scaling)
-Esegue benchmark con ripetizioni e genera CSV/grafici in `results/`:
+## OpenMP + MPI Tests
+Runner OpenMP+MPI progressivo:
 ```sh
-make experiments
-```
-
-## Report PDF
-Genera il report in `report/report.pdf`:
-```sh
-make report
-```
-
-## Coverage
-Compila con flag di coverage ed esegue i test (genera `*.gcno` e `*.gcda`):
-```sh
-make coverage
+make openmp_mpi_tests
 ```
 
 ## Debug

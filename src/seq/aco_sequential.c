@@ -41,12 +41,16 @@ void aco_vrp(int n, int K, int m, int T, double **c, double alpha,
   double **eta = matrix_alloc(n);
   double **tau = matrix_alloc(n);
   Solution *iter_best = solution_create(K, n);
+  AcoScoreCache *score_cache =
+      aco_score_cache_create(n, (n + 1 < 8) ? (n + 1) : 8,
+                             (n + 1 < 64) ? (n + 1) : 64);
 
   if (!eta || !tau || !iter_best) {
     fprintf(stderr, "allocation failure in aco_vrp\n");
     matrix_free(eta);
     matrix_free(tau);
     solution_free(iter_best);
+    aco_score_cache_free(score_cache);
     return;
   }
 
@@ -73,6 +77,7 @@ void aco_vrp(int n, int K, int m, int T, double **c, double alpha,
   size_t scratch_len = (n > 0) ? (size_t)n : 1u;
 
   for (int iter = 0; iter < T; ++iter) {
+    aco_score_cache_invalidate(score_cache);
     double iter_best_cost = DBL_MAX;
     int iter_best_ant = INT_MAX;
     int iter_failed = 0;
@@ -90,8 +95,8 @@ void aco_vrp(int n, int K, int m, int T, double **c, double alpha,
         unsigned int rng_state = aco_make_ant_seed(seed, iter, ant);
 
         aco_build_ant_solution(sol, n, K, tau, eta, alpha, beta,
-                   vehicle_capacity_customers, &rng_state,
-                               unvisited_nodes, candidate_scores,
+                               vehicle_capacity_customers, score_cache,
+                               &rng_state, unvisited_nodes, candidate_scores,
                                random_draws);
         double cost = solution_cost(sol, c);
 
@@ -115,6 +120,7 @@ void aco_vrp(int n, int K, int m, int T, double **c, double alpha,
       solution_free(iter_best);
       matrix_free(eta);
       matrix_free(tau);
+      aco_score_cache_free(score_cache);
       return;
     }
 
@@ -148,4 +154,5 @@ void aco_vrp(int n, int K, int m, int T, double **c, double alpha,
   solution_free(iter_best);
   matrix_free(eta);
   matrix_free(tau);
+  aco_score_cache_free(score_cache);
 }

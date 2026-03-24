@@ -3,7 +3,29 @@
 
 #include "solution.h"
 
+#include <stddef.h>
+
 #define ACO_EPS 1e-9
+
+typedef struct {
+  int n;
+  int line_len;
+  int l1_lines;
+  int l2_lines;
+  int *l1_keys;
+  int *l2_keys;
+  double *l1_rows;
+  double *l2_rows;
+  size_t l1_hits;
+  size_t l2_hits;
+  size_t l3_misses;
+} AcoScoreCache;
+
+typedef struct {
+  size_t l1_hits;
+  size_t l2_hits;
+  size_t l3_misses;
+} AcoCacheStats;
 
 /*
  * Function:  aco_vrp
@@ -59,6 +81,68 @@ unsigned int aco_make_ant_seed(unsigned int base_seed, int iter,
                                int ant_index);
 
 /*
+ * Function:  aco_score_cache_create
+ * ---------------------------------
+ * allocates a per-worker layered score cache:
+ * - L1: direct-mapped small cache (fastest, hottest rows)
+ * - L2: direct-mapped backing cache (larger working set)
+ * - L3: implicit fallback path when L1/L2 miss (row recomputation)
+ *
+ *  n: highest node index (matrix side is n+1)
+ *  l1_lines: number of L1 cache lines (>= 1 recommended)
+ *  l2_lines: number of L2 cache lines (>= 0)
+ *
+ *  returns: cache pointer on success
+ *           NULL on allocation error
+ */
+AcoScoreCache *aco_score_cache_create(int n, int l1_lines, int l2_lines);
+
+/*
+ * Function:  aco_score_cache_invalidate
+ * -------------------------------------
+ * invalidates all cached rows (required after pheromone updates).
+ *
+ *  cache: cache instance; NULL is allowed
+ *
+ *  returns: nothing
+ */
+void aco_score_cache_invalidate(AcoScoreCache *cache);
+
+/*
+ * Function:  aco_score_cache_reset_stats
+ * --------------------------------------
+ * resets L1/L2/L3 counters to zero.
+ *
+ *  cache: cache instance; NULL is allowed
+ *
+ *  returns: nothing
+ */
+void aco_score_cache_reset_stats(AcoScoreCache *cache);
+
+/*
+ * Function:  aco_score_cache_get_stats
+ * ------------------------------------
+ * snapshots cache hit/miss counters.
+ *
+ *  cache: cache instance; NULL is allowed
+ *  out: destination stats struct
+ *
+ *  returns: nothing; out is zeroed when cache is NULL
+ */
+void aco_score_cache_get_stats(const AcoScoreCache *cache, AcoCacheStats *out);
+
+/*
+ * Function:  aco_score_cache_free
+ * -------------------------------
+ * releases a cache created by aco_score_cache_create.
+ *
+ *  cache: cache instance; NULL is allowed
+ *
+ *  returns: nothing
+ */
+void aco_score_cache_free(AcoScoreCache *cache);
+
+/*
  * Function:  aco_select_next
  * --------------------------
  * selects the next customer from the unvisited list using roulette-wheel
@@ -74,6 +158,7 @@ unsigned int aco_make_ant_seed(unsigned int base_seed, int iter,
  *  roulette_r: random value in [0, 1] used for roulette threshold
  *  candidate_scores: scratch array sized at least unvisited_count
  *  selected_index: optional output index inside unvisited_nodes
+ *  score_cache: optional layered cache for arc scores
  *
  *  returns: selected customer id on success
  *           0 when no unvisited nodes are available
@@ -81,7 +166,8 @@ unsigned int aco_make_ant_seed(unsigned int base_seed, int iter,
 int aco_select_next(int current, const int *unvisited_nodes,
                     int unvisited_count, double **tau, double **eta,
                     double alpha, double beta, double roulette_r,
-                    double *candidate_scores, int *selected_index);
+                    double *candidate_scores, int *selected_index,
+                    AcoScoreCache *score_cache);
 
 /*
  * Function:  aco_build_ant_solution
@@ -98,6 +184,7 @@ int aco_select_next(int current, const int *unvisited_nodes,
  *  beta: heuristic influence exponent
  *  vehicle_capacity_customers: max customers assignable to each vehicle;
  *                              <=0 disables the limit
+ *  score_cache: optional layered cache for arc scores
  *  rng_state: rng state for deterministic random draws
  *  unvisited_nodes: scratch array of size at least n
  *  candidate_scores: scratch array of size at least n
@@ -105,10 +192,10 @@ int aco_select_next(int current, const int *unvisited_nodes,
  *
  *  returns: nothing
  */
-void aco_build_ant_solution(Solution *sol, int n, int K, double **tau,
-                            double **eta, double alpha, double beta,
-                            int vehicle_capacity_customers,
-                            unsigned int *rng_state, int *unvisited_nodes,
-                            double *candidate_scores, double *random_draws);
+void aco_build_ant_solution(
+    Solution *sol, int n, int K, double **tau, double **eta, double alpha,
+    double beta, int vehicle_capacity_customers, AcoScoreCache *score_cache,
+    unsigned int *rng_state, int *unvisited_nodes, double *candidate_scores,
+    double *random_draws);
 
 #endif

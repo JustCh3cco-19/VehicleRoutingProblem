@@ -13,7 +13,7 @@
 #ifdef USE_MPI
 #include <mpi.h>
 #else
-#error "openmp_mpi_scaling_tests.c must be compiled with -DUSE_MPI"
+#error "openmp_mpi_tests.c must be compiled with -DUSE_MPI"
 #endif
 
 typedef struct {
@@ -83,7 +83,9 @@ static size_t estimate_c_memory_bytes(int n) {
   size_t side = (size_t)n + 1u;
   size_t one_dense = side * side * sizeof(double);
   size_t dense_three = one_dense * 3u;
-  return (size_t)((double)dense_three * 1.2);
+  size_t layered_cache = side * (size_t)(8 + 64) * sizeof(double); /* L1 + L2 */
+  size_t base = dense_three + layered_cache;
+  return (size_t)((double)base * 1.2);
 }
 
 static void build_scenarios(Scenario *out, int *count) {

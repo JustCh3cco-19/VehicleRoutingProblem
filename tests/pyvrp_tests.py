@@ -202,7 +202,7 @@ def generate_points(n: int, seed: int, layout: int) -> List[Point]:
     """
     Generate depot + customer coordinates with deterministic geometry patterns.
 
-    layout meanings (mirrors tests/tests.c):
+    layout meanings (mirrors the C synthetic generator):
     - 0: uniform random in a square;
     - 1: clustered customers around 3 centers;
     - 2: border-heavy left/right stripes;
@@ -260,7 +260,7 @@ def write_vrplib_file(path: Path, sc: Scenario):
     lines = [
         f"NAME : scaling_n{sc.n}",
         "TYPE : CVRP",
-        "COMMENT : synthetic deterministic instance generated from tests/tests.c layout",
+        "COMMENT : synthetic deterministic instance generated from C layout",
         f"DIMENSION : {sc.n + 1}",
         "EDGE_WEIGHT_TYPE : EUC_2D",
         f"CAPACITY : {(sc.n + sc.K - 1) // sc.K}",
