@@ -57,8 +57,9 @@ define RUN_TEST_CMD
 	log_file="$$log_dir/$${job}_$${ts}.log"; \
 	pid_file="$$log_dir/$${job}_$${ts}.pid"; \
 	cmd_file="$$log_dir/$${job}_$${ts}.cmd"; \
-	printf '%s\n' "$(2)" >"$$cmd_file"; \
-	nohup bash -lc "$(2)" >"$$log_file" 2>&1 </dev/null & \
+	run_cmd="cd '$(CURDIR)' && $(2)"; \
+	printf '%s\n' "$$run_cmd" >"$$cmd_file"; \
+	nohup bash -lc "$$run_cmd" >"$$log_file" 2>&1 </dev/null & \
 	pid=$$!; \
 	printf '%s\n' "$$pid" >"$$pid_file"; \
 	echo "[DETACHED] job=$$job"; \

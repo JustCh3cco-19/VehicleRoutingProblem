@@ -212,6 +212,9 @@ static double elapsed_seconds(const struct timespec *start,
 }
 
 int main(int argc, char **argv) {
+  setvbuf(stdout, NULL, _IOLBF, 0);
+  setvbuf(stderr, NULL, _IOLBF, 0);
+
   const char *csv_path = "results/scaling_progressive_c.csv";
   double memory_utilization = 0.70;
   int c_max_n = 100000;
@@ -252,9 +255,11 @@ int main(int argc, char **argv) {
     fprintf(stderr, "failed to open output CSV: %s\n", csv_path);
     return 1;
   }
+  setvbuf(csv, NULL, _IOLBF, 0);
 
   fprintf(csv,
           "mode,n,K,m,T,estimated_mem_gib,status,elapsed_s,c_cost,error\n");
+  fflush(csv);
 
   size_t available = read_available_memory_bytes();
   size_t threshold = (size_t)((double)available * memory_utilization);
@@ -289,6 +294,7 @@ int main(int argc, char **argv) {
       printf("  [SKIP] customers > c-max-n (%d)\n", c_max_n);
       fprintf(csv, "c,%d,%d,%d,%d,%.4f,skipped_c_max_n,,,\n", sc->n, sc->K,
               sc->m, sc->T, est_gib);
+      fflush(csv);
       continue;
     }
 
@@ -297,6 +303,7 @@ int main(int argc, char **argv) {
       printf("  [SKIP] estimated memory above threshold\n");
       fprintf(csv, "c,%d,%d,%d,%d,%.4f,skipped_memory,,,\n", sc->n, sc->K,
               sc->m, sc->T, est_gib);
+      fflush(csv);
       continue;
     }
 
@@ -310,6 +317,7 @@ int main(int argc, char **argv) {
       printf("  [FAIL] allocation failure before solve\n");
       fprintf(csv, "c,%d,%d,%d,%d,%.4f,failed_alloc,,,allocation_failure\n",
               sc->n, sc->K, sc->m, sc->T, est_gib);
+      fflush(csv);
       solution_free(best);
       matrix_free(c);
       free(pts);
@@ -334,6 +342,7 @@ int main(int argc, char **argv) {
       fprintf(csv,
               "c,%d,%d,%d,%d,%.4f,failed_solver,%.6f,,non_finite_objective\n",
               sc->n, sc->K, sc->m, sc->T, est_gib, elapsed);
+      fflush(csv);
     } else {
       ++ok_count;
       total_elapsed += elapsed;
@@ -341,6 +350,7 @@ int main(int argc, char **argv) {
              best_cost);
       fprintf(csv, "c,%d,%d,%d,%d,%.4f,ok,%.6f,%.6f,\n", sc->n, sc->K, sc->m,
               sc->T, est_gib, elapsed, best_cost);
+      fflush(csv);
     }
 
     solution_free(best);

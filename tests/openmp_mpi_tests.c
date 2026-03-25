@@ -258,6 +258,9 @@ static int ensure_parent_dir(const char *path) {
 }
 
 int main(int argc, char **argv) {
+  setvbuf(stdout, NULL, _IOLBF, 0);
+  setvbuf(stderr, NULL, _IOLBF, 0);
+
   int rank = 0;
   int size = 1;
   MPI_Init(&argc, &argv);
@@ -325,9 +328,11 @@ int main(int argc, char **argv) {
       MPI_Finalize();
       return 1;
     }
+    setvbuf(csv, NULL, _IOLBF, 0);
 
     fprintf(csv,
             "mode,mpi_ranks,n,K,m,T,estimated_mem_gib,status,elapsed_s,cost,error\n");
+    fflush(csv);
   }
 
   size_t available = read_available_memory_bytes();
@@ -381,6 +386,7 @@ int main(int argc, char **argv) {
         fprintf(csv,
                 "openmp_mpi,%d,%d,%d,%d,%d,%.4f,skipped_c_max_n,,,\n",
           size, sc->n, sc->K, run_m_effective, sc->T, est_gib);
+        fflush(csv);
       }
       continue;
     }
@@ -392,6 +398,7 @@ int main(int argc, char **argv) {
         fprintf(csv,
                 "openmp_mpi,%d,%d,%d,%d,%d,%.4f,skipped_memory,,,\n",
           size, sc->n, sc->K, run_m_effective, sc->T, est_gib);
+        fflush(csv);
       }
       continue;
     }
@@ -413,6 +420,7 @@ int main(int argc, char **argv) {
         fprintf(csv,
                 "openmp_mpi,%d,%d,%d,%d,%d,%.4f,failed_alloc,,,allocation_failure\n",
           size, sc->n, sc->K, run_m_effective, sc->T, est_gib);
+        fflush(csv);
       }
       solution_free(best);
       matrix_free(c);
@@ -446,6 +454,7 @@ int main(int argc, char **argv) {
         fprintf(csv,
                 "openmp_mpi,%d,%d,%d,%d,%d,%.4f,failed_solver,%.6f,,non_finite_objective\n",
           size, sc->n, sc->K, run_m_effective, sc->T, est_gib, elapsed);
+        fflush(csv);
       } else {
         ++ok_count;
         total_elapsed += elapsed;
@@ -455,6 +464,7 @@ int main(int argc, char **argv) {
                 "openmp_mpi,%d,%d,%d,%d,%d,%.4f,ok,%.6f,%.6f,\n",
           size, sc->n, sc->K, run_m_effective, sc->T, est_gib, elapsed,
                 global_best_cost);
+        fflush(csv);
       }
     }
 
