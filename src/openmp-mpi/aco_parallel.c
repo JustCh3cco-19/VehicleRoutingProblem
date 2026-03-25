@@ -103,6 +103,105 @@ static int choose_auto_total_ants(int n, int mpi_size) {
 }
 
 /*
+ * Function:  choose_stagnation_level
+ * ----------------------------------
+ * maps the global stagnation counter to a discrete level:
+ * 0 = low, 1 = medium, 2 = high.
+ *
+ *  stagnation_iters: consecutive iterations without global-best improvement
+ *  stagnation_trigger: base trigger used for medium/high transitions
+ *
+ *  returns: stagnation level in [0, 2]
+ */
+static int choose_stagnation_level(int stagnation_iters,
+                                   int stagnation_trigger) {
+  if (stagnation_iters >= 2 * stagnation_trigger) {
+    return 2;
+  }
+  if (stagnation_iters >= stagnation_trigger) {
+    return 1;
+  }
+  return 0;
+}
+
+/*
+ * Function:  choose_ant_batch_size
+ * --------------------------------
+ * picks a batch size for adaptive in-iteration ant evaluation. Higher
+ * stagnation uses smaller batches to check marginal gains more frequently.
+ *
+ *  local_ants: ants assigned to this rank for one iteration
+ *  stagnation_level: 0 (low), 1 (medium), 2 (high)
+ *
+ *  returns: ants processed per batch (>= 1)
+ */
+static int choose_ant_batch_size(int local_ants, int stagnation_level) {
+  if (local_ants <= 0) {
+    return 0;
+  }
+
+  int divisor = 8;
+  if (stagnation_level <= 0) {
+    divisor = 6;
+  } else if (stagnation_level >= 2) {
+    divisor = 12;
+  }
+
+  int batch = local_ants / divisor;
+  return clamp_int(batch, 1, local_ants);
+}
+
+/*
+ * Function:  choose_min_ants_before_stop
+ * --------------------------------------
+ * picks the minimum ants to evaluate before allowing early stop. Higher
+ * stagnation enforces deeper per-iteration search.
+ *
+ *  local_ants: ants assigned to this rank for one iteration
+ *  stagnation_level: 0 (low), 1 (medium), 2 (high)
+ *
+ *  returns: minimum ants to evaluate (>= 1, <= local_ants)
+ */
+static int choose_min_ants_before_stop(int local_ants, int stagnation_level) {
+  if (local_ants <= 0) {
+    return 0;
+  }
+
+  int min_ants = local_ants / 4;
+  if (stagnation_level == 1) {
+    min_ants = local_ants / 2;
+  } else if (stagnation_level >= 2) {
+    min_ants = (3 * local_ants) / 4;
+  }
+  return clamp_int(min_ants, 1, local_ants);
+}
+
+/*
+ * Function:  choose_no_improve_patience
+ * -------------------------------------
+ * picks how many consecutive non-improving batches are tolerated before
+ * stopping the current iteration early. Higher stagnation increases patience.
+ *
+ *  local_ants: ants assigned to this rank for one iteration
+ *  stagnation_level: 0 (low), 1 (medium), 2 (high)
+ *
+ *  returns: patience in number of batches (>= 1)
+ */
+static int choose_no_improve_patience(int local_ants, int stagnation_level) {
+  if (local_ants <= 0) {
+    return 1;
+  }
+
+  int patience = (local_ants >= 128) ? 3 : 2;
+  if (stagnation_level == 1) {
+    ++patience;
+  } else if (stagnation_level >= 2) {
+    patience += 2;
+  }
+  return clamp_int(patience, 1, 6);
+}
+
+/*
  * Function:  route_reverse_segment
  * --------------------------------
  * reverses an in-place route segment between inclusive endpoints.
@@ -416,6 +515,7 @@ static bool solution_unpack(Solution *sol, int n, const int *buf) {
  * 1) split ants across MPI ranks
  * 2) initialize shared eta/tau matrices
  * 3) for each iteration, evaluate local ants (OpenMP in-rank parallelism)
+ *    in adaptive batches with early stop on weak marginal gains
  * 4) reduce local iteration-best to global best with MPI collectives
  * 5) synchronize winning solution across ranks
  * 6) update pheromone matrix from global iteration-best solution
@@ -537,80 +637,140 @@ void aco_vrp(int n, int K, int m, int T, double **c, double alpha,
   }
 
   size_t scratch_len = (n > 0) ? (size_t)n : 1u;
-  const double iter_deposit_weight = 0.3;
-  const double global_deposit_weight = 0.7;
   int stagnation_iters = 0;
   int stagnation_trigger = T / 4;
   if (stagnation_trigger < 4) {
     stagnation_trigger = 4;
   }
+  const double iter_deposit_weight = 0.3;
+  const double global_deposit_weight = 0.7;
   double tau_max = tau0;
   double tau_min = tau0 * 0.05;
 
   for (int iter = 0; iter < T; ++iter) {
+    int stagnation_level =
+        choose_stagnation_level(stagnation_iters, stagnation_trigger);
+    int batch_size = choose_ant_batch_size(local_m, stagnation_level);
+    int min_ants_before_stop =
+        choose_min_ants_before_stop(local_m, stagnation_level);
+    int no_improve_patience =
+        choose_no_improve_patience(local_m, stagnation_level);
+
     double iter_best_cost = DBL_MAX;
     int iter_best_ant = INT_MAX;
     int iter_failed = 0;
 
     if (omp_enabled) {
 #ifdef _OPENMP
+      int ants_evaluated = 0;
+      int consecutive_no_improve_batches = 0;
+
+      for (int batch_start = 0; batch_start < local_m;
+           batch_start += batch_size) {
+        int batch_end = batch_start + batch_size;
+        if (batch_end > local_m) {
+          batch_end = local_m;
+        }
+
+        double prev_best_cost = iter_best_cost;
+        int prev_best_ant = iter_best_ant;
+        double batch_best_cost = DBL_MAX;
+        int batch_best_ant = INT_MAX;
+        Solution *batch_best_solution = solution_create(K, n);
+
+        if (!batch_best_solution) {
+          iter_failed = 1;
+          break;
+        }
+
 #pragma omp parallel default(shared)
-      {
-        double thread_best_cost = DBL_MAX;
-        int thread_best_ant = INT_MAX;
-        Solution *sol = solution_create(K, n);
-        Solution *thread_best = solution_create(K, n);
-        AcoScoreCache *score_cache =
-            aco_score_cache_create(n, choose_l1_lines(n), choose_l2_lines(n));
-        int *unvisited_nodes = malloc(scratch_len * sizeof(int));
-        double *candidate_scores = malloc(scratch_len * sizeof(double));
-        double *random_draws = malloc(scratch_len * sizeof(double));
+        {
+          double thread_best_cost = DBL_MAX;
+          int thread_best_ant = INT_MAX;
+          Solution *sol = solution_create(K, n);
+          Solution *thread_best = solution_create(K, n);
+          AcoScoreCache *score_cache =
+              aco_score_cache_create(n, choose_l1_lines(n), choose_l2_lines(n));
+          int *unvisited_nodes = malloc(scratch_len * sizeof(int));
+          double *candidate_scores = malloc(scratch_len * sizeof(double));
+          double *random_draws = malloc(scratch_len * sizeof(double));
 
-        if (!sol || !thread_best || !unvisited_nodes ||
-            !candidate_scores || !random_draws) {
+          if (!sol || !thread_best || !score_cache || !unvisited_nodes ||
+              !candidate_scores || !random_draws) {
 #pragma omp critical
-          { iter_failed = 1; }
-        } else {
+            { iter_failed = 1; }
+          } else {
 #pragma omp for schedule(static)
-          for (int ant = 0; ant < local_m; ++ant) {
-            int global_ant = ant_offset + ant;
-            unsigned int rng_state = aco_make_ant_seed(seed, iter, global_ant);
+            for (int ant = batch_start; ant < batch_end; ++ant) {
+              int global_ant = ant_offset + ant;
+              unsigned int rng_state =
+                  aco_make_ant_seed(seed, iter, global_ant);
 
-            aco_build_ant_solution(sol, n, K, tau, eta, alpha, beta,
-                                   vehicle_capacity_customers, score_cache,
-                                   &rng_state, unvisited_nodes,
-                                   candidate_scores, random_draws);
-            double cost = solution_cost(sol, c);
+              aco_build_ant_solution(sol, n, K, tau, eta, alpha, beta,
+                                     vehicle_capacity_customers, score_cache,
+                                     &rng_state, unvisited_nodes,
+                                     candidate_scores, random_draws);
+              double cost = solution_cost(sol, c);
 
-            if (cost < thread_best_cost ||
-                (fabs(cost - thread_best_cost) <= ACO_EPS &&
-                 global_ant < thread_best_ant)) {
-              thread_best_cost = cost;
-              thread_best_ant = global_ant;
-              solution_copy(thread_best, sol);
+              if (cost < thread_best_cost ||
+                  (fabs(cost - thread_best_cost) <= ACO_EPS &&
+                   global_ant < thread_best_ant)) {
+                thread_best_cost = cost;
+                thread_best_ant = global_ant;
+                solution_copy(thread_best, sol);
+              }
             }
-          }
 
-          if (thread_best_cost < DBL_MAX) {
+            if (thread_best_cost < DBL_MAX) {
 #pragma omp critical
-            {
-              if (thread_best_cost < iter_best_cost ||
-                  (fabs(thread_best_cost - iter_best_cost) <= ACO_EPS &&
-                   thread_best_ant < iter_best_ant)) {
-                iter_best_cost = thread_best_cost;
-                iter_best_ant = thread_best_ant;
-                solution_copy(iter_best, thread_best);
+              {
+                if (thread_best_cost < batch_best_cost ||
+                    (fabs(thread_best_cost - batch_best_cost) <= ACO_EPS &&
+                     thread_best_ant < batch_best_ant)) {
+                  batch_best_cost = thread_best_cost;
+                  batch_best_ant = thread_best_ant;
+                  solution_copy(batch_best_solution, thread_best);
+                }
               }
             }
           }
+
+          free(random_draws);
+          free(candidate_scores);
+          free(unvisited_nodes);
+          aco_score_cache_free(score_cache);
+          solution_free(thread_best);
+          solution_free(sol);
         }
 
-        free(random_draws);
-        free(candidate_scores);
-        free(unvisited_nodes);
-        aco_score_cache_free(score_cache);
-        solution_free(thread_best);
-        solution_free(sol);
+        if (iter_failed) {
+          solution_free(batch_best_solution);
+          break;
+        }
+
+        if (batch_best_cost < iter_best_cost ||
+            (fabs(batch_best_cost - iter_best_cost) <= ACO_EPS &&
+             batch_best_ant < iter_best_ant)) {
+          iter_best_cost = batch_best_cost;
+          iter_best_ant = batch_best_ant;
+          solution_copy(iter_best, batch_best_solution);
+        }
+
+        solution_free(batch_best_solution);
+
+        ants_evaluated += (batch_end - batch_start);
+        if (iter_best_cost < prev_best_cost - ACO_EPS ||
+            (fabs(iter_best_cost - prev_best_cost) <= ACO_EPS &&
+             iter_best_ant < prev_best_ant)) {
+          consecutive_no_improve_batches = 0;
+        } else {
+          ++consecutive_no_improve_batches;
+        }
+
+        if (ants_evaluated >= min_ants_before_stop &&
+            consecutive_no_improve_batches >= no_improve_patience) {
+          break;
+        }
       }
 #endif
     } else {
@@ -624,22 +784,50 @@ void aco_vrp(int n, int K, int m, int T, double **c, double alpha,
           !random_draws) {
         iter_failed = 1;
       } else {
-        for (int ant = 0; ant < local_m; ++ant) {
-          int global_ant = ant_offset + ant;
-          unsigned int rng_state = aco_make_ant_seed(seed, iter, global_ant);
+        int ants_evaluated = 0;
+        int consecutive_no_improve_batches = 0;
 
-          aco_build_ant_solution(sol, n, K, tau, eta, alpha, beta,
-                                 vehicle_capacity_customers, serial_cache,
-                                 &rng_state, unvisited_nodes,
-                                 candidate_scores, random_draws);
-          double cost = solution_cost(sol, c);
+        for (int batch_start = 0; batch_start < local_m;
+             batch_start += batch_size) {
+          int batch_end = batch_start + batch_size;
+          if (batch_end > local_m) {
+            batch_end = local_m;
+          }
 
-          if (cost < iter_best_cost ||
-              (fabs(cost - iter_best_cost) <= ACO_EPS &&
-               global_ant < iter_best_ant)) {
-            iter_best_cost = cost;
-            iter_best_ant = global_ant;
-            solution_copy(iter_best, sol);
+          double prev_best_cost = iter_best_cost;
+          int prev_best_ant = iter_best_ant;
+
+          for (int ant = batch_start; ant < batch_end; ++ant) {
+            int global_ant = ant_offset + ant;
+            unsigned int rng_state = aco_make_ant_seed(seed, iter, global_ant);
+
+            aco_build_ant_solution(sol, n, K, tau, eta, alpha, beta,
+                                   vehicle_capacity_customers, serial_cache,
+                                   &rng_state, unvisited_nodes,
+                                   candidate_scores, random_draws);
+            double cost = solution_cost(sol, c);
+
+            if (cost < iter_best_cost ||
+                (fabs(cost - iter_best_cost) <= ACO_EPS &&
+                 global_ant < iter_best_ant)) {
+              iter_best_cost = cost;
+              iter_best_ant = global_ant;
+              solution_copy(iter_best, sol);
+            }
+          }
+
+          ants_evaluated += (batch_end - batch_start);
+          if (iter_best_cost < prev_best_cost - ACO_EPS ||
+              (fabs(iter_best_cost - prev_best_cost) <= ACO_EPS &&
+               iter_best_ant < prev_best_ant)) {
+            consecutive_no_improve_batches = 0;
+          } else {
+            ++consecutive_no_improve_batches;
+          }
+
+          if (ants_evaluated >= min_ants_before_stop &&
+              consecutive_no_improve_batches >= no_improve_patience) {
+            break;
           }
         }
       }

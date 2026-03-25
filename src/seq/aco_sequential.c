@@ -70,12 +70,112 @@ static int choose_auto_total_ants(int n) {
 }
 
 /*
+ * Function:  choose_stagnation_level
+ * ----------------------------------
+ * maps the global stagnation counter to a discrete level:
+ * 0 = low, 1 = medium, 2 = high.
+ *
+ *  stagnation_iters: consecutive iterations without global-best improvement
+ *  stagnation_trigger: base trigger used for medium/high transitions
+ *
+ *  returns: stagnation level in [0, 2]
+ */
+static int choose_stagnation_level(int stagnation_iters,
+                                   int stagnation_trigger) {
+  if (stagnation_iters >= 2 * stagnation_trigger) {
+    return 2;
+  }
+  if (stagnation_iters >= stagnation_trigger) {
+    return 1;
+  }
+  return 0;
+}
+
+/*
+ * Function:  choose_ant_batch_size
+ * --------------------------------
+ * picks a batch size for adaptive in-iteration ant evaluation. Higher
+ * stagnation uses smaller batches to check marginal gains more frequently.
+ *
+ *  total_ants: upper bound ants for this iteration
+ *  stagnation_level: 0 (low), 1 (medium), 2 (high)
+ *
+ *  returns: ants processed per batch (>= 1)
+ */
+static int choose_ant_batch_size(int total_ants, int stagnation_level) {
+  if (total_ants <= 0) {
+    return 0;
+  }
+
+  int divisor = 8;
+  if (stagnation_level <= 0) {
+    divisor = 6;
+  } else if (stagnation_level >= 2) {
+    divisor = 12;
+  }
+
+  int batch = total_ants / divisor;
+  return clamp_int(batch, 1, total_ants);
+}
+
+/*
+ * Function:  choose_min_ants_before_stop
+ * --------------------------------------
+ * picks the minimum ants to evaluate before allowing early stop. Higher
+ * stagnation enforces deeper per-iteration search.
+ *
+ *  total_ants: upper bound ants for this iteration
+ *  stagnation_level: 0 (low), 1 (medium), 2 (high)
+ *
+ *  returns: minimum ants to evaluate (>= 1, <= total_ants)
+ */
+static int choose_min_ants_before_stop(int total_ants, int stagnation_level) {
+  if (total_ants <= 0) {
+    return 0;
+  }
+
+  int min_ants = total_ants / 4;
+  if (stagnation_level == 1) {
+    min_ants = total_ants / 2;
+  } else if (stagnation_level >= 2) {
+    min_ants = (3 * total_ants) / 4;
+  }
+  return clamp_int(min_ants, 1, total_ants);
+}
+
+/*
+ * Function:  choose_no_improve_patience
+ * -------------------------------------
+ * picks how many consecutive non-improving batches are tolerated before
+ * stopping the current iteration early. Higher stagnation increases patience.
+ *
+ *  total_ants: upper bound ants for this iteration
+ *  stagnation_level: 0 (low), 1 (medium), 2 (high)
+ *
+ *  returns: patience in number of batches (>= 1)
+ */
+static int choose_no_improve_patience(int total_ants, int stagnation_level) {
+  if (total_ants <= 0) {
+    return 1;
+  }
+
+  int patience = (total_ants >= 128) ? 3 : 2;
+  if (stagnation_level == 1) {
+    ++patience;
+  } else if (stagnation_level >= 2) {
+    patience += 2;
+  }
+  return clamp_int(patience, 1, 6);
+}
+
+/*
  * Function:  aco_vrp
  * ------------------
  * runs the sequential ACO solver for VRP.
  * algorithm outline:
  * 1) initialize heuristic matrix eta and pheromone matrix tau
- * 2) for each iteration, build m ant solutions and keep the best one
+ * 2) for each iteration, build up to m ant solutions in adaptive batches and
+ *    keep the best one
  * 3) update global best solution if iteration best improves it
  * 4) evaporate pheromone and deposit on arcs of iteration-best solution
  *
@@ -139,9 +239,23 @@ void aco_vrp(int n, int K, int m, int T, double **c, double alpha,
     vehicle_capacity_customers = 1;
   }
 
+  int stagnation_iters = 0;
+  int stagnation_trigger = T / 4;
+  if (stagnation_trigger < 4) {
+    stagnation_trigger = 4;
+  }
+
   size_t scratch_len = (n > 0) ? (size_t)n : 1u;
 
   for (int iter = 0; iter < T; ++iter) {
+    int stagnation_level =
+        choose_stagnation_level(stagnation_iters, stagnation_trigger);
+    int batch_size = choose_ant_batch_size(total_m, stagnation_level);
+    int min_ants_before_stop =
+        choose_min_ants_before_stop(total_m, stagnation_level);
+    int no_improve_patience =
+        choose_no_improve_patience(total_m, stagnation_level);
+
     aco_score_cache_invalidate(score_cache);
     double iter_best_cost = DBL_MAX;
     int iter_best_ant = INT_MAX;
@@ -156,21 +270,49 @@ void aco_vrp(int n, int K, int m, int T, double **c, double alpha,
         !random_draws) {
       iter_failed = 1;
     } else {
-      for (int ant = 0; ant < total_m; ++ant) {
-        unsigned int rng_state = aco_make_ant_seed(seed, iter, ant);
+      int ants_evaluated = 0;
+      int consecutive_no_improve_batches = 0;
 
-        aco_build_ant_solution(sol, n, K, tau, eta, alpha, beta,
-                               vehicle_capacity_customers, score_cache,
-                               &rng_state, unvisited_nodes, candidate_scores,
-                               random_draws);
-        double cost = solution_cost(sol, c);
+      for (int batch_start = 0; batch_start < total_m;
+           batch_start += batch_size) {
+        int batch_end = batch_start + batch_size;
+        if (batch_end > total_m) {
+          batch_end = total_m;
+        }
 
-        if (cost < iter_best_cost ||
-            (fabs(cost - iter_best_cost) <= ACO_EPS &&
-             ant < iter_best_ant)) {
-          iter_best_cost = cost;
-          iter_best_ant = ant;
-          solution_copy(iter_best, sol);
+        double prev_best_cost = iter_best_cost;
+        int prev_best_ant = iter_best_ant;
+
+        for (int ant = batch_start; ant < batch_end; ++ant) {
+          unsigned int rng_state = aco_make_ant_seed(seed, iter, ant);
+
+          aco_build_ant_solution(sol, n, K, tau, eta, alpha, beta,
+                                 vehicle_capacity_customers, score_cache,
+                                 &rng_state, unvisited_nodes,
+                                 candidate_scores, random_draws);
+          double cost = solution_cost(sol, c);
+
+          if (cost < iter_best_cost ||
+              (fabs(cost - iter_best_cost) <= ACO_EPS &&
+               ant < iter_best_ant)) {
+            iter_best_cost = cost;
+            iter_best_ant = ant;
+            solution_copy(iter_best, sol);
+          }
+        }
+
+        ants_evaluated += (batch_end - batch_start);
+        if (iter_best_cost < prev_best_cost - ACO_EPS ||
+            (fabs(iter_best_cost - prev_best_cost) <= ACO_EPS &&
+             iter_best_ant < prev_best_ant)) {
+          consecutive_no_improve_batches = 0;
+        } else {
+          ++consecutive_no_improve_batches;
+        }
+
+        if (ants_evaluated >= min_ants_before_stop &&
+            consecutive_no_improve_batches >= no_improve_patience) {
+          break;
         }
       }
     }
@@ -192,6 +334,9 @@ void aco_vrp(int n, int K, int m, int T, double **c, double alpha,
     if (iter_best_cost < *best_cost) {
       *best_cost = iter_best_cost;
       solution_copy(best_solution, iter_best);
+      stagnation_iters = 0;
+    } else {
+      ++stagnation_iters;
     }
 
     if (iter_best_cost < DBL_MAX) {
