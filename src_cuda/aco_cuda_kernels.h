@@ -10,9 +10,11 @@ void launch_init_matrices(double *d_eta, double *d_tau, const double *d_c, int n
 void launch_precompute_scores(double *d_scores, const double *d_eta, const double *d_tau,
                               int n, double alpha, double beta, int threads_per_block);
 
+void launch_precompute_candidate_lists(int *d_candidates, const double *d_c, int n, int threads_per_block);
+
 void launch_construct_solutions(int m, int K, int n, const double *d_scores,
                                 const double *d_c, double *d_costs, int *d_routes,
-                                int *d_route_lens, void *d_curand_states, bool *d_visited, int threads_per_block);
+                                int *d_route_lens, void *d_curand_states, int *d_candidates, int threads_per_block);
 
 void launch_evaporate_pheromones(double *d_tau, int n, double rho, int threads_per_block);
 

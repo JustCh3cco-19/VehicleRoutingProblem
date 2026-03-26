@@ -14,19 +14,39 @@ SRC_SEQ=src_sequential
 SRC_CUDA=src_cuda
 
 CFLAGS=-O3 -Wall -Wextra -std=c11 -Iinclude -I$(SRC_SEQ) -I$(SRC_CUDA)
-CUDAFLAGS=-O3 -Iinclude -I$(SRC_SEQ) -I$(SRC_CUDA) $(CUDA_GENCODE) $(CUDA_MATH_FLAGS)
+CUDAFLAGS=-O3 -Iinclude -I$(SRC_SEQ) -I$(SRC_CUDA) $(CUDA_GENCODE) $(CUDA_MATH_FLAGS) -Xptxas -dlcm=cg
 LIBS=-lm
 CUDALIBS=-lm -lcudart
 
 SEQ_BIN=aco_vrp_seq
 SEQ_INST_BIN=aco_vrp_seq_inst
 CUDA_BIN=aco_vrp_cuda_vrp
+NEW_CUDA_BIN=aco_vrp_new_cuda
 
 CORE_OBJ=$(SRC_SEQ)/solution.o $(SRC_SEQ)/matrix.o $(SRC_SEQ)/instance_parser.o
 CUDA_OBJ=$(SRC_CUDA)/aco_cuda.o $(SRC_CUDA)/aco_cuda_kernels.o $(SRC_CUDA)/aco_cuda_host_utils.o
-CUDA_CORE_OBJ=$(SRC_CUDA)/main_vrp.o $(SRC_SEQ)/solution_cuda.o $(SRC_SEQ)/matrix_cuda.o $(SRC_SEQ)/instance_parser_cuda.o
+NEW_CUDA_OBJ=src_new_cuda/aco_cuda.o src_new_cuda/aco_cuda_kernels.o
 
-all: $(SEQ_BIN) $(SEQ_INST_BIN) $(CUDA_BIN)
+CUDA_CORE_OBJ=$(SRC_CUDA)/main_vrp.o $(SRC_SEQ)/solution_cuda.o $(SRC_SEQ)/matrix_cuda.o $(SRC_SEQ)/instance_parser_cuda.o
+NEW_CUDA_CORE_OBJ=src_new_cuda/main_vrp.o $(SRC_SEQ)/solution_cuda.o $(SRC_SEQ)/matrix_cuda.o $(SRC_SEQ)/instance_parser_cuda.o
+
+all: $(SEQ_BIN) $(SEQ_INST_BIN) $(CUDA_BIN) $(NEW_CUDA_BIN)
+
+# ... (regole precedenti invariate) ...
+
+src_new_cuda/main_vrp.o: src_new_cuda/main_vrp.cu include/aco.h include/matrix.h include/solution.h include/instance_parser.h
+	$(CUDACC) $(CUDAFLAGS) -c $< -o $@
+
+src_new_cuda/aco_cuda.o: src_new_cuda/aco_cuda.cu src_new_cuda/aco_cuda_kernels.h include/aco.h include/solution.h
+	$(CUDACC) $(CUDAFLAGS) -c $< -o $@
+
+src_new_cuda/aco_cuda_kernels.o: src_new_cuda/aco_cuda_kernels.cu src_new_cuda/aco_cuda_kernels.h
+	$(CUDACC) $(CUDAFLAGS) -c $< -o $@
+
+$(NEW_CUDA_BIN): $(NEW_CUDA_CORE_OBJ) $(NEW_CUDA_OBJ)
+	$(CUDACC) $(CUDAFLAGS) $^ $(CUDALIBS) -o $@
+
+cuda-new: $(NEW_CUDA_BIN)
 
 $(SRC_SEQ)/main.o: $(SRC_SEQ)/main.c include/aco.h include/matrix.h include/solution.h
 	$(CC) $(CFLAGS) -c $< -o $@
@@ -86,7 +106,15 @@ $(TEST_BIN): tests/test_aco.c $(SRC_SEQ)/aco.o $(CORE_OBJ)
 test: $(TEST_BIN)
 	./$(TEST_BIN)
 
-clean:
-	rm -f $(SEQ_BIN) $(SEQ_INST_BIN) $(CUDA_BIN) $(TEST_BIN) src_sequential/*.o src_cuda/*.o tests/*.o
+CUDA_TEST_BIN=tests/test_cuda
 
-.PHONY: all clean cuda-vrp
+$(CUDA_TEST_BIN): tests/test_cuda.c $(CUDA_OBJ) $(SRC_SEQ)/solution_cuda.o $(SRC_SEQ)/matrix_cuda.o $(SRC_SEQ)/instance_parser_cuda.o
+	$(CUDACC) $(CUDAFLAGS) $^ $(CUDALIBS) -o $@
+
+test_cuda: $(CUDA_TEST_BIN)
+	./$(CUDA_TEST_BIN)
+
+clean:
+	rm -f $(SEQ_BIN) $(SEQ_INST_BIN) $(CUDA_BIN) $(NEW_CUDA_BIN) $(TEST_BIN) $(CUDA_TEST_BIN) src_sequential/*.o src_cuda/*.o src_new_cuda/*.o tests/*.o
+
+.PHONY: all clean cuda-vrp cuda-new

@@ -48,11 +48,11 @@ int main(void) {
   double cost_cuda_b = DBL_MAX;
 
   int rc = aco_vrp_cuda(n, K, m, T, c,
-                        1.0, 2.0, 0.5, 1.0, 1.0, seed,
+                        1.0, 2.0, 0.5, 1.0, 1.0, seed, false, 0,
                         best_cuda_a, &cost_cuda_a);
   assert(rc == 0);
   rc = aco_vrp_cuda(n, K, m, T, c,
-                    1.0, 2.0, 0.5, 1.0, 1.0, seed,
+                    1.0, 2.0, 0.5, 1.0, 1.0, seed, false, 0,
                     best_cuda_b, &cost_cuda_b);
   assert(rc == 0);
   assert_valid_solution(best_cuda_a, n, K);
