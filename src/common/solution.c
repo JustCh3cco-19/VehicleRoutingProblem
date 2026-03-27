@@ -5,36 +5,19 @@
 #include <stdlib.h>
 #include <string.h>
 
-/*
- * Function:  route_init
- * ---------------------
- * initializes one route with fixed capacity and empty content.
- *
- *  r: route to initialize
- *  cap: maximum number of nodes this route can store
- *
- *  returns: nothing; r->nodes is NULL if allocation fails
- */
-static void route_init(Route *r, int cap) {
-  r->nodes = malloc((size_t)cap * sizeof(int));
-  r->cap = cap;
-  r->len = 0;
-}
+#define SOLUTION_ALIGNMENT 64u
 
 /*
- * Function:  route_free
- * ---------------------
- * releases memory owned by one route and resets its fields.
- *
- *  r: route to free
- *
- *  returns: nothing
+ * Function:  align_up_size
+ * ------------------------
+ * rounds a byte count up to the next alignment boundary.
  */
-static void route_free(Route *r) {
-  free(r->nodes);
-  r->nodes = NULL;
-  r->cap = 0;
-  r->len = 0;
+static size_t align_up_size(size_t value, size_t alignment) {
+  size_t rem = value % alignment;
+  if (rem == 0u) {
+    return value;
+  }
+  return value + (alignment - rem);
 }
 
 /*
@@ -58,7 +41,8 @@ void route_append(Route *r, int node) {
  * Function:  solution_create
  * --------------------------
  * allocates a Solution with K routes. each route gets capacity n+2 to hold
- * depot start/end and up to all customers.
+ * depot start/end and up to all customers. all route node arrays are slices
+ * of one aligned contiguous storage buffer.
  *
  *  K: number of routes
  *  n: number of customers
@@ -67,27 +51,36 @@ void route_append(Route *r, int node) {
  *           NULL on allocation failure
  */
 Solution *solution_create(int K, int n) {
-  Solution *s = malloc(sizeof(*s));
-  if (!s) return NULL;
+  if (K <= 0 || n < 0) {
+    return NULL;
+  }
 
+  Solution *s = calloc(1, sizeof(*s));
+  if (!s) return NULL;
   s->K = K;
+  s->route_cap = n + 2;
   s->routes = calloc((size_t)K, sizeof(Route));
   if (!s->routes) {
     free(s);
     return NULL;
   }
 
-  int cap = n + 2;
+  size_t total_nodes = (size_t)K * (size_t)s->route_cap;
+  size_t bytes = total_nodes * sizeof(int);
+  size_t aligned_bytes = align_up_size(bytes, SOLUTION_ALIGNMENT);
+  s->nodes_storage = aligned_alloc(SOLUTION_ALIGNMENT, aligned_bytes);
+  if (!s->nodes_storage) {
+    free(s->routes);
+    free(s);
+    return NULL;
+  }
+  memset(s->nodes_storage, 0, aligned_bytes);
+
   for (int i = 0; i < K; ++i) {
-    route_init(&s->routes[i], cap);
-    if (!s->routes[i].nodes) {
-      for (int j = 0; j < i; ++j) {
-        route_free(&s->routes[j]);
-      }
-      free(s->routes);
-      free(s);
-      return NULL;
-    }
+    Route *r = &s->routes[i];
+    r->nodes = s->nodes_storage + (size_t)i * (size_t)s->route_cap;
+    r->cap = s->route_cap;
+    r->len = 0;
   }
 
   return s;
@@ -111,7 +104,7 @@ void solution_reset(Solution *s) {
 /*
  * Function:  solution_free
  * ------------------------
- * frees all routes and the parent solution structure.
+ * frees contiguous route storage, route metadata, and solution header.
  *
  *  s: solution to free; NULL is accepted
  *
@@ -119,9 +112,7 @@ void solution_reset(Solution *s) {
  */
 void solution_free(Solution *s) {
   if (!s) return;
-  for (int i = 0; i < s->K; ++i) {
-    route_free(&s->routes[i]);
-  }
+  free(s->nodes_storage);
   free(s->routes);
   free(s);
 }

@@ -1,6 +1,7 @@
 #include "aco.h"
 #include "matrix.h"
 #include "solution.h"
+#include "test_types.h"
 
 #include <errno.h>
 #include <float.h>
@@ -20,30 +21,44 @@
 #include <omp.h>
 #endif
 
-typedef struct {
-  int n;
-  int K;
-  int m;
-  int T;
-  unsigned int solver_seed;
-  unsigned int instance_seed;
-  int layout_id;
-} Scenario;
-
-typedef struct {
-  double x;
-  double y;
-} Point;
-
+/*
+ * Function:  lcg_next
+ * ------------------------
+ * advances the local LCG state and returns the next value.
+ *
+ *  state: input parameter
+ *
+ *  returns: value as defined by the function contract
+ */
 static unsigned int lcg_next(unsigned int *state) {
   *state = (*state * 1664525u) + 1013904223u;
   return *state;
 }
 
+/*
+ * Function:  rand01_lcg
+ * ------------------------
+ * maps one LCG step to a floating-point value in [0, 1].
+ *
+ *  state: input parameter
+ *
+ *  returns: value as defined by the function contract
+ */
 static double rand01_lcg(unsigned int *state) {
   return (double)lcg_next(state) / (double)0xFFFFFFFFu;
 }
 
+/*
+ * Function:  clamp
+ * ------------------------
+ * clamps a scalar value inside the inclusive [lo, hi] interval.
+ *
+ *  x: input parameter
+ *  lo: input parameter
+ *  hi: input parameter
+ *
+ *  returns: value as defined by the function contract
+ */
 static double clamp(double x, double lo, double hi) {
   if (x < lo) {
     return lo;
@@ -54,10 +69,26 @@ static double clamp(double x, double lo, double hi) {
   return x;
 }
 
+/*
+ * Function:  bytes_to_gib
+ * ------------------------
+ * converts a byte count to gibibytes.
+ *
+ *  x: input parameter
+ *
+ *  returns: value as defined by the function contract
+ */
 static double bytes_to_gib(size_t x) {
   return (double)x / (1024.0 * 1024.0 * 1024.0);
 }
 
+/*
+ * Function:  read_available_memory_bytes
+ * ------------------------
+ * reads available memory from /proc/meminfo.
+ *
+ *  returns: value as defined by the function contract
+ */
 static size_t read_available_memory_bytes(void) {
   FILE *fp = fopen("/proc/meminfo", "r");
   if (!fp) {
@@ -83,15 +114,84 @@ static size_t read_available_memory_bytes(void) {
   return out;
 }
 
+/*
+ * Function:  align_up_size
+ * ------------------------
+ * rounds a size up to the requested alignment.
+ *
+ *  value: input parameter
+ *  alignment: input parameter
+ *
+ *  returns: value as defined by the function contract
+ */
+static size_t align_up_size(size_t value, size_t alignment) {
+  size_t rem = value % alignment;
+  if (rem == 0u) {
+    return value;
+  }
+  return value + (alignment - rem);
+}
+
+/*
+ * Function:  choose_candidate_count_for_log
+ * ------------------------
+ * selects candidate-list size used for memory/report estimates.
+ *
+ *  n: input parameter
+ *
+ *  returns: value as defined by the function contract
+ */
+static int choose_candidate_count_for_log(int n) {
+  if (n <= 8) {
+    return n;
+  }
+  if (n <= 256) {
+    return 16;
+  }
+  if (n <= 4096) {
+    return 24;
+  }
+  return 32;
+}
+
+/*
+ * Function:  estimate_c_memory_bytes
+ * ------------------------
+ * estimates memory footprint for one scenario.
+ *
+ *  n: input parameter
+ *
+ *  returns: value as defined by the function contract
+ */
 static size_t estimate_c_memory_bytes(int n) {
   size_t side = (size_t)n + 1u;
-  size_t one_dense = side * side * sizeof(double);
-  size_t dense_three = one_dense * 3u;
-  size_t layered_cache = side * (size_t)(8 + 64) * sizeof(double); /* L1 + L2 */
-  size_t base = dense_three + layered_cache;
+  size_t dense_cost = side * side * sizeof(double); /* c */
+  size_t dense_tau = side * side * sizeof(double);  /* tau */
+
+  int cand_k = choose_candidate_count_for_log(n);
+  size_t row_bytes = (size_t)cand_k * sizeof(float);
+  size_t padded_row_bytes = align_up_size(row_bytes, 64u);
+  size_t stride = padded_row_bytes / sizeof(float);
+  size_t candidate_rows = side * stride;
+
+  size_t candidate_idx = candidate_rows * sizeof(int);
+  size_t eta_beta = candidate_rows * sizeof(float);
+  size_t score = candidate_rows * sizeof(float);
+  size_t base = dense_cost + dense_tau + candidate_idx + eta_beta + score;
   return (size_t)((double)base * 1.2);
 }
 
+/*
+ * Function:  clamp_int
+ * ------------------------
+ * clamps an integer value between lower and upper bounds.
+ *
+ *  x: input parameter
+ *  lo: input parameter
+ *  hi: input parameter
+ *
+ *  returns: value as defined by the function contract
+ */
 static int clamp_int(int x, int lo, int hi) {
   if (x < lo) {
     return lo;
@@ -103,6 +203,16 @@ static int clamp_int(int x, int lo, int hi) {
 }
 
 /* Mirrors solver auto-ant policy only for user-facing reporting in this runner. */
+/*
+ * Function:  estimate_auto_ants_for_log
+ * ------------------------
+ * mirrors solver auto-ant policy for user-facing logs.
+ *
+ *  n: input parameter
+ *  mpi_ranks: input parameter
+ *
+ *  returns: value as defined by the function contract
+ */
 static int estimate_auto_ants_for_log(int n, int mpi_ranks) {
   int omp_threads = 1;
 #ifdef _OPENMP
@@ -117,23 +227,31 @@ static int estimate_auto_ants_for_log(int n, int mpi_ranks) {
     workers = 1;
   }
 
-  int ants_per_worker;
+  int ants_per_worker = 6;
   if (n <= 2000) {
+    ants_per_worker = 8;
+  } else if (n > 16000) {
     ants_per_worker = 4;
-  } else if (n <= 8000) {
-    ants_per_worker = 3;
-  } else if (n <= 16000) {
-    ants_per_worker = 2;
-  } else {
-    ants_per_worker = 1;
   }
 
   int total_ants = workers * ants_per_worker;
-  total_ants = clamp_int(total_ants, workers, workers * 16);
-  total_ants = clamp_int(total_ants, 8, n > 8 ? n : 8);
+  total_ants = clamp_int(total_ants, workers * 4, workers * 8);
+  if (total_ants < 8) {
+    total_ants = 8;
+  }
   return total_ants;
 }
 
+/*
+ * Function:  build_scenarios
+ * ------------------------
+ * builds the deterministic scaling scenario list.
+ *
+ *  out: input parameter
+ *  count: input parameter
+ *
+ *  returns: value as defined by the function contract
+ */
 static void build_scenarios(Scenario *out, int *count) {
   static const int levels[] = {500, 1000, 2000, 4000, 8000,
                                12000, 16000, 24000, 32000, 40000,
@@ -180,6 +298,18 @@ static void build_scenarios(Scenario *out, int *count) {
   *count = total;
 }
 
+/*
+ * Function:  generate_points
+ * ------------------------
+ * generates deterministic synthetic points for one layout.
+ *
+ *  pts: input parameter
+ *  n: input parameter
+ *  seed: input parameter
+ *  layout: input parameter
+ *
+ *  returns: value as defined by the function contract
+ */
 static void generate_points(Point *pts, int n, unsigned int seed, int layout) {
   const double scale = 1000.0;
   unsigned int st = seed ? seed : 1u;
@@ -213,6 +343,17 @@ static void generate_points(Point *pts, int n, unsigned int seed, int layout) {
   }
 }
 
+/*
+ * Function:  fill_cost_matrix
+ * ------------------------
+ * fills the rounded Euclidean distance matrix.
+ *
+ *  c: input parameter
+ *  pts: input parameter
+ *  n: input parameter
+ *
+ *  returns: value as defined by the function contract
+ */
 static void fill_cost_matrix(double **c, const Point *pts, int n) {
   for (int i = 0; i <= n; ++i) {
     for (int j = 0; j <= n; ++j) {
@@ -231,6 +372,15 @@ static void fill_cost_matrix(double **c, const Point *pts, int n) {
   }
 }
 
+/*
+ * Function:  ensure_parent_dir
+ * ------------------------
+ * creates the parent directory of a file path if needed.
+ *
+ *  path: input parameter
+ *
+ *  returns: value as defined by the function contract
+ */
 static int ensure_parent_dir(const char *path) {
   const char *slash = strrchr(path, '/');
   if (!slash) {
@@ -257,6 +407,40 @@ static int ensure_parent_dir(const char *path) {
   return 0;
 }
 
+/*
+ * Function:  print_command_line
+ * ------------------------
+ * prints the current command line to the selected stream.
+ *
+ *  out: input parameter
+ *  argc: input parameter
+ *  argv: input parameter
+ *
+ *  returns: value as defined by the function contract
+ */
+static void print_command_line(FILE *out, int argc, char **argv) {
+  if (!out || argc <= 0 || !argv) {
+    return;
+  }
+  for (int i = 0; i < argc; ++i) {
+    fprintf(out, "%s", argv[i]);
+    if (i + 1 < argc) {
+      fputc(' ', out);
+    }
+  }
+  fputc('\n', out);
+}
+
+/*
+ * Function:  main
+ * ------------------------
+ * parses CLI options, executes scenarios, and writes outputs.
+ *
+ *  argc: input parameter
+ *  argv: input parameter
+ *
+ *  returns: value as defined by the function contract
+ */
 int main(int argc, char **argv) {
   setvbuf(stdout, NULL, _IOLBF, 0);
   setvbuf(stderr, NULL, _IOLBF, 0);
@@ -268,6 +452,7 @@ int main(int argc, char **argv) {
   MPI_Comm_size(MPI_COMM_WORLD, &size);
 
   const char *csv_path = "results/scaling_progressive_openmp_mpi.csv";
+  const char *input_log_path = "results/openmp_mpi_test_inputs.log";
   double memory_utilization = 0.70;
   int c_max_n = 100000;
   int enforce_c_max_n = 0;
@@ -277,6 +462,8 @@ int main(int argc, char **argv) {
   for (int i = 1; i < argc; ++i) {
     if (strcmp(argv[i], "--csv") == 0 && i + 1 < argc) {
       csv_path = argv[++i];
+    } else if (strcmp(argv[i], "--input-log") == 0 && i + 1 < argc) {
+      input_log_path = argv[++i];
     } else if (strcmp(argv[i], "--memory-utilization") == 0 && i + 1 < argc) {
       memory_utilization = atof(argv[++i]);
       if (memory_utilization <= 0.0 || memory_utilization > 1.0) {
@@ -306,7 +493,7 @@ int main(int argc, char **argv) {
     } else {
       if (rank == 0) {
         fprintf(stderr,
-          "usage: %s [--csv PATH] [--memory-utilization X] [--c-max-n N] [--enforce-c-max-n] [--force] [--auto-ants|--fixed-ants]\n",
+          "usage: %s [--csv PATH] [--input-log PATH] [--memory-utilization X] [--c-max-n N] [--enforce-c-max-n] [--force] [--auto-ants|--fixed-ants]\n",
                 argv[0]);
       }
       MPI_Finalize();
@@ -315,9 +502,16 @@ int main(int argc, char **argv) {
   }
 
   FILE *csv = NULL;
+  FILE *input_log = NULL;
   if (rank == 0) {
     if (!ensure_parent_dir(csv_path)) {
       fprintf(stderr, "failed to create parent directory for CSV: %s\n", csv_path);
+      MPI_Finalize();
+      return 1;
+    }
+    if (!ensure_parent_dir(input_log_path)) {
+      fprintf(stderr, "failed to create parent directory for input log: %s\n",
+              input_log_path);
       MPI_Finalize();
       return 1;
     }
@@ -328,7 +522,15 @@ int main(int argc, char **argv) {
       MPI_Finalize();
       return 1;
     }
+    input_log = fopen(input_log_path, "w");
+    if (!input_log) {
+      fprintf(stderr, "failed to open input log: %s\n", input_log_path);
+      fclose(csv);
+      MPI_Finalize();
+      return 1;
+    }
     setvbuf(csv, NULL, _IOLBF, 0);
+    setvbuf(input_log, NULL, _IOLBF, 0);
 
     fprintf(csv,
             "mode,mpi_ranks,n,K,m,T,estimated_mem_gib,status,elapsed_s,cost,error\n");
@@ -354,8 +556,26 @@ int main(int argc, char **argv) {
     printf("[INFO] threshold_gib        : %.2f\n", bytes_to_gib(threshold));
     printf("[INFO] memory_utilization   : %.2f\n", memory_utilization);
     printf("[INFO] c_max_n              : %d\n\n", c_max_n);
-            printf("[INFO] enforce_c_max_n      : %s\n\n",
-              enforce_c_max_n ? "yes" : "no");
+    printf("[INFO] enforce_c_max_n      : %s\n", enforce_c_max_n ? "yes" : "no");
+    printf("[INFO] csv_path             : %s\n", csv_path);
+    printf("[INFO] input_log_path       : %s\n", input_log_path);
+    printf("[INFO] command              : ");
+    print_command_line(stdout, argc, argv);
+    printf("\n");
+
+    fprintf(input_log, "# openmp_mpi_tests input log\n");
+    fprintf(input_log, "command: ");
+    print_command_line(input_log, argc, argv);
+    fprintf(input_log, "mpi_ranks=%d\n", size);
+    fprintf(input_log, "csv_path=%s\n", csv_path);
+    fprintf(input_log, "memory_utilization=%.6f\n", memory_utilization);
+    fprintf(input_log, "c_max_n=%d\n", c_max_n);
+    fprintf(input_log, "enforce_c_max_n=%d\n", enforce_c_max_n);
+    fprintf(input_log, "force=%d\n", force);
+    fprintf(input_log, "auto_ants=%d\n", auto_ants);
+    fprintf(input_log, "available_mem_gib=%.4f\n", bytes_to_gib(available));
+    fprintf(input_log, "threshold_gib=%.4f\n\n", bytes_to_gib(threshold));
+    fflush(input_log);
   }
 
   Scenario scenarios[24];
@@ -377,16 +597,26 @@ int main(int argc, char **argv) {
     if (rank == 0) {
       printf("[RUN  %02d/%02d] customers=%-6d vehicles=%-4d ants=%-3d iterations=%-3d est_mem=%6.2f GiB\n",
               i + 1, total, sc->n, sc->K, run_m_effective, sc->T, est_gib);
+      printf("  [INPUT] solver   : n=%d K=%d m=%d T=%d alpha=1.0 beta=3.0 rho=0.3 tau0=1.0 Q=1.0 seed=%u\n",
+             sc->n, sc->K, run_m, sc->T, sc->solver_seed);
+      printf("  [INPUT] instance : seed=%u layout_id=%d mpi_ranks=%d\n",
+             sc->instance_seed, sc->layout_id, size);
+      fprintf(input_log,
+              "[RUN %02d/%02d] mpi_ranks=%d n=%d K=%d m_passed=%d m_effective=%d T=%d alpha=1.0 beta=3.0 rho=0.3 tau0=1.0 Q=1.0 solver_seed=%u instance_seed=%u layout_id=%d est_mem_gib=%.4f\n",
+              i + 1, total, size, sc->n, sc->K, run_m, run_m_effective, sc->T,
+              sc->solver_seed, sc->instance_seed, sc->layout_id, est_gib);
     }
 
     if (enforce_c_max_n && sc->n > c_max_n) {
       if (rank == 0) {
         ++skipped_count;
-        printf("  [SKIP] customers > c-max-n (%d)\n", c_max_n);
+        printf("  [SKIP] n=%d supera c-max-n=%d\n", sc->n, c_max_n);
         fprintf(csv,
                 "openmp_mpi,%d,%d,%d,%d,%d,%.4f,skipped_c_max_n,,,\n",
           size, sc->n, sc->K, run_m_effective, sc->T, est_gib);
+        fprintf(input_log, "  result=skipped_c_max_n c_max_n=%d\n\n", c_max_n);
         fflush(csv);
+        fflush(input_log);
       }
       continue;
     }
@@ -394,11 +624,16 @@ int main(int argc, char **argv) {
     if (!force && threshold > 0 && est_mem > threshold) {
       if (rank == 0) {
         ++skipped_count;
-        printf("  [SKIP] estimated memory above threshold\n");
+        printf("  [SKIP] memoria stimata %.2f GiB > soglia %.2f GiB\n",
+               est_gib, bytes_to_gib(threshold));
         fprintf(csv,
                 "openmp_mpi,%d,%d,%d,%d,%d,%.4f,skipped_memory,,,\n",
           size, sc->n, sc->K, run_m_effective, sc->T, est_gib);
+        fprintf(input_log,
+                "  result=skipped_memory est_mem_gib=%.4f threshold_gib=%.4f\n\n",
+                est_gib, bytes_to_gib(threshold));
         fflush(csv);
+        fflush(input_log);
       }
       continue;
     }
@@ -420,7 +655,9 @@ int main(int argc, char **argv) {
         fprintf(csv,
                 "openmp_mpi,%d,%d,%d,%d,%d,%.4f,failed_alloc,,,allocation_failure\n",
           size, sc->n, sc->K, run_m_effective, sc->T, est_gib);
+        fprintf(input_log, "  result=failed_alloc error=allocation_failure\n\n");
         fflush(csv);
+        fflush(input_log);
       }
       solution_free(best);
       matrix_free(c);
@@ -454,7 +691,11 @@ int main(int argc, char **argv) {
         fprintf(csv,
                 "openmp_mpi,%d,%d,%d,%d,%d,%.4f,failed_solver,%.6f,,non_finite_objective\n",
           size, sc->n, sc->K, run_m_effective, sc->T, est_gib, elapsed);
+        fprintf(input_log,
+                "  result=failed_solver elapsed_s=%.6f error=non_finite_objective\n\n",
+                elapsed);
         fflush(csv);
+        fflush(input_log);
       } else {
         ++ok_count;
         total_elapsed += elapsed;
@@ -464,7 +705,11 @@ int main(int argc, char **argv) {
                 "openmp_mpi,%d,%d,%d,%d,%d,%.4f,ok,%.6f,%.6f,\n",
           size, sc->n, sc->K, run_m_effective, sc->T, est_gib, elapsed,
                 global_best_cost);
+        fprintf(input_log,
+                "  result=ok elapsed_s=%.6f best_cost=%.6f\n\n", elapsed,
+                global_best_cost);
         fflush(csv);
+        fflush(input_log);
       }
     }
 
@@ -475,6 +720,7 @@ int main(int argc, char **argv) {
 
   if (rank == 0) {
     fclose(csv);
+    fclose(input_log);
 
     printf("\n========================================================================\n");
     printf("OpenMP+MPI Scaling Summary\n");
@@ -485,6 +731,7 @@ int main(int argc, char **argv) {
     printf("[SUMMARY] skipped           : %d\n", skipped_count);
     printf("[SUMMARY] total_solve_s     : %.2f\n", total_elapsed);
     printf("[DONE] wrote %s\n", csv_path);
+    printf("[DONE] wrote %s\n", input_log_path);
   }
 
   MPI_Finalize();

@@ -7,6 +7,7 @@
 #include <limits.h>
 #include <math.h>
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -19,36 +20,45 @@
 #include <mpi.h>
 #endif
 
+#if defined(__AVX2__)
+#include <immintrin.h>
+#endif
+
+#define ACO_ALIGNMENT 64u
+#define ACO_MAX_CANDIDATES 64
+
 /*
- * Function:  choose_l1_lines
- * --------------------------
- * picks L1 cache line count for desirability-row cache.
+ * Function:  align_up_size
+ * ------------------------
+ * rounds a value up to a multiple of alignment.
  */
-static int choose_l1_lines(int n) {
-  int side = n + 1;
-  return (side < 8) ? side : 8;
+static size_t align_up_size(size_t value, size_t alignment) {
+  size_t rem = value % alignment;
+  if (rem == 0u) {
+    return value;
+  }
+  return value + (alignment - rem);
 }
 
 /*
- * Function:  choose_l2_lines
- * --------------------------
- * picks L2 cache line count for desirability-row cache.
+ * Function:  aligned_calloc_bytes
+ * -------------------------------
+ * allocates cache-line aligned zeroed memory.
  */
-static int choose_l2_lines(int n) {
-  int side = n + 1;
-  return (side < 64) ? side : 64;
+static void *aligned_calloc_bytes(size_t bytes) {
+  size_t alloc_bytes = align_up_size(bytes, ACO_ALIGNMENT);
+  void *ptr = aligned_alloc(ACO_ALIGNMENT, alloc_bytes);
+  if (!ptr) {
+    return NULL;
+  }
+  memset(ptr, 0, alloc_bytes);
+  return ptr;
 }
 
 /*
  * Function:  clamp_int
  * --------------------
- * Clamps an integer value between a lower and an upper bound.
- *
- *  x:  the value to clamp
- *  lo: the lower bound
- *  hi: the upper bound
- *
- *  returns: the clamped value
+ * clamps an integer value between a lower and an upper bound.
  */
 static int clamp_int(int x, int lo, int hi) {
   if (x < lo) {
@@ -65,11 +75,6 @@ static int clamp_int(int x, int lo, int hi) {
  * ---------------------------------
  * estimates a robust ant count from problem size and total worker count
  * (MPI ranks x OpenMP threads).
- *
- *  n: number of customers
- *  mpi_size: number of MPI ranks
- *
- *  returns: total ants per global iteration
  */
 static int choose_auto_total_ants(int n, int mpi_size) {
   int omp_threads = 1;
@@ -85,132 +90,344 @@ static int choose_auto_total_ants(int n, int mpi_size) {
     workers = 1;
   }
 
-  int ants_per_worker;
+  int ants_per_worker = 6;
   if (n <= 2000) {
+    ants_per_worker = 8;
+  } else if (n > 16000) {
     ants_per_worker = 4;
-  } else if (n <= 8000) {
-    ants_per_worker = 3;
-  } else if (n <= 16000) {
-    ants_per_worker = 2;
-  } else {
-    ants_per_worker = 1;
   }
 
   int total_ants = workers * ants_per_worker;
-  total_ants = clamp_int(total_ants, workers, workers * 16);
-  total_ants = clamp_int(total_ants, 8, n > 8 ? n : 8);
+  total_ants = clamp_int(total_ants, workers * 4, workers * 8);
+  if (total_ants < 8) {
+    total_ants = 8;
+  }
   return total_ants;
 }
 
 /*
- * Function:  choose_stagnation_level
- * ----------------------------------
- * maps the global stagnation counter to a discrete level:
- * 0 = low, 1 = medium, 2 = high.
- *
- *  stagnation_iters: consecutive iterations without global-best improvement
- *  stagnation_trigger: base trigger used for medium/high transitions
- *
- *  returns: stagnation level in [0, 2]
+ * Function:  fast_pow_nonneg
+ * --------------------------
+ * evaluates base^exponent with fast paths for common exponents.
  */
-static int choose_stagnation_level(int stagnation_iters,
-                                   int stagnation_trigger) {
-  if (stagnation_iters >= 2 * stagnation_trigger) {
-    return 2;
+static double fast_pow_nonneg(double base, double exponent) {
+  if (exponent == 1.0) {
+    return base;
   }
-  if (stagnation_iters >= stagnation_trigger) {
+  if (exponent == 2.0) {
+    return base * base;
+  }
+  if (exponent == 0.5) {
+    return sqrt(base);
+  }
+  return pow(base, exponent);
+}
+
+/*
+ * Function:  aligned_row_stride
+ * -----------------------------
+ * computes row stride in elements with 64-byte row alignment.
+ */
+static int aligned_row_stride(int cols, size_t elem_size) {
+  size_t row_bytes = (size_t)cols * elem_size;
+  size_t padded = align_up_size(row_bytes, ACO_ALIGNMENT);
+  return (int)(padded / elem_size);
+}
+
+/*
+ * Function:  choose_candidate_count
+ * ---------------------------------
+ * chooses nearest-neighbor candidate count.
+ */
+static int choose_candidate_count(int n) {
+  if (n <= 8) {
+    return n;
+  }
+  if (n <= 256) {
+    return 16;
+  }
+  if (n <= 4096) {
+    return 24;
+  }
+  return 32;
+}
+
+/*
+ * Function:  rank_shared_free
+ * ---------------------------
+ * releases per-rank shared candidate/score structures.
+ */
+static void rank_shared_free(AcoRankShared *shared) {
+  if (!shared) {
+    return;
+  }
+  free(shared->ls_node_pos);
+  free(shared->ls_node_route);
+  free(shared->ls_pos);
+  free(shared->score);
+  free(shared->eta_beta);
+  free(shared->candidate_idx);
+  memset(shared, 0, sizeof(*shared));
+}
+
+/*
+ * Function:  rank_shared_init
+ * ---------------------------
+ * allocates per-rank candidate, heuristic and score matrices.
+ */
+static int rank_shared_init(AcoRankShared *shared, int n) {
+  if (!shared || n < 1) {
+    return 0;
+  }
+
+  memset(shared, 0, sizeof(*shared));
+  shared->n = n;
+  shared->candidate_k = choose_candidate_count(n);
+  shared->candidate_k = clamp_int(shared->candidate_k, 1, ACO_MAX_CANDIDATES);
+  if (shared->candidate_k > n) {
+    shared->candidate_k = n;
+  }
+  shared->stride = aligned_row_stride(shared->candidate_k, sizeof(float));
+  if (shared->stride < shared->candidate_k) {
+    shared->stride = shared->candidate_k;
+  }
+  shared->visited_words = (n / 64) + 1;
+
+  int rows = n + 1;
+  size_t elems = (size_t)rows * (size_t)shared->stride;
+
+  shared->candidate_idx = aligned_calloc_bytes(elems * sizeof(int));
+  shared->eta_beta = aligned_calloc_bytes(elems * sizeof(float));
+  shared->score = aligned_calloc_bytes(elems * sizeof(float));
+  shared->ls_pos = malloc((size_t)(n + 1) * sizeof(int));
+  shared->ls_node_route = malloc((size_t)(n + 1) * sizeof(int));
+  shared->ls_node_pos = malloc((size_t)(n + 1) * sizeof(int));
+  if (!shared->candidate_idx || !shared->eta_beta || !shared->score ||
+      !shared->ls_pos || !shared->ls_node_route || !shared->ls_node_pos) {
+    rank_shared_free(shared);
+    return 0;
+  }
+
+  for (size_t i = 0; i < elems; ++i) {
+    shared->candidate_idx[i] = -1;
+  }
+
+  return 1;
+}
+
+/*
+ * Function:  rank_shared_build_candidates
+ * ---------------------------------------
+ * builds nearest-neighbor indices and eta^beta matrix once per rank.
+ */
+static void rank_shared_build_candidates(AcoRankShared *shared, double **c,
+                                         double beta) {
+  int n = shared->n;
+  int k = shared->candidate_k;
+  int stride = shared->stride;
+
+#ifdef _OPENMP
+#pragma omp parallel for schedule(static) if (n > 64)
+#endif
+  for (int i = 0; i <= n; ++i) {
+    int best_nodes[ACO_MAX_CANDIDATES];
+    double best_dists[ACO_MAX_CANDIDATES];
+
+    for (int t = 0; t < k; ++t) {
+      best_nodes[t] = -1;
+      best_dists[t] = DBL_MAX;
+    }
+
+    for (int node = 1; node <= n; ++node) {
+      if (node == i) {
+        continue;
+      }
+
+      double d = c[i][node];
+      int pos = -1;
+      for (int t = 0; t < k; ++t) {
+        if (d < best_dists[t]) {
+          pos = t;
+          break;
+        }
+      }
+
+      if (pos < 0) {
+        continue;
+      }
+
+      for (int s = k - 1; s > pos; --s) {
+        best_dists[s] = best_dists[s - 1];
+        best_nodes[s] = best_nodes[s - 1];
+      }
+      best_dists[pos] = d;
+      best_nodes[pos] = node;
+    }
+
+    int *cand_row = shared->candidate_idx + (size_t)i * (size_t)stride;
+    float *eta_row = shared->eta_beta + (size_t)i * (size_t)stride;
+
+    for (int t = 0; t < k; ++t) {
+      int node = best_nodes[t];
+      cand_row[t] = (node > 0) ? node : 0;
+      if (node > 0) {
+        double eta = 1.0 / (c[i][node] + ACO_EPS);
+        eta_row[t] = (float)fast_pow_nonneg(eta, beta);
+      } else {
+        eta_row[t] = 0.0f;
+      }
+    }
+
+    for (int t = k; t < stride; ++t) {
+      cand_row[t] = 0;
+      eta_row[t] = 0.0f;
+    }
+  }
+}
+
+/*
+ * Function:  update_score_row_alpha1
+ * ----------------------------------
+ * AVX2/scalar kernel for score = tau * eta_beta.
+ */
+static void update_score_row_alpha1(const int *restrict cand_row,
+                                    const float *restrict eta_row,
+                                    float *restrict score_row,
+                                    const double *restrict tau_row, int k) {
+  int t = 0;
+#if defined(__AVX2__)
+  for (; t + 4 <= k; t += 4) {
+    __m128i idx = _mm_loadu_si128((const __m128i *)(cand_row + t));
+    __m256d tau_v = _mm256_i32gather_pd(tau_row, idx, (int)sizeof(double));
+    __m128 eta_f = _mm_loadu_ps(eta_row + t);
+    __m256d eta_v = _mm256_cvtps_pd(eta_f);
+    __m256d prod = _mm256_mul_pd(tau_v, eta_v);
+    _mm_storeu_ps(score_row + t, _mm256_cvtpd_ps(prod));
+  }
+#endif
+  for (; t < k; ++t) {
+    int node = cand_row[t];
+    score_row[t] = (node > 0) ? (float)(tau_row[node] * (double)eta_row[t]) : 0.0f;
+  }
+}
+
+/*
+ * Function:  update_score_row_alpha2
+ * ----------------------------------
+ * AVX2/scalar kernel for score = tau^2 * eta_beta.
+ */
+static void update_score_row_alpha2(const int *restrict cand_row,
+                                    const float *restrict eta_row,
+                                    float *restrict score_row,
+                                    const double *restrict tau_row, int k) {
+  int t = 0;
+#if defined(__AVX2__)
+  for (; t + 4 <= k; t += 4) {
+    __m128i idx = _mm_loadu_si128((const __m128i *)(cand_row + t));
+    __m256d tau_v = _mm256_i32gather_pd(tau_row, idx, (int)sizeof(double));
+    __m256d tau2_v = _mm256_mul_pd(tau_v, tau_v);
+    __m128 eta_f = _mm_loadu_ps(eta_row + t);
+    __m256d eta_v = _mm256_cvtps_pd(eta_f);
+    __m256d prod = _mm256_mul_pd(tau2_v, eta_v);
+    _mm_storeu_ps(score_row + t, _mm256_cvtpd_ps(prod));
+  }
+#endif
+  for (; t < k; ++t) {
+    int node = cand_row[t];
+    if (node > 0) {
+      double tau_val = tau_row[node];
+      score_row[t] = (float)(tau_val * tau_val * (double)eta_row[t]);
+    } else {
+      score_row[t] = 0.0f;
+    }
+  }
+}
+
+/*
+ * Function:  rank_shared_update_scores
+ * ------------------------------------
+ * updates score matrix S = tau^alpha * eta^beta for candidate arcs.
+ */
+static void rank_shared_update_scores(AcoRankShared *shared,
+                                      double **restrict tau, double alpha) {
+  int n = shared->n;
+  int k = shared->candidate_k;
+  int stride = shared->stride;
+
+#ifdef _OPENMP
+#pragma omp parallel for schedule(static) if (n > 64)
+#endif
+  for (int i = 0; i <= n; ++i) {
+    int *cand_row = shared->candidate_idx + (size_t)i * (size_t)stride;
+    float *eta_row = shared->eta_beta + (size_t)i * (size_t)stride;
+    float *score_row = shared->score + (size_t)i * (size_t)stride;
+    const double *tau_row = tau[i];
+
+    if (alpha == 1.0) {
+      update_score_row_alpha1(cand_row, eta_row, score_row, tau_row, k);
+    } else if (alpha == 2.0) {
+      update_score_row_alpha2(cand_row, eta_row, score_row, tau_row, k);
+    } else {
+#pragma omp simd
+      for (int t = 0; t < k; ++t) {
+        int node = cand_row[t];
+        if (node > 0) {
+          double tau_term = fast_pow_nonneg(tau_row[node], alpha);
+          score_row[t] = (float)(tau_term * (double)eta_row[t]);
+        } else {
+          score_row[t] = 0.0f;
+        }
+      }
+    }
+
+    for (int t = k; t < stride; ++t) {
+      score_row[t] = 0.0f;
+    }
+  }
+}
+
+/*
+ * Function:  candidate_contains
+ * -----------------------------
+ * checks whether v is inside candidate list of u.
+ */
+static int candidate_contains(const AcoRankShared *shared, int u, int v) {
+  if (u <= 0 || v <= 0 || u > shared->n || v > shared->n) {
+    return 0;
+  }
+
+  const int *row =
+      shared->candidate_idx + (size_t)u * (size_t)shared->stride;
+  for (int t = 0; t < shared->candidate_k; ++t) {
+    if (row[t] == v) {
+      return 1;
+    }
+  }
+  return 0;
+}
+
+/*
+ * Function:  candidate_pair_allowed
+ * ---------------------------------
+ * allows depot edges and candidate-neighbor customer edges.
+ */
+static int candidate_pair_allowed(const AcoRankShared *shared, int a, int b) {
+  if (a == 0 || b == 0) {
+    return 1;
+  }
+  if (candidate_contains(shared, a, b)) {
+    return 1;
+  }
+  if (candidate_contains(shared, b, a)) {
     return 1;
   }
   return 0;
 }
 
 /*
- * Function:  choose_ant_batch_size
- * --------------------------------
- * picks a batch size for adaptive in-iteration ant evaluation. Higher
- * stagnation uses smaller batches to check marginal gains more frequently.
- *
- *  local_ants: ants assigned to this rank for one iteration
- *  stagnation_level: 0 (low), 1 (medium), 2 (high)
- *
- *  returns: ants processed per batch (>= 1)
- */
-static int choose_ant_batch_size(int local_ants, int stagnation_level) {
-  if (local_ants <= 0) {
-    return 0;
-  }
-
-  int divisor = 8;
-  if (stagnation_level <= 0) {
-    divisor = 6;
-  } else if (stagnation_level >= 2) {
-    divisor = 12;
-  }
-
-  int batch = local_ants / divisor;
-  return clamp_int(batch, 1, local_ants);
-}
-
-/*
- * Function:  choose_min_ants_before_stop
- * --------------------------------------
- * picks the minimum ants to evaluate before allowing early stop. Higher
- * stagnation enforces deeper per-iteration search.
- *
- *  local_ants: ants assigned to this rank for one iteration
- *  stagnation_level: 0 (low), 1 (medium), 2 (high)
- *
- *  returns: minimum ants to evaluate (>= 1, <= local_ants)
- */
-static int choose_min_ants_before_stop(int local_ants, int stagnation_level) {
-  if (local_ants <= 0) {
-    return 0;
-  }
-
-  int min_ants = local_ants / 4;
-  if (stagnation_level == 1) {
-    min_ants = local_ants / 2;
-  } else if (stagnation_level >= 2) {
-    min_ants = (3 * local_ants) / 4;
-  }
-  return clamp_int(min_ants, 1, local_ants);
-}
-
-/*
- * Function:  choose_no_improve_patience
- * -------------------------------------
- * picks how many consecutive non-improving batches are tolerated before
- * stopping the current iteration early. Higher stagnation increases patience.
- *
- *  local_ants: ants assigned to this rank for one iteration
- *  stagnation_level: 0 (low), 1 (medium), 2 (high)
- *
- *  returns: patience in number of batches (>= 1)
- */
-static int choose_no_improve_patience(int local_ants, int stagnation_level) {
-  if (local_ants <= 0) {
-    return 1;
-  }
-
-  int patience = (local_ants >= 128) ? 3 : 2;
-  if (stagnation_level == 1) {
-    ++patience;
-  } else if (stagnation_level >= 2) {
-    patience += 2;
-  }
-  return clamp_int(patience, 1, 6);
-}
-
-/*
  * Function:  route_reverse_segment
  * --------------------------------
  * reverses an in-place route segment between inclusive endpoints.
- *
- *  r: route to modify
- *  i: segment start index
- *  k: segment end index
- *
- *  returns: nothing
  */
 static void route_reverse_segment(Route *r, int i, int k) {
   while (i < k) {
@@ -226,11 +443,6 @@ static void route_reverse_segment(Route *r, int i, int k) {
  * Function:  route_remove_at
  * --------------------------
  * removes one node at a valid position by shifting tail elements left.
- *
- *  r: route to modify
- *  pos: position to remove
- *
- *  returns: nothing; invalid positions are ignored
  */
 static void route_remove_at(Route *r, int pos) {
   if (pos < 0 || pos >= r->len) {
@@ -246,12 +458,6 @@ static void route_remove_at(Route *r, int pos) {
  * Function:  route_insert_at
  * --------------------------
  * inserts a node at a valid position by shifting tail elements right.
- *
- *  r: route to modify
- *  pos: insertion index
- *  node: node id to insert
- *
- *  returns: nothing; invalid positions/full route are ignored
  */
 static void route_insert_at(Route *r, int pos, int node) {
   if (pos < 0 || pos > r->len || r->len >= r->cap) {
@@ -268,49 +474,81 @@ static void route_insert_at(Route *r, int pos, int node) {
  * Function:  route_customer_count
  * -------------------------------
  * counts customers in a route excluding start/end depot nodes.
- *
- *  r: route to inspect
- *
- *  returns: number of customer nodes in the route
  */
-static int route_customer_count(const Route *r) { return (r->len >= 2) ? (r->len - 2) : 0; }
+static int route_customer_count(const Route *r) {
+  return (r->len >= 2) ? (r->len - 2) : 0;
+}
 
 /*
  * Function:  local_search_two_opt_intra
  * -------------------------------------
- * applies bounded 2-opt improvement independently within each route.
- *
- *  sol: solution to refine
- *  K: route count
- *  c: cost matrix
- *
- *  returns: nothing
+ * applies candidate-aware bounded 2-opt within each route.
  */
-static void local_search_two_opt_intra(Solution *sol, int K, double **c) {
-#ifdef _OPENMP
-#pragma omp parallel for schedule(static) if (K > 4)
-#endif
+static void local_search_two_opt_intra(Solution *sol, int K, double **c,
+                                       const AcoRankShared *shared) {
+  int n = shared->n;
+  int *pos = shared->ls_pos;
+  if (!pos) {
+    return;
+  }
+
   for (int ri = 0; ri < K; ++ri) {
     Route *r = &sol->routes[ri];
     if (r->len < 5) {
       continue;
     }
 
+    for (int node = 0; node <= n; ++node) {
+      pos[node] = -1;
+    }
+    for (int t = 1; t + 1 < r->len; ++t) {
+      int node = r->nodes[t];
+      if (node > 0 && node <= n) {
+        pos[node] = t;
+      }
+    }
+
     int improved = 1;
     int pass = 0;
-    while (improved && pass < 3) {
+    while (improved && pass < 2) {
       improved = 0;
       ++pass;
 
       for (int i = 1; i + 2 < r->len; ++i) {
-        for (int k = i + 1; k + 1 < r->len; ++k) {
-          int a = r->nodes[i - 1];
-          int b = r->nodes[i];
-          int cc = r->nodes[k];
-          int d = r->nodes[k + 1];
+        int a = r->nodes[i - 1];
+        int b = r->nodes[i];
+        if (b <= 0) {
+          continue;
+        }
+
+        const int *cand_row =
+            shared->candidate_idx + (size_t)b * (size_t)shared->stride;
+        for (int ct = 0; ct < shared->candidate_k; ++ct) {
+          int cc = cand_row[ct];
+          if (cc <= 0 || cc > n) {
+            continue;
+          }
+
+          int kpos = pos[cc];
+          if (kpos <= i || kpos + 1 >= r->len) {
+            continue;
+          }
+
+          int d = r->nodes[kpos + 1];
+          if (!candidate_pair_allowed(shared, a, cc) ||
+              !candidate_pair_allowed(shared, b, d)) {
+            continue;
+          }
+
           double delta = c[a][cc] + c[b][d] - c[a][b] - c[cc][d];
           if (delta < -ACO_EPS) {
-            route_reverse_segment(r, i, k);
+            route_reverse_segment(r, i, kpos);
+            for (int p = i; p <= kpos; ++p) {
+              int node = r->nodes[p];
+              if (node > 0 && node <= n) {
+                pos[node] = p;
+              }
+            }
             improved = 1;
           }
         }
@@ -322,20 +560,37 @@ static void local_search_two_opt_intra(Solution *sol, int K, double **c) {
 /*
  * Function:  local_search_relocate
  * --------------------------------
- * performs best-improving single-customer relocations across routes under
- * simple per-vehicle customer-capacity constraints.
- *
- *  sol: solution to refine
- *  K: route count
- *  vehicle_capacity_customers: max customers allowed in a route when > 0
- *  c: cost matrix
- *
- *  returns: nothing
+ * performs candidate-aware best-improving single-customer relocations.
  */
-static void local_search_relocate(Solution *sol, int K, int vehicle_capacity_customers,
-                                  double **c) {
-  int move_budget = 64;
+static void local_search_relocate(Solution *sol, int K,
+                                  int vehicle_capacity_customers, double **c,
+                                  const AcoRankShared *shared) {
+  int n = shared->n;
+  int *node_route = shared->ls_node_route;
+  int *node_pos = shared->ls_node_pos;
+  if (!node_route || !node_pos) {
+    return;
+  }
+
+  int move_budget = 48;
+
   for (int moves = 0; moves < move_budget; ++moves) {
+    for (int node = 0; node <= n; ++node) {
+      node_route[node] = -1;
+      node_pos[node] = -1;
+    }
+
+    for (int ri = 0; ri < K; ++ri) {
+      Route *r = &sol->routes[ri];
+      for (int pos = 1; pos + 1 < r->len; ++pos) {
+        int node = r->nodes[pos];
+        if (node > 0 && node <= n) {
+          node_route[node] = ri;
+          node_pos[node] = pos;
+        }
+      }
+    }
+
     double best_delta = -ACO_EPS;
     int best_from_r = -1;
     int best_from_pos = -1;
@@ -354,20 +609,43 @@ static void local_search_relocate(Solution *sol, int K, int vehicle_capacity_cus
         int next = from->nodes[pos + 1];
         double remove_delta = c[prev][next] - c[prev][x] - c[x][next];
 
-        for (int rj = 0; rj < K; ++rj) {
+        const int *cand_row =
+            shared->candidate_idx + (size_t)x * (size_t)shared->stride;
+        for (int ct = 0; ct < shared->candidate_k; ++ct) {
+          int y = cand_row[ct];
+          if (y <= 0 || y > n) {
+            continue;
+          }
+
+          int rj = node_route[y];
+          int y_pos = node_pos[y];
+          if (rj < 0 || y_pos < 1) {
+            continue;
+          }
+
           Route *to = &sol->routes[rj];
           if (ri != rj && vehicle_capacity_customers > 0 &&
               route_customer_count(to) >= vehicle_capacity_customers) {
             continue;
           }
 
-          for (int ins = 1; ins < to->len; ++ins) {
+          int ins_candidates[2] = {y_pos, y_pos + 1};
+          for (int q = 0; q < 2; ++q) {
+            int ins = ins_candidates[q];
+            if (ins <= 0 || ins >= to->len) {
+              continue;
+            }
             if (ri == rj && (ins == pos || ins == pos + 1)) {
               continue;
             }
 
             int u = to->nodes[ins - 1];
             int v = to->nodes[ins];
+            if (!candidate_pair_allowed(shared, u, x) ||
+                !candidate_pair_allowed(shared, x, v)) {
+              continue;
+            }
+
             double insert_delta = c[u][x] + c[x][v] - c[u][v];
             double delta = remove_delta + insert_delta;
 
@@ -398,39 +676,281 @@ static void local_search_relocate(Solution *sol, int K, int vehicle_capacity_cus
 
     route_insert_at(to, best_to_pos, node);
   }
+
 }
 
 /*
  * Function:  local_search_refine_solution
  * ---------------------------------------
- * runs a lightweight local-search pipeline: 2-opt, relocate, then 2-opt.
- *
- *  sol: solution to refine
- *  K: route count
- *  vehicle_capacity_customers: max customers per route when > 0
- *  c: cost matrix
- *
- *  returns: nothing
+ * runs candidate-aware local search pipeline.
  */
 static void local_search_refine_solution(Solution *sol, int K,
                                          int vehicle_capacity_customers,
-                                         double **c) {
-  local_search_two_opt_intra(sol, K, c);
-  local_search_relocate(sol, K, vehicle_capacity_customers, c);
-  local_search_two_opt_intra(sol, K, c);
+                                         double **c,
+                                         const AcoRankShared *shared) {
+  local_search_two_opt_intra(sol, K, c, shared);
+  local_search_relocate(sol, K, vehicle_capacity_customers, c, shared);
+  local_search_two_opt_intra(sol, K, c, shared);
+}
+
+/*
+ * Function:  visited_is_set
+ * -------------------------
+ * tests whether a customer has already been visited.
+ */
+static inline int visited_is_set(const uint64_t *visited, int node) {
+  return (int)((visited[(unsigned int)node >> 6] >>
+                ((unsigned int)node & 63u)) &
+               1u);
+}
+
+/*
+ * Function:  visited_set
+ * ----------------------
+ * marks a customer as visited.
+ */
+static inline void visited_set(uint64_t *visited, int node) {
+  visited[(unsigned int)node >> 6] |= (uint64_t)1u
+                                     << ((unsigned int)node & 63u);
+}
+
+/*
+ * Function:  find_nearest_unvisited
+ * ---------------------------------
+ * fallback selector that returns the nearest unvisited customer.
+ */
+static int find_nearest_unvisited(const AcoRankShared *shared, int current,
+                                  const uint64_t *restrict visited,
+                                  double **restrict c) {
+  int best = 0;
+  double best_dist = DBL_MAX;
+  for (int node = 1; node <= shared->n; ++node) {
+    if (visited_is_set(visited, node)) {
+      continue;
+    }
+    double d = c[current][node];
+    if (d < best_dist) {
+      best_dist = d;
+      best = node;
+    }
+  }
+  return best;
+}
+
+/*
+ * Function:  sum_weights
+ * ----------------------
+ * sums a float buffer using AVX2 when available.
+ */
+static double sum_weights(const float *weights, int count) {
+#if defined(__AVX2__)
+  __m256 vsum = _mm256_setzero_ps();
+  int i = 0;
+  for (; i + 8 <= count; i += 8) {
+    __m256 w = _mm256_loadu_ps(weights + i);
+    vsum = _mm256_add_ps(vsum, w);
+  }
+
+  float tmp[8];
+  _mm256_storeu_ps(tmp, vsum);
+  double sum = (double)tmp[0] + (double)tmp[1] + (double)tmp[2] +
+               (double)tmp[3] + (double)tmp[4] + (double)tmp[5] +
+               (double)tmp[6] + (double)tmp[7];
+  for (; i < count; ++i) {
+    sum += (double)weights[i];
+  }
+  return sum;
+#else
+  double sum = 0.0;
+  for (int i = 0; i < count; ++i) {
+    sum += (double)weights[i];
+  }
+  return sum;
+#endif
+}
+
+/*
+ * Function:  select_next_customer
+ * -------------------------------
+ * candidate-first roulette selection with nearest-neighbor fallback.
+ */
+static int select_next_customer(const AcoRankShared *shared, int current,
+                                const uint64_t *restrict visited,
+                                double **restrict c,
+                                unsigned int *restrict rng_state) {
+  float masked_weights[ACO_MAX_CANDIDATES];
+
+  const int *cand_row =
+      shared->candidate_idx + (size_t)current * (size_t)shared->stride;
+  const float *score_row =
+      shared->score + (size_t)current * (size_t)shared->stride;
+  int k = shared->candidate_k;
+
+  /* Dense mask application over S[current] keeps the hot path SIMD-friendly. */
+#pragma omp simd
+  for (int t = 0; t < k; ++t) {
+    int node = cand_row[t];
+    int available = 0;
+    if (node > 0) {
+      uint64_t word = visited[(unsigned int)node >> 6];
+      uint64_t bit = (word >> ((unsigned int)node & 63u)) & 1u;
+      available = (bit == 0u);
+    }
+    masked_weights[t] = score_row[t] * (float)available;
+  }
+
+  double denom = sum_weights(masked_weights, k);
+  if (denom > 0.0) {
+    double threshold = aco_rand01_state(rng_state) * denom;
+    double cumulative = 0.0;
+
+    for (int i = 0; i < k; ++i) {
+      float w = masked_weights[i];
+      if (w <= 0.0f) {
+        continue;
+      }
+      cumulative += (double)w;
+      if (cumulative >= threshold) {
+        return cand_row[i];
+      }
+    }
+
+    for (int i = k - 1; i >= 0; --i) {
+      if (masked_weights[i] > 0.0f) {
+        return cand_row[i];
+      }
+    }
+  }
+
+  return find_nearest_unvisited(shared, current, visited, c);
+}
+
+/*
+ * Function:  thread_workspace_free
+ * --------------------------------
+ * releases per-thread persistent workspace.
+ */
+static void thread_workspace_free(AcoThreadWorkspace *ws) {
+  if (!ws) {
+    return;
+  }
+  free(ws->route_loads);
+  free(ws->visited);
+  solution_free(ws->thread_best);
+  solution_free(ws->sol);
+  memset(ws, 0, sizeof(*ws));
+}
+
+/*
+ * Function:  thread_workspace_init
+ * --------------------------------
+ * allocates per-thread persistent structures once per epoch.
+ */
+static int thread_workspace_init(AcoThreadWorkspace *ws, int K, int n,
+                                 int visited_words) {
+  memset(ws, 0, sizeof(*ws));
+
+  ws->sol = solution_create(K, n);
+  ws->thread_best = solution_create(K, n);
+  ws->visited = aligned_calloc_bytes((size_t)visited_words * sizeof(uint64_t));
+  ws->route_loads = calloc((size_t)K, sizeof(int));
+  ws->rng_state = 1u;
+
+  if (!ws->sol || !ws->thread_best || !ws->visited || !ws->route_loads) {
+    thread_workspace_free(ws);
+    return 0;
+  }
+
+  return 1;
+}
+
+/*
+ * Function:  build_ant_solution
+ * -----------------------------
+ * builds one ant solution with bitmask-tracked visited customers.
+ */
+static void build_ant_solution(AcoThreadWorkspace *ws,
+                               const AcoRankShared *shared, int K,
+                               int vehicle_capacity_customers,
+                               double **restrict c) {
+  solution_reset(ws->sol);
+  memset(ws->visited, 0, (size_t)shared->visited_words * sizeof(uint64_t));
+  memset(ws->route_loads, 0, (size_t)K * sizeof(int));
+
+  int route_customer_cap = vehicle_capacity_customers;
+  if (route_customer_cap <= 0) {
+    route_customer_cap = shared->n;
+  }
+
+  int remaining = shared->n;
+
+  for (int vehicle = 0; vehicle < K; ++vehicle) {
+    Route *r = &ws->sol->routes[vehicle];
+    route_append(r, 0);
+
+    int current = 0;
+    int remaining_vehicles = K - vehicle - 1;
+    int future_capacity = remaining_vehicles * route_customer_cap;
+
+    while (remaining > 0 && remaining > future_capacity &&
+           ws->route_loads[vehicle] < route_customer_cap) {
+      int next =
+          select_next_customer(shared, current, ws->visited, c, &ws->rng_state);
+      if (next <= 0 || visited_is_set(ws->visited, next)) {
+        break;
+      }
+
+      route_append(r, next);
+      visited_set(ws->visited, next);
+      ++ws->route_loads[vehicle];
+      --remaining;
+      current = next;
+    }
+
+    route_append(r, 0);
+  }
+
+  if (remaining > 0) {
+    Route *last = &ws->sol->routes[K - 1];
+    if (last->len > 0 && last->nodes[last->len - 1] == 0) {
+      --last->len;
+    }
+
+    while (remaining > 0 && ws->route_loads[K - 1] < route_customer_cap) {
+      int current = (last->len > 0) ? last->nodes[last->len - 1] : 0;
+      int next = find_nearest_unvisited(shared, current, ws->visited, c);
+      if (next <= 0) {
+        break;
+      }
+      route_append(last, next);
+      visited_set(ws->visited, next);
+      ++ws->route_loads[K - 1];
+      --remaining;
+    }
+
+    if (remaining > 0) {
+      for (int node = 1; node <= shared->n; ++node) {
+        if (visited_is_set(ws->visited, node)) {
+          continue;
+        }
+        route_append(last, node);
+        visited_set(ws->visited, node);
+        --remaining;
+        if (remaining == 0) {
+          break;
+        }
+      }
+    }
+
+    route_append(last, 0);
+  }
 }
 
 #ifdef USE_MPI
 /*
  * Function:  solution_pack_size_ints
  * ----------------------------------
- * computes the integer buffer length required to serialize a Solution with K
- * routes and per-route capacity n+2.
- *
- *  K: number of routes
- *  n: number of customers
- *
- *  returns: number of ints needed in packed representation
+ * computes integer count required to serialize a solution.
  */
 static int solution_pack_size_ints(int K, int n) {
   return 1 + K + K * (n + 2);
@@ -439,13 +959,7 @@ static int solution_pack_size_ints(int K, int n) {
 /*
  * Function:  solution_pack
  * ------------------------
- * serializes a Solution into an integer buffer for MPI broadcast.
- *
- *  sol: source solution
- *  n: number of customers
- *  buf: destination integer buffer with size solution_pack_size_ints(K, n)
- *
- *  returns: nothing
+ * serializes a solution into an integer buffer.
  */
 static void solution_pack(const Solution *sol, int n, int *buf) {
   int route_cap = n + 2;
@@ -474,14 +988,7 @@ static void solution_pack(const Solution *sol, int n, int *buf) {
 /*
  * Function:  solution_unpack
  * --------------------------
- * deserializes a packed solution buffer into an existing Solution object.
- *
- *  sol: destination solution (already allocated with matching K/capacities)
- *  n: number of customers
- *  buf: serialized integer buffer
- *
- *  returns: true on successful unpack
- *           false if packed metadata is inconsistent
+ * deserializes an integer buffer into an existing solution.
  */
 static bool solution_unpack(Solution *sol, int n, const int *buf) {
   int route_cap = n + 2;
@@ -505,37 +1012,50 @@ static bool solution_unpack(Solution *sol, int n, const int *buf) {
 
   return true;
 }
+
+/*
+ * Function:  mpi_sync_tau_epoch
+ * -----------------------------
+ * synchronizes pheromone rows across ranks with non-blocking all-reduce.
+ */
+static int mpi_sync_tau_epoch(double **tau, int n, int mpi_size,
+                              MPI_Request *reqs) {
+  int side = n + 1;
+
+  for (int i = 0; i < side; ++i) {
+    int rc = MPI_Iallreduce(MPI_IN_PLACE, tau[i], side, MPI_DOUBLE, MPI_SUM,
+                            MPI_COMM_WORLD, &reqs[i]);
+    if (rc != MPI_SUCCESS) {
+      return 0;
+    }
+  }
+
+  if (MPI_Waitall(side, reqs, MPI_STATUSES_IGNORE) != MPI_SUCCESS) {
+    return 0;
+  }
+
+  double inv = 1.0 / (double)mpi_size;
+#ifdef _OPENMP
+#pragma omp parallel for schedule(static) if (n > 32)
+#endif
+  for (int i = 0; i < side; ++i) {
+    for (int j = 0; j < side; ++j) {
+      if (i == j) {
+        tau[i][j] = 0.0;
+      } else {
+        tau[i][j] *= inv;
+      }
+    }
+  }
+
+  return 1;
+}
 #endif
 
 /*
  * Function:  aco_vrp
  * ------------------
  * runs the hybrid OpenMP+MPI ACO solver for VRP.
- * algorithm outline:
- * 1) split ants across MPI ranks
- * 2) initialize shared eta/tau matrices
- * 3) for each iteration, evaluate local ants (OpenMP in-rank parallelism)
- *    in adaptive batches with early stop on weak marginal gains
- * 4) reduce local iteration-best to global best with MPI collectives
- * 5) synchronize winning solution across ranks
- * 6) update pheromone matrix from global iteration-best solution
- *
- *  n: number of customers (1..n), with depot at 0
- *  K: number of routes/vehicles
- *  m: total ants per iteration across all ranks
- *  T: number of iterations
- *  c: cost matrix
- *  alpha: pheromone exponent
- *  beta: heuristic exponent
- *  rho: evaporation factor
- *  tau0: initial pheromone value
- *  Q: deposit scale
- *  seed: base random seed
- *  best_solution: output container for best route set
- *  best_cost: output best objective value
- *
- *  returns: nothing; on allocation or synchronization failure prints an error
- *           and returns early
  */
 void aco_vrp(int n, int K, int m, int T, double **c, double alpha,
              double beta, double rho, double tau0, double Q,
@@ -568,19 +1088,22 @@ void aco_vrp(int n, int K, int m, int T, double **c, double alpha,
     ant_offset = mpi_rank * base + ((mpi_rank < rem) ? mpi_rank : rem);
   }
 
-  double **eta = matrix_alloc(n);
   double **tau = matrix_alloc(n);
   Solution *iter_best = solution_create(K, n);
+  AcoRankShared shared = {0};
+  int rank_shared_ok = rank_shared_init(&shared, n);
 
 #ifdef USE_MPI
   int packed_len = mpi_enabled ? solution_pack_size_ints(K, n) : 0;
   int *packed_solution =
       mpi_enabled ? calloc((size_t)packed_len, sizeof(int)) : NULL;
+  MPI_Request *tau_sync_reqs =
+      mpi_enabled ? malloc((size_t)(n + 1) * sizeof(MPI_Request)) : NULL;
 #endif
 
-  int local_ok = (eta && tau && iter_best) ? 1 : 0;
+  int local_ok = (tau && iter_best && rank_shared_ok) ? 1 : 0;
 #ifdef USE_MPI
-  if (mpi_enabled && !packed_solution) {
+  if (mpi_enabled && (!packed_solution || !tau_sync_reqs)) {
     local_ok = 0;
   }
   if (mpi_enabled) {
@@ -591,30 +1114,27 @@ void aco_vrp(int n, int K, int m, int T, double **c, double alpha,
 #endif
 
   if (!local_ok) {
-    fprintf(stderr, "allocation failure in aco_vrp\n");
-    matrix_free(eta);
+    if (!mpi_enabled || mpi_rank == 0) {
+      fprintf(stderr, "allocation failure in aco_vrp\n");
+    }
     matrix_free(tau);
     solution_free(iter_best);
+    rank_shared_free(&shared);
 #ifdef USE_MPI
+    free(tau_sync_reqs);
     free(packed_solution);
 #endif
     return;
   }
 
-#ifdef _OPENMP
-#pragma omp parallel for collapse(2) if (n > 16)
-#endif
   for (int i = 0; i <= n; ++i) {
     for (int j = 0; j <= n; ++j) {
-      if (i == j) {
-        eta[i][j] = 0.0;
-        tau[i][j] = 0.0;
-      } else {
-        eta[i][j] = 1.0 / (c[i][j] + ACO_EPS);
-        tau[i][j] = tau0;
-      }
+      tau[i][j] = (i == j) ? 0.0 : tau0;
     }
   }
+
+  rank_shared_build_candidates(&shared, c, beta);
+  rank_shared_update_scores(&shared, tau, alpha);
 
   solution_reset(best_solution);
   *best_cost = DBL_MAX;
@@ -630,31 +1150,19 @@ void aco_vrp(int n, int K, int m, int T, double **c, double alpha,
   bool omp_enabled = false;
 #endif
 
-  AcoScoreCache *serial_cache = NULL;
-  if (!omp_enabled) {
-    serial_cache =
-        aco_score_cache_create(n, choose_l1_lines(n), choose_l2_lines(n));
-  }
-
-  size_t scratch_len = (n > 0) ? (size_t)n : 1u;
   int stagnation_iters = 0;
   int stagnation_trigger = T / 4;
   if (stagnation_trigger < 4) {
     stagnation_trigger = 4;
   }
+
   const double iter_deposit_weight = 0.3;
   const double global_deposit_weight = 0.7;
   double tau_max = tau0;
   double tau_min = tau0 * 0.05;
 
   for (int iter = 0; iter < T; ++iter) {
-    int stagnation_level =
-        choose_stagnation_level(stagnation_iters, stagnation_trigger);
-    int batch_size = choose_ant_batch_size(local_m, stagnation_level);
-    int min_ants_before_stop =
-        choose_min_ants_before_stop(local_m, stagnation_level);
-    int no_improve_patience =
-        choose_no_improve_patience(local_m, stagnation_level);
+    rank_shared_update_scores(&shared, tau, alpha);
 
     double iter_best_cost = DBL_MAX;
     int iter_best_ant = INT_MAX;
@@ -662,180 +1170,84 @@ void aco_vrp(int n, int K, int m, int T, double **c, double alpha,
 
     if (omp_enabled) {
 #ifdef _OPENMP
-      int ants_evaluated = 0;
-      int consecutive_no_improve_batches = 0;
+#pragma omp parallel default(shared) proc_bind(close)
+      {
+        AcoThreadWorkspace ws;
+        double thread_best_cost = DBL_MAX;
+        int thread_best_ant = INT_MAX;
+        int thread_id = 0;
+#ifdef _OPENMP
+        thread_id = omp_get_thread_num();
+#endif
 
-      for (int batch_start = 0; batch_start < local_m;
-           batch_start += batch_size) {
-        int batch_end = batch_start + batch_size;
-        if (batch_end > local_m) {
-          batch_end = local_m;
-        }
-
-        double prev_best_cost = iter_best_cost;
-        int prev_best_ant = iter_best_ant;
-        double batch_best_cost = DBL_MAX;
-        int batch_best_ant = INT_MAX;
-        Solution *batch_best_solution = solution_create(K, n);
-
-        if (!batch_best_solution) {
-          iter_failed = 1;
-          break;
-        }
-
-#pragma omp parallel default(shared)
-        {
-          double thread_best_cost = DBL_MAX;
-          int thread_best_ant = INT_MAX;
-          Solution *sol = solution_create(K, n);
-          Solution *thread_best = solution_create(K, n);
-          AcoScoreCache *score_cache =
-              aco_score_cache_create(n, choose_l1_lines(n), choose_l2_lines(n));
-          int *unvisited_nodes = malloc(scratch_len * sizeof(int));
-          double *candidate_scores = malloc(scratch_len * sizeof(double));
-          double *random_draws = malloc(scratch_len * sizeof(double));
-
-          if (!sol || !thread_best || !score_cache || !unvisited_nodes ||
-              !candidate_scores || !random_draws) {
+        if (!thread_workspace_init(&ws, K, n, shared.visited_words)) {
 #pragma omp critical
-            { iter_failed = 1; }
-          } else {
-#pragma omp for schedule(static)
-            for (int ant = batch_start; ant < batch_end; ++ant) {
-              int global_ant = ant_offset + ant;
-              unsigned int rng_state =
-                  aco_make_ant_seed(seed, iter, global_ant);
-
-              aco_build_ant_solution(sol, n, K, tau, eta, alpha, beta,
-                                     vehicle_capacity_customers, score_cache,
-                                     &rng_state, unvisited_nodes,
-                                     candidate_scores, random_draws);
-              double cost = solution_cost(sol, c);
-
-              if (cost < thread_best_cost ||
-                  (fabs(cost - thread_best_cost) <= ACO_EPS &&
-                   global_ant < thread_best_ant)) {
-                thread_best_cost = cost;
-                thread_best_ant = global_ant;
-                solution_copy(thread_best, sol);
-              }
+          { iter_failed = 1; }
+        } else {
+          ws.rng_state = aco_make_ant_seed(seed, iter, ant_offset + thread_id);
+#pragma omp for schedule(guided, 1)
+          for (int ant = 0; ant < local_m; ++ant) {
+            int global_ant = ant_offset + ant;
+            ws.rng_state ^= (unsigned int)(global_ant + 1) * 0x9e3779b1u;
+            if (ws.rng_state == 0u) {
+              ws.rng_state = 1u;
             }
 
-            if (thread_best_cost < DBL_MAX) {
+            build_ant_solution(&ws, &shared, K, vehicle_capacity_customers, c);
+            double cost = solution_cost(ws.sol, c);
+
+            if (cost < thread_best_cost ||
+                (fabs(cost - thread_best_cost) <= ACO_EPS &&
+                 global_ant < thread_best_ant)) {
+              thread_best_cost = cost;
+              thread_best_ant = global_ant;
+              solution_copy(ws.thread_best, ws.sol);
+            }
+          }
+
+          if (thread_best_cost < DBL_MAX) {
 #pragma omp critical
-              {
-                if (thread_best_cost < batch_best_cost ||
-                    (fabs(thread_best_cost - batch_best_cost) <= ACO_EPS &&
-                     thread_best_ant < batch_best_ant)) {
-                  batch_best_cost = thread_best_cost;
-                  batch_best_ant = thread_best_ant;
-                  solution_copy(batch_best_solution, thread_best);
-                }
+            {
+              if (thread_best_cost < iter_best_cost ||
+                  (fabs(thread_best_cost - iter_best_cost) <= ACO_EPS &&
+                   thread_best_ant < iter_best_ant)) {
+                iter_best_cost = thread_best_cost;
+                iter_best_ant = thread_best_ant;
+                solution_copy(iter_best, ws.thread_best);
               }
             }
           }
 
-          free(random_draws);
-          free(candidate_scores);
-          free(unvisited_nodes);
-          aco_score_cache_free(score_cache);
-          solution_free(thread_best);
-          solution_free(sol);
-        }
-
-        if (iter_failed) {
-          solution_free(batch_best_solution);
-          break;
-        }
-
-        if (batch_best_cost < iter_best_cost ||
-            (fabs(batch_best_cost - iter_best_cost) <= ACO_EPS &&
-             batch_best_ant < iter_best_ant)) {
-          iter_best_cost = batch_best_cost;
-          iter_best_ant = batch_best_ant;
-          solution_copy(iter_best, batch_best_solution);
-        }
-
-        solution_free(batch_best_solution);
-
-        ants_evaluated += (batch_end - batch_start);
-        if (iter_best_cost < prev_best_cost - ACO_EPS ||
-            (fabs(iter_best_cost - prev_best_cost) <= ACO_EPS &&
-             iter_best_ant < prev_best_ant)) {
-          consecutive_no_improve_batches = 0;
-        } else {
-          ++consecutive_no_improve_batches;
-        }
-
-        if (ants_evaluated >= min_ants_before_stop &&
-            consecutive_no_improve_batches >= no_improve_patience) {
-          break;
+          thread_workspace_free(&ws);
         }
       }
 #endif
     } else {
-      aco_score_cache_invalidate(serial_cache);
-      Solution *sol = solution_create(K, n);
-      int *unvisited_nodes = malloc(scratch_len * sizeof(int));
-      double *candidate_scores = malloc(scratch_len * sizeof(double));
-      double *random_draws = malloc(scratch_len * sizeof(double));
-
-      if (!sol || !unvisited_nodes || !candidate_scores ||
-          !random_draws) {
+      AcoThreadWorkspace ws;
+      if (!thread_workspace_init(&ws, K, n, shared.visited_words)) {
         iter_failed = 1;
       } else {
-        int ants_evaluated = 0;
-        int consecutive_no_improve_batches = 0;
-
-        for (int batch_start = 0; batch_start < local_m;
-             batch_start += batch_size) {
-          int batch_end = batch_start + batch_size;
-          if (batch_end > local_m) {
-            batch_end = local_m;
+        ws.rng_state = aco_make_ant_seed(seed, iter, ant_offset);
+        for (int ant = 0; ant < local_m; ++ant) {
+          int global_ant = ant_offset + ant;
+          ws.rng_state ^= (unsigned int)(global_ant + 1) * 0x9e3779b1u;
+          if (ws.rng_state == 0u) {
+            ws.rng_state = 1u;
           }
 
-          double prev_best_cost = iter_best_cost;
-          int prev_best_ant = iter_best_ant;
+          build_ant_solution(&ws, &shared, K, vehicle_capacity_customers, c);
+          double cost = solution_cost(ws.sol, c);
 
-          for (int ant = batch_start; ant < batch_end; ++ant) {
-            int global_ant = ant_offset + ant;
-            unsigned int rng_state = aco_make_ant_seed(seed, iter, global_ant);
-
-            aco_build_ant_solution(sol, n, K, tau, eta, alpha, beta,
-                                   vehicle_capacity_customers, serial_cache,
-                                   &rng_state, unvisited_nodes,
-                                   candidate_scores, random_draws);
-            double cost = solution_cost(sol, c);
-
-            if (cost < iter_best_cost ||
-                (fabs(cost - iter_best_cost) <= ACO_EPS &&
-                 global_ant < iter_best_ant)) {
-              iter_best_cost = cost;
-              iter_best_ant = global_ant;
-              solution_copy(iter_best, sol);
-            }
-          }
-
-          ants_evaluated += (batch_end - batch_start);
-          if (iter_best_cost < prev_best_cost - ACO_EPS ||
-              (fabs(iter_best_cost - prev_best_cost) <= ACO_EPS &&
-               iter_best_ant < prev_best_ant)) {
-            consecutive_no_improve_batches = 0;
-          } else {
-            ++consecutive_no_improve_batches;
-          }
-
-          if (ants_evaluated >= min_ants_before_stop &&
-              consecutive_no_improve_batches >= no_improve_patience) {
-            break;
+          if (cost < iter_best_cost ||
+              (fabs(cost - iter_best_cost) <= ACO_EPS &&
+               global_ant < iter_best_ant)) {
+            iter_best_cost = cost;
+            iter_best_ant = global_ant;
+            solution_copy(iter_best, ws.sol);
           }
         }
       }
-
-      free(random_draws);
-      free(candidate_scores);
-      free(unvisited_nodes);
-      solution_free(sol);
+      thread_workspace_free(&ws);
     }
 
 #ifdef USE_MPI
@@ -844,11 +1256,13 @@ void aco_vrp(int n, int K, int m, int T, double **c, double alpha,
       MPI_Allreduce(&iter_failed, &global_failed, 1, MPI_INT, MPI_MAX,
                     MPI_COMM_WORLD);
       if (global_failed) {
-        fprintf(stderr, "allocation failure during iteration\n");
-        matrix_free(eta);
+        if (mpi_rank == 0) {
+          fprintf(stderr, "allocation failure during iteration\n");
+        }
         matrix_free(tau);
         solution_free(iter_best);
-        aco_score_cache_free(serial_cache);
+        rank_shared_free(&shared);
+        free(tau_sync_reqs);
         free(packed_solution);
         return;
       }
@@ -866,7 +1280,8 @@ void aco_vrp(int n, int K, int m, int T, double **c, double alpha,
                     MPI_COMM_WORLD);
 
       int local_ant = INT_MAX;
-      if (local_has_solution && fabs(iter_best_cost - global_best_cost) <= ACO_EPS) {
+      if (local_has_solution &&
+          fabs(iter_best_cost - global_best_cost) <= ACO_EPS) {
         local_ant = iter_best_ant;
       }
 
@@ -875,7 +1290,8 @@ void aco_vrp(int n, int K, int m, int T, double **c, double alpha,
                     MPI_COMM_WORLD);
 
       int owner_rank = mpi_size;
-      if (global_best_ant >= ant_offset && global_best_ant < ant_offset + local_m) {
+      if (global_best_ant >= ant_offset &&
+          global_best_ant < ant_offset + local_m) {
         owner_rank = mpi_rank;
       }
 
@@ -892,11 +1308,13 @@ void aco_vrp(int n, int K, int m, int T, double **c, double alpha,
 
       if (mpi_rank != winner_rank &&
           !solution_unpack(iter_best, n, packed_solution)) {
-        fprintf(stderr, "solution synchronization failure\n");
-        matrix_free(eta);
+        if (mpi_rank == 0) {
+          fprintf(stderr, "solution synchronization failure\n");
+        }
         matrix_free(tau);
         solution_free(iter_best);
-        aco_score_cache_free(serial_cache);
+        rank_shared_free(&shared);
+        free(tau_sync_reqs);
         free(packed_solution);
         return;
       }
@@ -907,19 +1325,15 @@ void aco_vrp(int n, int K, int m, int T, double **c, double alpha,
 #endif
 
     if (iter_failed) {
-      fprintf(stderr, "allocation failure during iteration\n");
-      matrix_free(eta);
-      matrix_free(tau);
-      solution_free(iter_best);
-      aco_score_cache_free(serial_cache);
-#ifdef USE_MPI
-      free(packed_solution);
-#endif
-      return;
+      if (!mpi_enabled || mpi_rank == 0) {
+        fprintf(stderr, "allocation failure during iteration\n");
+      }
+      break;
     }
 
     if (iter_best_cost < DBL_MAX) {
-      local_search_refine_solution(iter_best, K, vehicle_capacity_customers, c);
+      local_search_refine_solution(iter_best, K, vehicle_capacity_customers, c,
+                                   &shared);
       iter_best_cost = solution_cost(iter_best, c);
     }
 
@@ -938,7 +1352,7 @@ void aco_vrp(int n, int K, int m, int T, double **c, double alpha,
 
     if (iter_best_cost < DBL_MAX) {
 #ifdef _OPENMP
-#pragma omp parallel for collapse(2) if (n > 16)
+#pragma omp parallel for schedule(static) if (n > 32)
 #endif
       for (int i = 0; i <= n; ++i) {
         for (int j = 0; j <= n; ++j) {
@@ -972,6 +1386,9 @@ void aco_vrp(int n, int K, int m, int T, double **c, double alpha,
         }
       }
 
+#ifdef _OPENMP
+#pragma omp parallel for schedule(static) if (n > 32)
+#endif
       for (int i = 0; i <= n; ++i) {
         for (int j = 0; j <= n; ++j) {
           if (i == j) {
@@ -986,6 +1403,9 @@ void aco_vrp(int n, int K, int m, int T, double **c, double alpha,
       }
 
       if (stagnation_iters >= stagnation_trigger) {
+#ifdef _OPENMP
+#pragma omp parallel for schedule(static) if (n > 32)
+#endif
         for (int i = 0; i <= n; ++i) {
           for (int j = 0; j <= n; ++j) {
             if (i != j) {
@@ -996,13 +1416,29 @@ void aco_vrp(int n, int K, int m, int T, double **c, double alpha,
         stagnation_iters = 0;
       }
     }
+
+#ifdef USE_MPI
+    if (mpi_enabled) {
+      if (!mpi_sync_tau_epoch(tau, n, mpi_size, tau_sync_reqs)) {
+        if (mpi_rank == 0) {
+          fprintf(stderr, "MPI pheromone synchronization failure\n");
+        }
+        matrix_free(tau);
+        solution_free(iter_best);
+        rank_shared_free(&shared);
+        free(tau_sync_reqs);
+        free(packed_solution);
+        return;
+      }
+    }
+#endif
   }
 
-  solution_free(iter_best);
-  matrix_free(eta);
   matrix_free(tau);
-  aco_score_cache_free(serial_cache);
+  solution_free(iter_best);
+  rank_shared_free(&shared);
 #ifdef USE_MPI
+  free(tau_sync_reqs);
   free(packed_solution);
 #endif
 }

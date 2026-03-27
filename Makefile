@@ -6,6 +6,7 @@ OMPFLAG=-fopenmp
 # Flags for optimization and libs
 FLAGS=-Wall -Wextra -std=c11 -Iinclude
 FORCE_OPT=-O3
+PERF_FLAGS?=
 LIBS=-lm
 COVERAGE_FLAGS=-g --coverage
 COVERAGE_LIBS=--coverage
@@ -35,6 +36,11 @@ OBJ=src/main.o $(SEQ_OBJ) $(ACO_SHARED_OBJ) $(SOLUTION_OBJ) $(MATRIX_OBJ)
 SEQUENTIAL_TESTS_SRC=tests/sequential_tests.c
 SEQUENTIAL_TESTS_OBJ=tests/sequential_tests.o
 SEQUENTIAL_TESTS_BIN=tests/sequential_tests.out
+
+C_COMPARE_CASE_SRC=tests/c_compare_case.c
+C_COMPARE_CASE_BIN=tests/c_compare_case.out
+C_COMPARE_CASE_MPI_SRC=tests/c_compare_case_mpi.c
+C_COMPARE_CASE_MPI_BIN=tests/c_compare_case_mpi.out
 
 OPENMP_MPI_TESTS_SRC=tests/openmp_mpi_tests.c
 OPENMP_MPI_TESTS_BIN=tests/openmp_mpi_tests.out
@@ -87,6 +93,8 @@ help:
 	@printf "Test Targets:\n"
 	@printf "  %-18s %s\n" "sequential_tests" "Run progressive C scaling tests up to n=100000 (memory-aware)"
 	@printf "  %-18s %s\n" "openmp_mpi_tests" "Run progressive OpenMP+MPI tests (uses MPI_NP, MPI_OMP_THREADS)"
+	@printf "  %-18s %s\n" "c_compare_case" "Build single-scenario C runner for C-vs-PyVRP comparisons"
+	@printf "  %-18s %s\n" "c_compare_case_mpi" "Build single-scenario MPI+OpenMP runner for C-vs-PyVRP comparisons"
 	@printf "\n"
 	@printf "Test Run Options:\n"
 	@printf "  %-35s %s\n" "TEST_MODE=background (default)" "Run detached with nohup and return immediately"
@@ -95,42 +103,52 @@ help:
 	@printf "  %-35s %s\n\n" "Example" "make sequential_tests TEST_MODE=foreground"
 
 src/main.o: src/main.c include/aco.h include/matrix.h include/solution.h
-	$(CC) $(EXTRA_FLAGS) $(FLAGS) $(FORCE_OPT) -c $< -o $@
+	$(CC) $(EXTRA_FLAGS) $(FLAGS) $(FORCE_OPT) $(PERF_FLAGS) -c $< -o $@
 
 $(SEQ_OBJ): $(SEQ_SRC) include/aco.h include/matrix.h include/solution.h
-	$(CC) $(EXTRA_FLAGS) $(FLAGS) $(FORCE_OPT) -c $< -o $@
+	$(CC) $(EXTRA_FLAGS) $(FLAGS) $(FORCE_OPT) $(PERF_FLAGS) -c $< -o $@
 
 $(ACO_SHARED_OBJ): $(ACO_SHARED_SRC) include/aco.h include/solution.h
-	$(CC) $(EXTRA_FLAGS) $(FLAGS) $(FORCE_OPT) -c $< -o $@
+	$(CC) $(EXTRA_FLAGS) $(FLAGS) $(FORCE_OPT) $(PERF_FLAGS) -c $< -o $@
 
 $(SOLUTION_OBJ): $(SOLUTION_SRC) include/solution.h
-	$(CC) $(EXTRA_FLAGS) $(FLAGS) $(FORCE_OPT) -c $< -o $@
+	$(CC) $(EXTRA_FLAGS) $(FLAGS) $(FORCE_OPT) $(PERF_FLAGS) -c $< -o $@
 
 $(MATRIX_OBJ): $(MATRIX_SRC) include/matrix.h
-	$(CC) $(EXTRA_FLAGS) $(FLAGS) $(FORCE_OPT) -c $< -o $@
+	$(CC) $(EXTRA_FLAGS) $(FLAGS) $(FORCE_OPT) $(PERF_FLAGS) -c $< -o $@
 
 $(BIN): $(OBJ)
-	$(CC) $(EXTRA_FLAGS) $(FLAGS) $(FORCE_OPT) $^ $(LIBS) -o $@
+	$(CC) $(EXTRA_FLAGS) $(FLAGS) $(FORCE_OPT) $(PERF_FLAGS) $^ $(LIBS) -o $@
 
 $(SEQUENTIAL_TESTS_OBJ): $(SEQUENTIAL_TESTS_SRC) include/aco.h include/matrix.h include/solution.h
-	$(CC) $(EXTRA_FLAGS) $(FLAGS) $(FORCE_OPT) -c $< -o $@
+	$(CC) $(EXTRA_FLAGS) $(FLAGS) $(FORCE_OPT) $(PERF_FLAGS) -c $< -o $@
 
 $(SEQUENTIAL_TESTS_BIN): $(SEQUENTIAL_TESTS_OBJ) $(SEQ_OBJ) $(ACO_SHARED_OBJ) $(SOLUTION_OBJ) $(MATRIX_OBJ)
-	$(CC) $(EXTRA_FLAGS) $(FLAGS) $(FORCE_OPT) $^ $(LIBS) -o $@
+	$(CC) $(EXTRA_FLAGS) $(FLAGS) $(FORCE_OPT) $(PERF_FLAGS) $^ $(LIBS) -o $@
+
+$(C_COMPARE_CASE_BIN): $(C_COMPARE_CASE_SRC) $(SEQ_SRC) $(ACO_SHARED_SRC) $(SOLUTION_SRC) $(MATRIX_SRC) include/aco.h include/matrix.h include/solution.h
+	$(CC) $(EXTRA_FLAGS) $(FLAGS) $(FORCE_OPT) $(PERF_FLAGS) $(C_COMPARE_CASE_SRC) $(SEQ_SRC) $(ACO_SHARED_SRC) $(SOLUTION_SRC) $(MATRIX_SRC) $(LIBS) -o $@
+
+$(C_COMPARE_CASE_MPI_BIN): $(C_COMPARE_CASE_MPI_SRC) $(PAR_SRC) $(ACO_SHARED_SRC) $(SOLUTION_SRC) $(MATRIX_SRC) include/aco.h include/matrix.h include/solution.h
+	$(MPICC) $(EXTRA_FLAGS) $(FLAGS) $(FORCE_OPT) $(PERF_FLAGS) $(OMPFLAG) -DUSE_MPI $(C_COMPARE_CASE_MPI_SRC) $(PAR_SRC) $(ACO_SHARED_SRC) $(SOLUTION_SRC) $(MATRIX_SRC) $(LIBS) -o $@
 
 openmp_mpi: $(OPENMP_MPI_BIN)
 
 $(OPENMP_MPI_BIN): $(OPENMP_MPI_SRC) include/aco.h include/matrix.h include/solution.h
-	$(MPICC) $(EXTRA_FLAGS) $(FLAGS) $(FORCE_OPT) $(OMPFLAG) -DUSE_MPI $(OPENMP_MPI_SRC) $(LIBS) -o $@
+	$(MPICC) $(EXTRA_FLAGS) $(FLAGS) $(FORCE_OPT) $(PERF_FLAGS) $(OMPFLAG) -DUSE_MPI $(OPENMP_MPI_SRC) $(LIBS) -o $@
 
 $(OPENMP_MPI_TESTS_BIN): $(OPENMP_MPI_TESTS_BUILD_SRC) include/aco.h include/matrix.h include/solution.h
-	$(MPICC) $(EXTRA_FLAGS) $(FLAGS) $(FORCE_OPT) $(OMPFLAG) -DUSE_MPI $(OPENMP_MPI_TESTS_BUILD_SRC) $(LIBS) -o $@
+	$(MPICC) $(EXTRA_FLAGS) $(FLAGS) $(FORCE_OPT) $(PERF_FLAGS) $(OMPFLAG) -DUSE_MPI $(OPENMP_MPI_TESTS_BUILD_SRC) $(LIBS) -o $@
 
 sequential_tests: $(SEQUENTIAL_TESTS_BIN)
 	$(call RUN_TEST_CMD,sequential_tests,./$(SEQUENTIAL_TESTS_BIN))
 
 openmp_mpi_tests: $(OPENMP_MPI_TESTS_BIN)
 	$(call RUN_TEST_CMD,openmp_mpi_tests,OMP_NUM_THREADS=$(MPI_OMP_THREADS) mpirun -np $(MPI_NP) ./$(OPENMP_MPI_TESTS_BIN))
+
+c_compare_case: $(C_COMPARE_CASE_BIN)
+
+c_compare_case_mpi: $(C_COMPARE_CASE_MPI_BIN)
 
 clean:
 	rm -f $(BIN) $(OBJ) $(SEQUENTIAL_TESTS_BIN) $(SEQUENTIAL_TESTS_OBJ) $(OPENMP_MPI_BIN) $(LEGACY_BINARIES) \
@@ -143,4 +161,4 @@ clean:
 debug:
 	$(MAKE) EXTRA_FLAGS=-DDEBUG
 
-.PHONY: all help clean debug openmp_mpi sequential_tests openmp_mpi_tests
+.PHONY: all help clean debug openmp_mpi sequential_tests openmp_mpi_tests c_compare_case c_compare_case_mpi

@@ -4,22 +4,44 @@
 #include <stdbool.h>
 #include <stddef.h>
 
+/*
+ * Struct:  Route
+ * --------------
+ * stores a single vehicle route as a dynamic sequence of node ids.
+ *
+ *  nodes: contiguous buffer containing route node ids
+ *  len: current number of valid nodes in nodes
+ *  cap: maximum number of nodes storable in nodes
+ */
 typedef struct {
   int *nodes;
   int len;
   int cap;
 } Route;
 
+/*
+ * Struct:  Solution
+ * -----------------
+ * stores a complete VRP solution with K routes and backing contiguous storage.
+ *
+ *  routes: array of K Route entries
+ *  K: number of routes/vehicles
+ *  route_cap: per-route capacity (same for each route)
+ *  nodes_storage: flat backing storage used by all route node buffers
+ */
 typedef struct {
   Route *routes;
   int K;
+  int route_cap;
+  int *nodes_storage;
 } Solution;
 
 /*
  * Function:  solution_create
  * --------------------------
  * allocates and initializes a solution with K routes. each route capacity is
- * set to n+2, enough for depot start/end plus all customers.
+ * set to n+2, enough for depot start/end plus all customers. route node data
+ * is stored in one contiguous flat buffer for cache-friendly traversal.
  *
  *  K: number of routes/vehicles
  *  n: number of customers

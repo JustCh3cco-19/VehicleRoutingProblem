@@ -4,9 +4,28 @@
 #include "solution.h"
 
 #include <stddef.h>
+#include <stdint.h>
 
 #define ACO_EPS 1e-9
 
+/*
+ * Struct:  AcoScoreCache
+ * ----------------------
+ * layered row cache for tau^alpha * eta^beta scores used in probabilistic
+ * node selection.
+ *
+ *  n: highest node index handled by cache rows
+ *  line_len: number of score entries per cached row
+ *  l1_lines: number of direct-mapped lines in L1 cache
+ *  l2_lines: number of direct-mapped lines in L2 cache
+ *  l1_keys: row-key tags for L1 lines
+ *  l2_keys: row-key tags for L2 lines
+ *  l1_rows: contiguous L1 row storage
+ *  l2_rows: contiguous L2 row storage
+ *  l1_hits: accumulated L1 hit count
+ *  l2_hits: accumulated L2 hit count
+ *  l3_misses: accumulated misses requiring row recomputation
+ */
 typedef struct {
   int n;
   int line_len;
@@ -21,11 +40,114 @@ typedef struct {
   size_t l3_misses;
 } AcoScoreCache;
 
+/*
+ * Struct:  AcoCacheStats
+ * ----------------------
+ * immutable snapshot of cache access counters for reporting.
+ *
+ *  l1_hits: number of L1 cache hits
+ *  l2_hits: number of L2 cache hits
+ *  l3_misses: number of misses requiring recomputation
+ */
 typedef struct {
   size_t l1_hits;
   size_t l2_hits;
   size_t l3_misses;
 } AcoCacheStats;
+
+/*
+ * Struct:  AcoRankShared
+ * ----------------------
+ * per-rank shared workspace reused by all OpenMP threads of one MPI rank.
+ *
+ *  n: number of customers
+ *  candidate_k: number of nearest-neighbor candidates per node
+ *  stride: row stride for flattened row-major arrays
+ *  visited_words: number of uint64 words for visited bitsets
+ *  candidate_idx: candidate list matrix [node][candidate_k]
+ *  eta_beta: precomputed eta^beta row-major matrix
+ *  score: thread-shared scratch score matrix/buffer
+ *  ls_pos: local-search scratch positions
+ *  ls_node_route: node->route mapping scratch
+ *  ls_node_pos: node->position-in-route mapping scratch
+ */
+typedef struct {
+  int n;
+  int candidate_k;
+  int stride;
+  int visited_words;
+  int *candidate_idx;
+  float *eta_beta;
+  float *score;
+  int *ls_pos;
+  int *ls_node_route;
+  int *ls_node_pos;
+} AcoRankShared;
+
+/*
+ * Struct:  AcoThreadWorkspace
+ * ---------------------------
+ * private workspace owned by one OpenMP thread in parallel solver.
+ *
+ *  sol: current thread ant solution buffer
+ *  thread_best: best solution found by the thread
+ *  visited: thread-local visited bitset
+ *  route_loads: thread-local per-route load counters
+ *  rng_state: thread-local RNG state
+ */
+typedef struct {
+  Solution *sol;
+  Solution *thread_best;
+  uint64_t *visited;
+  int *route_loads;
+  unsigned int rng_state;
+} AcoThreadWorkspace;
+
+/*
+ * Struct:  SeqShared
+ * ------------------
+ * sequential solver shared workspace reused across iterations.
+ *
+ *  n: number of customers
+ *  candidate_k: number of nearest-neighbor candidates per node
+ *  stride: row stride for flattened row-major arrays
+ *  visited_words: number of uint64 words for visited bitsets
+ *  candidate_idx: candidate list matrix [node][candidate_k]
+ *  eta_beta: precomputed eta^beta row-major matrix
+ *  score: scratch score matrix/buffer
+ *  ls_pos: local-search scratch positions
+ *  ls_node_route: node->route mapping scratch
+ *  ls_node_pos: node->position-in-route mapping scratch
+ */
+typedef struct {
+  int n;
+  int candidate_k;
+  int stride;
+  int visited_words;
+  int *candidate_idx;
+  float *eta_beta;
+  float *score;
+  int *ls_pos;
+  int *ls_node_route;
+  int *ls_node_pos;
+} SeqShared;
+
+/*
+ * Struct:  SeqWorkspace
+ * ---------------------
+ * private sequential worker workspace reused across ants/iterations.
+ *
+ *  sol: current ant solution buffer
+ *  visited: visited bitset
+ *  route_loads: per-route load counters
+ *  rng_state: RNG state
+ */
+typedef struct {
+  Solution *sol;
+  uint64_t *visited;
+  int *route_loads;
+  unsigned int rng_state;
+} SeqWorkspace;
 
 /*
  * Function:  aco_vrp

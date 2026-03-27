@@ -5,8 +5,9 @@
  * Function:  matrix_alloc
  * -----------------------
  * allocates a square (n+1) x (n+1) matrix of doubles initialized to zero.
- * the matrix is stored as one contiguous data block plus an array of row
- * pointers for O(1) indexing with m[i][j].
+ * the matrix is stored as one contiguous aligned data block plus an array
+ * of row pointers for O(1) indexing with m[i][j]. rows are padded so each
+ * row starts on a 64-byte boundary for cache/SIMD-friendly traversal.
  *
  *  n: highest node index; the allocated matrix size is (n+1)
  *

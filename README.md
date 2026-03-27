@@ -1,61 +1,93 @@
 # VehicleRoutingProblem
 
-Implementazione di Ant Colony Optimization (ACO) per il Vehicle Routing Problem (VRP), con supporto:
-- sequenziale (default)
-- ibrido MPI + OpenMP
+Implementazione in C di Ant Colony Optimization (ACO) per Vehicle Routing Problem (VRP), con due eseguibili:
+- `aco_vrp_seq.out` (sequenziale)
+- `aco_vrp_openmp_mpi.out` (ibrido OpenMP + MPI)
 
-Il `main` esegue un esempio minimale senza argomenti e stampa il costo migliore trovato.
+Il solver usa layout hardware-aware (matrici allineate 64-byte, candidate list per-rank, workspace persistente per-thread/per-run, MMAS bounds, sincronizzazione MPI per epoche).
 
 ## Requisiti
 - `gcc`
 - `make`
-- `mpicc` e `mpirun` (solo per versione ibrida / test MPI)
-- `python3` (per script test/scaling)
-- ambiente `VRP` con PyVRP (solo per baseline/golden e scaling PyVRP)
+- `mpicc` e `mpirun` (solo target MPI/OpenMP)
+- `python3` + `pandas`, `numpy`, `matplotlib` (report scaling)
+- `pyvrp` (solo confronto C vs PyVRP)
+- `sbatch` (opzionale, per esecuzione su cluster SLURM)
 
-## Avvio rapido
-Compilazione ed esecuzione sequenziale:
+## Struttura progetto
+- `src/seq/aco_sequential.c`: solver ACO sequenziale
+- `src/openmp-mpi/aco_parallel.c`: solver ACO OpenMP+MPI
+- `src/common/matrix.c`: allocazione matrici dense allineate/paddate
+- `src/common/solution.c`: storage contiguo flat delle soluzioni
+- `tests/sequential_tests.c`: scaling progressivo C
+- `tests/openmp_mpi_tests.c`: scaling progressivo OpenMP+MPI
+- `tests/openmp_mpi_scaling_report.py`: report/plot da CSV MPI
+- `tests/c_compare_case.c`: runner C single-scenario per confronto con PyVRP
+- `tests/pyvrp_compare.py`: confronto C vs PyVRP con gap su CSV
+- `scripts/run_openmp_mpi_tests.sbatch`: job batch SLURM
+
+## Build
+Sequenziale:
 ```sh
 make
-./aco_vrp_seq.out
 ```
 
-## Esecuzione ibrida MPI + OpenMP
-Compilazione:
+Ibrido OpenMP+MPI:
 ```sh
 make openmp_mpi
 ```
 
-Esecuzione (esempio con 2 rank e 2 thread OpenMP per rank):
+Help Makefile:
 ```sh
-OMP_NUM_THREADS=2 mpirun -np 2 ./aco_vrp_openmp_mpi.out
+make help
 ```
 
-## Test (background di default)
-I target di test partono in background (`TEST_MODE=background`) per uso su cluster.
-I log sono salvati in `results/detached/` con file `.log`, `.pid`, `.cmd`.
-
-Per esecuzione in foreground:
+## Esecuzione binari solver
+### Sequenziale
 ```sh
-make <target> TEST_MODE=foreground
+./aco_vrp_seq.out [n K m T seed]
 ```
 
-Per cambiare directory dei log:
+Esempio:
 ```sh
-make <target> TEST_LOGS_DIR=/path/to/logs
+./aco_vrp_seq.out 200 16 0 100 1234
 ```
 
-Target disponibili:
-- `sequential_tests`
-- `openmp_mpi_tests`
+Note:
+- `m=0` abilita auto-scaling delle formiche.
+- senza argomenti, usa un esempio minimale interno.
 
-## Sequential Tests (fino a 100k clienti)
-Runner C dedicato per scenari progressivi fino a `n=100000`:
+### OpenMP + MPI
+```sh
+OMP_NUM_THREADS=2 mpirun -np 2 ./aco_vrp_openmp_mpi.out [n K m T seed]
+```
+
+## Test mode (foreground/background)
+I target `sequential_tests` e `openmp_mpi_tests` usano:
+- `TEST_MODE=background` (default): run detached con `nohup`
+- `TEST_MODE=foreground`: output live nel terminale
+- `TEST_LOGS_DIR=...`: directory log detached (`.log`, `.pid`, `.cmd`)
+
+Esempi:
+```sh
+make sequential_tests TEST_MODE=foreground
+make openmp_mpi_tests TEST_MODE=foreground MPI_NP=4 MPI_OMP_THREADS=8
+make sequential_tests TEST_LOGS_DIR=/tmp/vrp_logs
+```
+
+Output runtime semplificato (esempio):
+- `[RUN xx/yy] ...`
+- `[INPUT] solver : n=... K=... m=... T=... alpha=... beta=... rho=... tau0=... Q=... seed=...`
+- `[INPUT] instance : seed=... layout_id=...`
+- `[OK] ...` oppure `[SKIP] ...` oppure `[FAIL] ...`
+
+## Sequential scaling runner
+Build + run:
 ```sh
 make sequential_tests
 ```
 
-Output CSV predefinito:
+CSV default:
 - `results/scaling_progressive_c.csv`
 
 Esecuzione manuale:
@@ -63,38 +95,128 @@ Esecuzione manuale:
 ./tests/sequential_tests.out --memory-utilization 0.70 --c-max-n 100000
 ```
 
-Opzioni utili:
-- `--memory-utilization X` frazione RAM usabile prima di fare skip (`0 < X <= 1`)
-- `--c-max-n N` limite massimo clienti eseguiti
-- `--csv PATH` percorso CSV output
-- `--force` forza l'esecuzione anche oltre la soglia memoria stimata
+Opzioni CLI:
+- `--csv PATH`
+- `--input-log PATH` (default: `results/sequential_test_inputs.log`)
+- `--memory-utilization X` con `0 < X <= 1`
+- `--c-max-n N`
+- `--force` (ignora soglia memoria stimata)
+- `--auto-ants` (default, passa `m=0` al solver)
+- `--fixed-ants` (usa `m` dallo scenario)
 
-Nota: la parte C usa matrici dense (`c`, `eta`, `tau`), quindi i casi molto grandi possono essere saltati automaticamente per evitare out-of-memory.
+Nota memoria: il runner stima `c` + `tau` dense e matrici candidate (`candidate_idx`, `eta_beta`, `score`) con overhead di sicurezza.
 
-## OpenMP + MPI Tests
-Runner OpenMP+MPI progressivo:
+## OpenMP+MPI scaling runner
+Build + run via Make:
 ```sh
 make openmp_mpi_tests
 ```
 
-Esecuzione su cluster con SLURM (batch, puoi disconnetterti):
+Il target usa:
+- `MPI_NP` (default `2`)
+- `MPI_OMP_THREADS` (default `2`)
+
+Comando equivalente:
+```sh
+OMP_NUM_THREADS=${MPI_OMP_THREADS} mpirun -np ${MPI_NP} ./tests/openmp_mpi_tests.out
+```
+
+CSV default:
+- `results/scaling_progressive_openmp_mpi.csv`
+
+Esecuzione manuale:
+```sh
+mpirun -np 2 ./tests/openmp_mpi_tests.out --memory-utilization 0.70 --c-max-n 100000
+```
+
+Opzioni CLI:
+- `--csv PATH`
+- `--input-log PATH` (default: `results/openmp_mpi_test_inputs.log`)
+- `--memory-utilization X` con `0 < X <= 1`
+- `--c-max-n N`
+- `--enforce-c-max-n` (salta `n > c_max_n`)
+- `--force` (ignora soglia memoria stimata)
+- `--auto-ants` (default, passa `m=0` al solver)
+- `--fixed-ants` (usa `m` dallo scenario)
+
+Durante i test, il runner stampa esplicitamente gli input passati al solver per ogni run (`n,K,m,T,alpha,beta,rho,tau0,Q,seed`) e salva gli stessi dati nel file `--input-log`.
+
+## Esecuzione SLURM
+Submit diretto:
 ```sh
 ./scripts/submit_openmp_mpi_tests.sh
 ```
 
-Con argomenti opzionali passati al binario:
+Con argomenti passati al test runner:
 ```sh
-./scripts/submit_openmp_mpi_tests.sh "--memory-utilization 0.70 --c-max-n 100000"
+./scripts/submit_openmp_mpi_tests.sh "--memory-utilization 0.70 --c-max-n 100000 --enforce-c-max-n"
 ```
 
-## Debug
-Compila con `-DDEBUG`:
+Lo script batch:
+- compila `tests/openmp_mpi_tests.out`
+- imposta `OMP_NUM_THREADS=$SLURM_CPUS_PER_TASK`
+- esegue `mpirun -n $SLURM_NTASKS ...`
+- salva output/error in `results/slurm/`
+
+## Report scaling OpenMP+MPI
+Da CSV a report markdown + grafici:
+```sh
+python3 tests/openmp_mpi_scaling_report.py \
+  --csv results/scaling_progressive_openmp_mpi.csv \
+  --out-dir results
+```
+
+Output principali:
+- `results/openmp_mpi_scaling_report.md`
+- `results/openmp_mpi_runtime_vs_n.png`
+- `results/openmp_mpi_throughput_vs_n.png`
+- `results/openmp_mpi_empirical_exponent.png`
+- `results/openmp_mpi_memory_vs_n.png`
+
+## Confronto C vs PyVRP
+Build helper C:
+```sh
+make c_compare_case
+make c_compare_case_mpi
+```
+
+Confronto rapido su un solo scenario (solo sequenziale):
+```sh
+python3 tests/pyvrp_compare.py --mode seq --single-n 500 --enforce-c-max-n --c-max-n 500
+```
+
+Confronto sequenziale + parallelo (MPI/OpenMP):
+```sh
+python3 tests/pyvrp_compare.py --mode both --single-n 500 --mpi-ranks-list 1,2,4 --omp-threads 2 --enforce-c-max-n --c-max-n 500
+```
+
+Nota: lo script prova automaticamente a rieseguirsi con `VRP/bin/python` se presente.
+
+Output CSV default:
+- `results/c_vs_pyvrp_compare.csv`
+- `results/c_vs_pyvrp_scaling_report.md`
+
+Opzioni utili:
+- `--mode seq|mpi|both` (default: `both`)
+- `--mpi-ranks-list 1,2,4` (usato in modalità MPI)
+- `--omp-threads N` (thread OpenMP per rank in modalità MPI)
+- `--fixed-ants` (default usa `m=0` auto)
+- `--timeout N` (secondi, stop PyVRP a runtime; `0` usa iterazioni `T`)
+- `--helper-bin-seq PATH` (default `tests/c_compare_case.out`)
+- `--helper-bin-mpi PATH` (default `tests/c_compare_case_mpi.out`)
+- `--no-build-helpers` (non lancia `make` automatico)
+
+Metriche scaling nel CSV/report:
+- **Strong scaling**: `strong_speedup`, `strong_efficiency` (stesso `n`, rank diversi)
+- **Weak scaling**: `weak_efficiency` con `n_per_rank` circa costante
+
+## Debug e pulizia
+Build debug:
 ```sh
 make debug
 ```
 
-## Pulizia
-Rimuove eseguibili, oggetti e file di coverage:
+Pulizia:
 ```sh
 make clean
 ```
