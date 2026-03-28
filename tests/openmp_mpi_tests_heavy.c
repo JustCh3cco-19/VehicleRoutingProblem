@@ -288,7 +288,8 @@ static int estimate_auto_ants_for_log(int n, int mpi_ranks) {
  *  returns: value as defined by the function contract
  */
 static void build_scenarios(Scenario *out, int *count) {
-  static const int levels[] = {500, 1000, 2000, 4000, 8000, 12000, 16000};
+  static const int levels[] = {24000, 32000, 40000, 48000, 56000,
+                               64000, 72000, 80000, 90000, 100000};
   const int total = (int)(sizeof(levels) / sizeof(levels[0]));
 
   for (int idx = 0; idx < total; ++idx) {
@@ -540,9 +541,9 @@ int main(int argc, char **argv) {
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
   MPI_Comm_size(MPI_COMM_WORLD, &size);
 
-  const char *csv_path = "results/scaling_progressive_openmp_mpi_light.csv";
-  const char *input_log_path = "results/openmp_mpi_test_inputs_light.log";
-  const char *checkpoint_path = "results/openmp_mpi_tests_light.checkpoint";
+  const char *csv_path = "results/scaling_progressive_openmp_mpi_heavy.csv";
+  const char *input_log_path = "results/openmp_mpi_test_inputs_heavy.log";
+  const char *checkpoint_path = "results/openmp_mpi_tests_heavy.checkpoint";
   double memory_utilization = 0.70;
   double time_budget_minutes = 30.0;
   double estimate_safety = 1.25;
@@ -677,7 +678,7 @@ int main(int argc, char **argv) {
     omp_threads = omp_get_max_threads();
   #endif
     printf("========================================================================\n");
-    printf("OpenMP+MPI Progressive Scaling (light <= 16k)\n");
+    printf("OpenMP+MPI Progressive Scaling (heavy > 16k)\n");
     printf("========================================================================\n");
     printf("[INFO] mpi_ranks            : %d\n", size);
     printf("[INFO] omp_threads/rank     : %d\n", omp_threads);
@@ -805,7 +806,7 @@ int main(int argc, char **argv) {
         ++skipped_count;
         printf("  [SKIP] n=%d supera c-max-n=%d\n", sc->n, c_max_n);
         fprintf(csv,
-                "openmp_mpi_light,%d,%d,%d,%d,%d,%.4f,skipped_c_max_n,,,\n",
+                "openmp_mpi_heavy,%d,%d,%d,%d,%d,%.4f,skipped_c_max_n,,,\n",
                 size, sc->n, sc->K, run_m_effective, sc->T, est_gib);
         fprintf(input_log, "  result=skipped_c_max_n c_max_n=%d\n\n", c_max_n);
         fflush(csv);
@@ -826,7 +827,7 @@ int main(int argc, char **argv) {
         printf("  [SKIP] memoria stimata %.2f GiB > soglia %.2f GiB\n",
                est_gib, bytes_to_gib(threshold));
         fprintf(csv,
-                "openmp_mpi_light,%d,%d,%d,%d,%d,%.4f,skipped_memory,,,\n",
+                "openmp_mpi_heavy,%d,%d,%d,%d,%d,%.4f,skipped_memory,,,\n",
                 size, sc->n, sc->K, run_m_effective, sc->T, est_gib);
         fprintf(input_log,
                 "  result=skipped_memory est_mem_gib=%.4f threshold_gib=%.4f\n\n",
@@ -858,7 +859,7 @@ int main(int argc, char **argv) {
         ++failed_count;
         printf("  [FAIL] allocation failure before solve\n");
         fprintf(csv,
-                "openmp_mpi_light,%d,%d,%d,%d,%d,%.4f,failed_alloc,,,allocation_failure\n",
+                "openmp_mpi_heavy,%d,%d,%d,%d,%d,%.4f,failed_alloc,,,allocation_failure\n",
                 size, sc->n, sc->K, run_m_effective, sc->T, est_gib);
         fprintf(input_log, "  result=failed_alloc error=allocation_failure\n\n");
         fflush(csv);
@@ -900,7 +901,7 @@ int main(int argc, char **argv) {
         ++failed_count;
         printf("  [FAIL] solver did not produce a finite objective\n");
         fprintf(csv,
-                "openmp_mpi_light,%d,%d,%d,%d,%d,%.4f,failed_solver,%.6f,,non_finite_objective\n",
+                "openmp_mpi_heavy,%d,%d,%d,%d,%d,%.4f,failed_solver,%.6f,,non_finite_objective\n",
                 size, sc->n, sc->K, run_m_effective, sc->T, est_gib, elapsed);
         fprintf(input_log,
                 "  result=failed_solver elapsed_s=%.6f error=non_finite_objective\n\n",
@@ -913,7 +914,7 @@ int main(int argc, char **argv) {
         printf("  [OK] openmp+mpi solver completed in %7.2fs, objective=%.3f\n",
                elapsed, global_best_cost);
         fprintf(csv,
-                "openmp_mpi_light,%d,%d,%d,%d,%d,%.4f,ok,%.6f,%.6f,\n",
+                "openmp_mpi_heavy,%d,%d,%d,%d,%d,%.4f,ok,%.6f,%.6f,\n",
                 size, sc->n, sc->K, run_m_effective, sc->T, est_gib, elapsed,
                 global_best_cost);
         fprintf(input_log,

@@ -45,11 +45,18 @@ C_COMPARE_CASE_MPI_BIN=tests/c_compare_case_mpi.out
 OPENMP_MPI_TESTS_SRC=tests/openmp_mpi_tests.c
 OPENMP_MPI_TESTS_BIN=tests/openmp_mpi_tests.out
 OPENMP_MPI_TESTS_BUILD_SRC=$(OPENMP_MPI_TESTS_SRC) $(PAR_SRC) $(ACO_SHARED_SRC) $(SOLUTION_SRC) $(MATRIX_SRC)
+OPENMP_MPI_TESTS_HEAVY_SRC=tests/openmp_mpi_tests_heavy.c
+OPENMP_MPI_TESTS_HEAVY_BIN=tests/openmp_mpi_tests_heavy.out
+OPENMP_MPI_TESTS_HEAVY_BUILD_SRC=$(OPENMP_MPI_TESTS_HEAVY_SRC) $(PAR_SRC) $(ACO_SHARED_SRC) $(SOLUTION_SRC) $(MATRIX_SRC)
 
 OPENMP_MPI_BIN=aco_vrp_openmp_mpi.out
 OPENMP_MPI_SRC=src/main.c $(PAR_SRC) $(ACO_SHARED_SRC) $(SOLUTION_SRC) $(MATRIX_SRC)
 MPI_NP=2
 MPI_OMP_THREADS=2
+MPI_TEST_ARGS?=
+CHECKPOINT_MODE?=fresh
+LIGHT_CHECKPOINT_PATH?=results/openmp_mpi_tests_light.checkpoint
+HEAVY_CHECKPOINT_PATH?=results/openmp_mpi_tests_heavy.checkpoint
 
 COVERAGE_FILES=src/*.gcno src/*.gcda src/seq/*.gcno src/seq/*.gcda src/openmp-mpi/*.gcno src/openmp-mpi/*.gcda src/common/*.gcno src/common/*.gcda tests/*.gcno tests/*.gcda
 LEGACY_BINARIES=aco_vrp_seq aco_vrp_hybrid aco_vrp_openmp_mpi tests/test tests/test_mpi tests/test_final tests/test_final.out tests/test_final_mpi.out tests/c_scaling_tests tests/c_scaling_tests.out
@@ -92,7 +99,12 @@ help:
 	@printf "  %-18s %s\n\n" "clean" "Remove binaries, objects, and coverage artifacts"
 	@printf "Test Targets:\n"
 	@printf "  %-18s %s\n" "sequential_tests" "Run progressive C scaling tests up to n=100000 (memory-aware)"
-	@printf "  %-18s %s\n" "openmp_mpi_tests" "Run progressive OpenMP+MPI tests (uses MPI_NP, MPI_OMP_THREADS)"
+	@printf "  %-18s %s\n" "openmp_mpi_tests" "Run OpenMP+MPI light tests up to 16k customers"
+	@printf "  %-18s %s\n" "openmp_mpi_tests_heavy" "Run OpenMP+MPI heavy tests from 24k to 100k customers"
+	@printf "  %-18s %s\n" "openmp_mpi_tests_resume" "Resume OpenMP+MPI light tests from checkpoint"
+	@printf "  %-18s %s\n" "openmp_mpi_tests_reset" "Reset checkpoint and run OpenMP+MPI light tests"
+	@printf "  %-18s %s\n" "openmp_mpi_tests_heavy_resume" "Resume OpenMP+MPI heavy tests from checkpoint"
+	@printf "  %-18s %s\n" "openmp_mpi_tests_heavy_reset" "Reset checkpoint and run OpenMP+MPI heavy tests"
 	@printf "  %-18s %s\n" "c_compare_case" "Build single-scenario C runner for C-vs-PyVRP comparisons"
 	@printf "  %-18s %s\n" "c_compare_case_mpi" "Build single-scenario MPI+OpenMP runner for C-vs-PyVRP comparisons"
 	@printf "\n"
@@ -140,11 +152,29 @@ $(OPENMP_MPI_BIN): $(OPENMP_MPI_SRC) include/aco.h include/matrix.h include/solu
 $(OPENMP_MPI_TESTS_BIN): $(OPENMP_MPI_TESTS_BUILD_SRC) include/aco.h include/matrix.h include/solution.h
 	$(MPICC) $(EXTRA_FLAGS) $(FLAGS) $(FORCE_OPT) $(PERF_FLAGS) $(OMPFLAG) -DUSE_MPI $(OPENMP_MPI_TESTS_BUILD_SRC) $(LIBS) -o $@
 
+$(OPENMP_MPI_TESTS_HEAVY_BIN): $(OPENMP_MPI_TESTS_HEAVY_BUILD_SRC) include/aco.h include/matrix.h include/solution.h
+	$(MPICC) $(EXTRA_FLAGS) $(FLAGS) $(FORCE_OPT) $(PERF_FLAGS) $(OMPFLAG) -DUSE_MPI $(OPENMP_MPI_TESTS_HEAVY_BUILD_SRC) $(LIBS) -o $@
+
 sequential_tests: $(SEQUENTIAL_TESTS_BIN)
 	$(call RUN_TEST_CMD,sequential_tests,./$(SEQUENTIAL_TESTS_BIN))
 
 openmp_mpi_tests: $(OPENMP_MPI_TESTS_BIN)
-	$(call RUN_TEST_CMD,openmp_mpi_tests,OMP_NUM_THREADS=$(MPI_OMP_THREADS) mpirun -np $(MPI_NP) ./$(OPENMP_MPI_TESTS_BIN))
+	$(call RUN_TEST_CMD,openmp_mpi_tests,OMP_NUM_THREADS=$(MPI_OMP_THREADS) bash -lc 'cp_flags="--checkpoint $(LIGHT_CHECKPOINT_PATH)"; if [ "$(CHECKPOINT_MODE)" = "resume" ]; then cp_flags="$$cp_flags --resume"; elif [ "$(CHECKPOINT_MODE)" = "reset" ]; then cp_flags="$$cp_flags --reset-checkpoint"; fi; mpirun -np $(MPI_NP) ./$(OPENMP_MPI_TESTS_BIN) $$cp_flags $(MPI_TEST_ARGS)')
+
+openmp_mpi_tests_heavy: $(OPENMP_MPI_TESTS_HEAVY_BIN)
+	$(call RUN_TEST_CMD,openmp_mpi_tests_heavy,OMP_NUM_THREADS=$(MPI_OMP_THREADS) bash -lc 'cp_flags="--checkpoint $(HEAVY_CHECKPOINT_PATH)"; if [ "$(CHECKPOINT_MODE)" = "resume" ]; then cp_flags="$$cp_flags --resume"; elif [ "$(CHECKPOINT_MODE)" = "reset" ]; then cp_flags="$$cp_flags --reset-checkpoint"; fi; mpirun -np $(MPI_NP) ./$(OPENMP_MPI_TESTS_HEAVY_BIN) $$cp_flags $(MPI_TEST_ARGS)')
+
+openmp_mpi_tests_resume:
+	$(MAKE) openmp_mpi_tests CHECKPOINT_MODE=resume TEST_MODE=$(TEST_MODE) MPI_NP=$(MPI_NP) MPI_OMP_THREADS=$(MPI_OMP_THREADS) MPI_TEST_ARGS="$(MPI_TEST_ARGS)" LIGHT_CHECKPOINT_PATH="$(LIGHT_CHECKPOINT_PATH)"
+
+openmp_mpi_tests_reset:
+	$(MAKE) openmp_mpi_tests CHECKPOINT_MODE=reset TEST_MODE=$(TEST_MODE) MPI_NP=$(MPI_NP) MPI_OMP_THREADS=$(MPI_OMP_THREADS) MPI_TEST_ARGS="$(MPI_TEST_ARGS)" LIGHT_CHECKPOINT_PATH="$(LIGHT_CHECKPOINT_PATH)"
+
+openmp_mpi_tests_heavy_resume:
+	$(MAKE) openmp_mpi_tests_heavy CHECKPOINT_MODE=resume TEST_MODE=$(TEST_MODE) MPI_NP=$(MPI_NP) MPI_OMP_THREADS=$(MPI_OMP_THREADS) MPI_TEST_ARGS="$(MPI_TEST_ARGS)" HEAVY_CHECKPOINT_PATH="$(HEAVY_CHECKPOINT_PATH)"
+
+openmp_mpi_tests_heavy_reset:
+	$(MAKE) openmp_mpi_tests_heavy CHECKPOINT_MODE=reset TEST_MODE=$(TEST_MODE) MPI_NP=$(MPI_NP) MPI_OMP_THREADS=$(MPI_OMP_THREADS) MPI_TEST_ARGS="$(MPI_TEST_ARGS)" HEAVY_CHECKPOINT_PATH="$(HEAVY_CHECKPOINT_PATH)"
 
 c_compare_case: $(C_COMPARE_CASE_BIN)
 
@@ -152,7 +182,7 @@ c_compare_case_mpi: $(C_COMPARE_CASE_MPI_BIN)
 
 clean:
 	rm -f $(BIN) $(OBJ) $(SEQUENTIAL_TESTS_BIN) $(SEQUENTIAL_TESTS_OBJ) $(OPENMP_MPI_BIN) $(LEGACY_BINARIES) \
-		$(OPENMP_MPI_TESTS_BIN) \
+		$(OPENMP_MPI_TESTS_BIN) $(OPENMP_MPI_TESTS_HEAVY_BIN) \
 		src/*.o src/seq/*.o src/openmp-mpi/*.o src/common/*.o \
 		tests/*.o tests/*.out \
 		$(COVERAGE_FILES) \
@@ -161,4 +191,4 @@ clean:
 debug:
 	$(MAKE) EXTRA_FLAGS=-DDEBUG
 
-.PHONY: all help clean debug openmp_mpi sequential_tests openmp_mpi_tests c_compare_case c_compare_case_mpi
+.PHONY: all help clean debug openmp_mpi sequential_tests openmp_mpi_tests openmp_mpi_tests_heavy openmp_mpi_tests_resume openmp_mpi_tests_reset openmp_mpi_tests_heavy_resume openmp_mpi_tests_heavy_reset c_compare_case c_compare_case_mpi

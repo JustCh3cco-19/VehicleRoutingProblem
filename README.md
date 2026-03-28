@@ -20,7 +20,8 @@ Il solver usa layout hardware-aware (matrici allineate 64-byte, candidate list p
 - `src/common/matrix.c`: allocazione matrici dense allineate/paddate
 - `src/common/solution.c`: storage contiguo flat delle soluzioni
 - `tests/sequential_tests.c`: scaling progressivo C
-- `tests/openmp_mpi_tests.c`: scaling progressivo OpenMP+MPI
+- `tests/openmp_mpi_tests.c`: scaling OpenMP+MPI light (fino a 16k clienti)
+- `tests/openmp_mpi_tests_heavy.c`: scaling OpenMP+MPI heavy (da 24k a 100k clienti)
 - `tests/openmp_mpi_scaling_report.py`: report/plot da CSV MPI
 - `tests/c_compare_case.c`: runner C single-scenario per confronto con PyVRP
 - `tests/pyvrp_compare.py`: confronto C vs PyVRP con gap su CSV
@@ -63,7 +64,7 @@ OMP_NUM_THREADS=2 mpirun -np 2 ./aco_vrp_openmp_mpi.out [n K m T seed]
 ```
 
 ## Test mode (foreground/background)
-I target `sequential_tests` e `openmp_mpi_tests` usano:
+I target `sequential_tests`, `openmp_mpi_tests` e `openmp_mpi_tests_heavy` usano:
 - `TEST_MODE=background` (default): run detached con `nohup`
 - `TEST_MODE=foreground`: output live nel terminale
 - `TEST_LOGS_DIR=...`: directory log detached (`.log`, `.pid`, `.cmd`)
@@ -72,6 +73,7 @@ Esempi:
 ```sh
 make sequential_tests TEST_MODE=foreground
 make openmp_mpi_tests TEST_MODE=foreground MPI_NP=4 MPI_OMP_THREADS=8
+make openmp_mpi_tests_heavy TEST_MODE=foreground MPI_NP=2 MPI_OMP_THREADS=32
 make sequential_tests TEST_LOGS_DIR=/tmp/vrp_logs
 ```
 
@@ -107,9 +109,14 @@ Opzioni CLI:
 Nota memoria: il runner stima `c` + `tau` dense e matrici candidate (`candidate_idx`, `eta_beta`, `score`) con overhead di sicurezza.
 
 ## OpenMP+MPI scaling runner
-Build + run via Make:
+Build + run via Make (light <= 16k):
 ```sh
 make openmp_mpi_tests
+```
+
+Build + run via Make (heavy > 16k):
+```sh
+make openmp_mpi_tests_heavy
 ```
 
 Il target usa:
@@ -122,17 +129,23 @@ OMP_NUM_THREADS=${MPI_OMP_THREADS} mpirun -np ${MPI_NP} ./tests/openmp_mpi_tests
 ```
 
 CSV default:
-- `results/scaling_progressive_openmp_mpi.csv`
+- `results/scaling_progressive_openmp_mpi_light.csv`
+- `results/scaling_progressive_openmp_mpi_heavy.csv`
 
 Esecuzione manuale:
 ```sh
 mpirun -np 2 ./tests/openmp_mpi_tests.out --memory-utilization 0.70 --c-max-n 100000
+mpirun -np 2 ./tests/openmp_mpi_tests_heavy.out --memory-utilization 0.70 --c-max-n 100000
 ```
 
 Opzioni CLI:
 - `--csv PATH`
 - `--input-log PATH` (default: `results/openmp_mpi_test_inputs.log`)
+- `--checkpoint PATH` (default: `results/openmp_mpi_tests_light.checkpoint` o `..._heavy.checkpoint`)
+- `--resume` (riparte da checkpoint, append a CSV/log)
 - `--memory-utilization X` con `0 < X <= 1`
+- `--time-budget-minutes X` (default `30`)
+- `--estimate-safety X` (default `1.25`)
 - `--c-max-n N`
 - `--enforce-c-max-n` (salta `n > c_max_n`)
 - `--force` (ignora soglia memoria stimata)
@@ -152,8 +165,36 @@ Con argomenti passati al test runner:
 ./scripts/submit_openmp_mpi_tests.sh "--memory-utilization 0.70 --c-max-n 100000 --enforce-c-max-n"
 ```
 
+Profilo heavy:
+```sh
+./scripts/submit_openmp_mpi_tests.sh "--memory-utilization 0.70 --c-max-n 100000 --enforce-c-max-n" heavy
+```
+
+Con checkpoint mode esplicito (`fresh|resume|reset`):
+```sh
+./scripts/submit_openmp_mpi_tests.sh "--time-budget-minutes 30" heavy resume
+./scripts/submit_openmp_mpi_tests.sh "--time-budget-minutes 30" heavy reset
+```
+
+Run pulita e ripresa dopo blocco:
+```sh
+# 1) run da zero (pulisce checkpoint precedente)
+./scripts/submit_openmp_mpi_tests.sh "--time-budget-minutes 30 --memory-utilization 0.70 --estimate-safety 1.25" heavy reset
+
+# 2) se il job viene interrotto/scade, riprende dal checkpoint
+./scripts/submit_openmp_mpi_tests.sh "--time-budget-minutes 30 --memory-utilization 0.70 --estimate-safety 1.25" heavy resume
+```
+
+Target Make utili:
+```sh
+make openmp_mpi_tests_resume TEST_MODE=foreground
+make openmp_mpi_tests_reset TEST_MODE=foreground
+make openmp_mpi_tests_heavy_resume TEST_MODE=foreground
+make openmp_mpi_tests_heavy_reset TEST_MODE=foreground
+```
+
 Lo script batch:
-- compila `tests/openmp_mpi_tests.out`
+- compila `tests/openmp_mpi_tests.out` (o `tests/openmp_mpi_tests_heavy.out` con `TEST_PROFILE=heavy`)
 - imposta `OMP_NUM_THREADS=$SLURM_CPUS_PER_TASK`
 - esegue `mpirun -n $SLURM_NTASKS ...`
 - salva output/error in `results/slurm/`
