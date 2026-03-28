@@ -16,8 +16,12 @@ mkdir -p results/slurm
 
 hpc_init_script="${HPC_INIT_SCRIPT:-/home/guest/init-hpc.sh}"
 if [ -f "${hpc_init_script}" ]; then
+  # Some cluster init scripts read undefined vars (e.g., LD_LIBRARY_PATH).
+  # Temporarily disable nounset while sourcing to avoid hard failure.
+  set +u
   # shellcheck disable=SC1090
   source "${hpc_init_script}"
+  set -u
   echo "[INFO] Sourced HPC init: ${hpc_init_script}"
 else
   echo "[WARN] HPC init script not found: ${hpc_init_script}"
