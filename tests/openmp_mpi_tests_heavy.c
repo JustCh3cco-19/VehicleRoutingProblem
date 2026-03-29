@@ -553,6 +553,7 @@ int main(int argc, char **argv) {
   int auto_ants = 1;
   int resume = 0;
   int reset_checkpoint = 0;
+  int only_n = -1;
 
   for (int i = 1; i < argc; ++i) {
     if (strcmp(argv[i], "--csv") == 0 && i + 1 < argc) {
@@ -610,10 +611,19 @@ int main(int argc, char **argv) {
       auto_ants = 1;
     } else if (strcmp(argv[i], "--fixed-ants") == 0) {
       auto_ants = 0;
+    } else if (strcmp(argv[i], "--only-n") == 0 && i + 1 < argc) {
+      only_n = atoi(argv[++i]);
+      if (only_n <= 0) {
+        if (rank == 0) {
+          fprintf(stderr, "invalid --only-n, expected positive integer.\n");
+        }
+        MPI_Finalize();
+        return 1;
+      }
     } else {
       if (rank == 0) {
         fprintf(stderr,
-          "usage: %s [--csv PATH] [--input-log PATH] [--checkpoint PATH] [--resume] [--reset-checkpoint] [--memory-utilization X] [--time-budget-minutes X] [--estimate-safety X] [--c-max-n N] [--enforce-c-max-n] [--force] [--auto-ants|--fixed-ants]\n",
+          "usage: %s [--csv PATH] [--input-log PATH] [--checkpoint PATH] [--resume] [--reset-checkpoint] [--memory-utilization X] [--time-budget-minutes X] [--estimate-safety X] [--c-max-n N] [--enforce-c-max-n] [--force] [--auto-ants|--fixed-ants] [--only-n N]\n",
                 argv[0]);
       }
       MPI_Finalize();
@@ -700,6 +710,9 @@ int main(int argc, char **argv) {
     printf("[INFO] command              : ");
     print_command_line(stdout, argc, argv);
     printf("\n");
+    if (only_n > 0) {
+      printf("[INFO] only_n              : %d\n", only_n);
+    }
 
     if (!append_mode) {
       fprintf(input_log, "# openmp_mpi_tests input log\n");
@@ -720,6 +733,7 @@ int main(int argc, char **argv) {
     fprintf(input_log, "checkpoint_path=%s\n", checkpoint_path);
     fprintf(input_log, "resume=%d\n", resume);
     fprintf(input_log, "reset_checkpoint=%d\n", reset_checkpoint);
+    fprintf(input_log, "only_n=%d\n", only_n);
     fprintf(input_log, "available_mem_gib=%.4f\n", bytes_to_gib(available));
     fprintf(input_log, "threshold_gib=%.4f\n\n", bytes_to_gib(threshold));
     fflush(input_log);
@@ -728,6 +742,28 @@ int main(int argc, char **argv) {
   Scenario scenarios[24];
   int total = 0;
   build_scenarios(scenarios, &total);
+  int selected_index = -1;
+  if (only_n > 0) {
+    for (int i = 0; i < total; ++i) {
+      if (scenarios[i].n == only_n) {
+        selected_index = i;
+        break;
+      }
+    }
+    if (selected_index < 0) {
+      if (rank == 0) {
+        fprintf(stderr,
+                "[ERROR] --only-n=%d is not available in heavy profile. Available:",
+                only_n);
+        for (int i = 0; i < total; ++i) {
+          fprintf(stderr, " %d", scenarios[i].n);
+        }
+        fprintf(stderr, "\n");
+      }
+      MPI_Finalize();
+      return 1;
+    }
+  }
   CheckpointState cp = {0, 0, 0, 0, 0.0};
   if (rank == 0 && resume) {
     checkpoint_load(checkpoint_path, &cp, total);
@@ -758,6 +794,9 @@ int main(int argc, char **argv) {
 
   double estimated_total_s = 0.0;
   for (int i = cp.next_index; i < total; ++i) {
+    if (selected_index >= 0 && i != selected_index) {
+      continue;
+    }
     int m_effective = auto_ants ? estimate_auto_ants_for_log(scenarios[i].n, size)
                                 : scenarios[i].m;
     estimated_total_s += estimate_runtime_seconds(
@@ -777,8 +816,14 @@ int main(int argc, char **argv) {
   int skipped_count = cp.skipped_count;
   int failed_count = cp.failed_count;
   double total_elapsed = cp.total_elapsed;
+  int planned_total = (selected_index >= 0) ? 1 : total;
+  int run_progress = 0;
 
   for (int i = cp.next_index; i < total; ++i) {
+    if (selected_index >= 0 && i != selected_index) {
+      continue;
+    }
+    ++run_progress;
     const Scenario *sc = &scenarios[i];
     int run_m = auto_ants ? 0 : sc->m;
     int run_m_effective = auto_ants ? estimate_auto_ants_for_log(sc->n, size) : sc->m;
@@ -789,7 +834,7 @@ int main(int argc, char **argv) {
 
     if (rank == 0) {
       printf("[RUN  %02d/%02d] customers=%-6d vehicles=%-4d ants=%-3d iterations=%-3d est_mem=%6.2f GiB\n",
-              i + 1, total, sc->n, sc->K, run_m_effective, sc->T, est_gib);
+              run_progress, planned_total, sc->n, sc->K, run_m_effective, sc->T, est_gib);
       printf("  [TIME ] est_runtime=%.1fs\n", est_runtime_s);
       printf("  [INPUT] solver   : n=%d K=%d m=%d T=%d alpha=1.0 beta=3.0 rho=0.3 tau0=1.0 Q=1.0 seed=%u\n",
              sc->n, sc->K, run_m, sc->T, sc->solver_seed);
@@ -797,7 +842,7 @@ int main(int argc, char **argv) {
              sc->instance_seed, sc->layout_id, size);
       fprintf(input_log,
               "[RUN %02d/%02d] mpi_ranks=%d n=%d K=%d m_passed=%d m_effective=%d T=%d alpha=1.0 beta=3.0 rho=0.3 tau0=1.0 Q=1.0 solver_seed=%u instance_seed=%u layout_id=%d est_mem_gib=%.4f\n",
-              i + 1, total, size, sc->n, sc->K, run_m, run_m_effective, sc->T,
+              run_progress, planned_total, size, sc->n, sc->K, run_m, run_m_effective, sc->T,
               sc->solver_seed, sc->instance_seed, sc->layout_id, est_gib);
     }
 
@@ -943,11 +988,15 @@ int main(int argc, char **argv) {
     printf("\n========================================================================\n");
     printf("OpenMP+MPI Scaling Summary\n");
     printf("========================================================================\n");
-    printf("[SUMMARY] scenarios_total   : %d\n", total);
+    printf("[SUMMARY] scenarios_total   : %d\n", planned_total);
     printf("[SUMMARY] ok                : %d\n", ok_count);
     printf("[SUMMARY] failed            : %d\n", failed_count);
     printf("[SUMMARY] skipped           : %d\n", skipped_count);
-    printf("[SUMMARY] total_solve_s     : %.2f\n", total_elapsed);
+    if (total_elapsed > 60.0) {
+      printf("[SUMMARY] total_solve_min   : %.2f\n", total_elapsed / 60.0);
+    } else {
+      printf("[SUMMARY] total_solve_s     : %.2f\n", total_elapsed);
+    }
     printf("[DONE] wrote %s\n", csv_path);
     printf("[DONE] wrote %s\n", input_log_path);
   }
