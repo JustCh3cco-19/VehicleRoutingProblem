@@ -1,4 +1,5 @@
 #include "aco.h"
+#include "instance_parser.h"
 #include "matrix.h"
 #include "solution.h"
 
@@ -97,6 +98,8 @@ static unsigned int parse_uint_arg(const char *s, int *ok) {
 int main(int argc, char **argv) {
   int status = 0;
   unsigned int seed = 1234u;
+  int use_instance_file = 0;
+  const char *instance_path = NULL;
 
 #ifdef USE_MPI
   int mpi_rank = 0;
@@ -114,9 +117,8 @@ int main(int argc, char **argv) {
   int m = 10;
   int T = 50;
 
-  if (argc == 6) {
+  if (argc == 6 && parse_int_arg(argv[1], &n)) {
     int ok = 1;
-    ok = ok && parse_int_arg(argv[1], &n);
     ok = ok && parse_int_arg(argv[2], &K);
     ok = ok && parse_int_arg(argv[3], &m);
     ok = ok && parse_int_arg(argv[4], &T);
@@ -136,6 +138,32 @@ int main(int argc, char **argv) {
       status = 1;
       goto cleanup_mpi;
     }
+  } else if ((argc == 5 || argc == 6) && argv[1] != NULL) {
+    int ok = 1;
+    instance_path = argv[1];
+    ok = ok && parse_int_arg(argv[2], &K);
+    ok = ok && parse_int_arg(argv[3], &m);
+    ok = ok && parse_int_arg(argv[4], &T);
+    if (argc == 6) {
+      seed = parse_uint_arg(argv[5], &ok);
+    }
+
+    if (!ok || K <= 0 || m < 0 || T <= 0) {
+      if (
+#ifdef USE_MPI
+          mpi_rank == 0 &&
+#endif
+          1) {
+        fprintf(stderr,
+                "usage: %s [n K m T seed]\n"
+                "   or: %s <instance.vrp> <K> <m> <T> [seed]\n"
+                "example: %s instances/test_aligned/n500_k8_s19000.vrp 8 32 20 9000\n",
+                argv[0], argv[0], argv[0]);
+      }
+      status = 1;
+      goto cleanup_mpi;
+    }
+    use_instance_file = 1;
   } else if (argc != 1) {
     if (
 #ifdef USE_MPI
@@ -144,8 +172,9 @@ int main(int argc, char **argv) {
         1) {
       fprintf(stderr,
               "usage: %s [n K m T seed]\n"
+              "   or: %s <instance.vrp> <K> <m> <T> [seed]\n"
               "example: %s 200 16 0 100 1234   (m=0 => auto ants)\n",
-              argv[0], argv[0]);
+              argv[0], argv[0], argv[0]);
     }
     status = 1;
     goto cleanup_mpi;
@@ -157,13 +186,28 @@ int main(int argc, char **argv) {
   double tau0 = 1.0;
   double Q = 1.0;
 
-  double **c = matrix_alloc(n);
-  if (!c) {
-    fprintf(stderr, "failed to allocate cost matrix\n");
-    status = 1;
-    goto cleanup_mpi;
+  double **c = NULL;
+  if (use_instance_file) {
+    if (vrp_load_tsplib_euc2d_matrix(instance_path, &n, &c) != 0) {
+      if (
+#ifdef USE_MPI
+          mpi_rank == 0 &&
+#endif
+          1) {
+        fprintf(stderr, "failed to load instance: %s\n", instance_path);
+      }
+      status = 1;
+      goto cleanup_mpi;
+    }
+  } else {
+    c = matrix_alloc(n);
+    if (!c) {
+      fprintf(stderr, "failed to allocate cost matrix\n");
+      status = 1;
+      goto cleanup_mpi;
+    }
+    fill_example_costs(c, n);
   }
-  fill_example_costs(c, n);
 
   Solution *best = solution_create(K, n);
   if (!best) {

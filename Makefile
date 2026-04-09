@@ -37,7 +37,7 @@ SOLUTION_OBJ=$(COMMON_DIR)/solution.o
 MATRIX_OBJ=$(COMMON_DIR)/matrix.o
 INSTANCE_PARSER_OBJ=$(COMMON_DIR)/instance_parser.o
 
-OBJ=src/main.o $(SEQ_OBJ) $(ACO_SHARED_OBJ) $(SOLUTION_OBJ) $(MATRIX_OBJ)
+OBJ=src/main.o $(SEQ_OBJ) $(ACO_SHARED_OBJ) $(SOLUTION_OBJ) $(MATRIX_OBJ) $(INSTANCE_PARSER_OBJ)
 
 SEQUENTIAL_TESTS_SRC=tests/sequential_tests.c
 SEQUENTIAL_TESTS_OBJ=tests/sequential_tests.o
@@ -56,7 +56,7 @@ OPENMP_MPI_TESTS_HEAVY_BIN=tests/openmp_mpi_tests_heavy.out
 OPENMP_MPI_TESTS_HEAVY_BUILD_SRC=$(OPENMP_MPI_TESTS_HEAVY_SRC) $(PAR_SRC) $(ACO_SHARED_SRC) $(SOLUTION_SRC) $(MATRIX_SRC)
 
 OPENMP_MPI_BIN=aco_vrp_openmp_mpi.out
-OPENMP_MPI_SRC=src/main.c $(PAR_SRC) $(ACO_SHARED_SRC) $(SOLUTION_SRC) $(MATRIX_SRC)
+OPENMP_MPI_SRC=src/main.c $(PAR_SRC) $(ACO_SHARED_SRC) $(SOLUTION_SRC) $(MATRIX_SRC) $(INSTANCE_PARSER_SRC)
 CUDA_BIN=aco_vrp_cuda.out
 CUDA_MAIN_SRC=src/cuda/main_vrp.cu
 CUDA_ACO_SRC=src/cuda/aco_cuda.cu
@@ -132,7 +132,7 @@ help:
 	@printf "  %-35s %s\n" "TEST_LOGS_DIR=PATH" "Directory for detached .log/.pid/.cmd files"
 	@printf "  %-35s %s\n\n" "Example" "make sequential_tests TEST_MODE=foreground"
 
-src/main.o: src/main.c include/aco.h include/matrix.h include/solution.h
+src/main.o: src/main.c include/aco.h include/instance_parser.h include/matrix.h include/solution.h
 	$(CC) $(EXTRA_FLAGS) $(FLAGS) $(FORCE_OPT) $(PERF_FLAGS) -c $< -o $@
 
 $(SEQ_OBJ): $(SEQ_SRC) include/aco.h include/matrix.h include/solution.h
@@ -219,6 +219,7 @@ clean:
 	rm -f $(BIN) $(OBJ) $(SEQUENTIAL_TESTS_BIN) $(SEQUENTIAL_TESTS_OBJ) $(OPENMP_MPI_BIN) $(CUDA_BIN) $(LEGACY_BINARIES) \
 		$(OPENMP_MPI_TESTS_BIN) $(OPENMP_MPI_TESTS_HEAVY_BIN) \
 		src/*.o src/seq/*.o src/openmp-mpi/*.o src/common/*.o src/cuda/*.o \
+		src/cuda/*.ptx src/cuda/*.cubin src/cuda/*.fatbin \
 		tests/*.o tests/*.out \
 		$(COVERAGE_FILES) \
 		report/*.aux report/*.log report/*.out
