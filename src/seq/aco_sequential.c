@@ -1090,7 +1090,7 @@ static void aco_vrp_run_with_timer(int n, int K, int m, int T, double **c,
   solution_reset(best_solution);
   *best_cost = DBL_MAX;
 
-  int vehicle_capacity_customers = (K > 0) ? ((n + K - 1) / K) : n;
+  int vehicle_capacity_customers = (K > 0) ? (n - K + 3) : n;
   if (vehicle_capacity_customers < 1) {
     vehicle_capacity_customers = 1;
   }
