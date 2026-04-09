@@ -11,6 +11,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #ifdef _OPENMP
 #include <omp.h>
@@ -150,6 +151,40 @@ static int choose_candidate_count(int n) {
     return 24;
   }
   return 32;
+}
+
+static double wall_time_seconds(void) {
+#ifdef USE_MPI
+  int mpi_initialized = 0;
+  MPI_Initialized(&mpi_initialized);
+  if (mpi_initialized) {
+    return MPI_Wtime();
+  }
+#endif
+#ifdef _OPENMP
+  return omp_get_wtime();
+#else
+  struct timespec ts;
+  timespec_get(&ts, TIME_UTC);
+  return (double)ts.tv_sec + (double)ts.tv_nsec * 1e-9;
+#endif
+}
+
+static void load_timer_directives(double *max_runtime_sec,
+                                  double *max_stagnation_sec,
+                                  double *improve_eps) {
+  const char *s_timeout = getenv("ACO_SOLVER_TIMEOUT_SECONDS");
+  const char *s_stagnation = getenv("ACO_SOLVER_STAGNATION_SECONDS");
+  const char *s_eps = getenv("ACO_SOLVER_IMPROVE_EPS");
+
+  *max_runtime_sec = (s_timeout && *s_timeout) ? atof(s_timeout) : 0.0;
+  *max_stagnation_sec =
+      (s_stagnation && *s_stagnation) ? atof(s_stagnation) : 0.0;
+  *improve_eps = (s_eps && *s_eps) ? atof(s_eps) : ACO_EPS;
+
+  if (*improve_eps <= 0.0) {
+    *improve_eps = ACO_EPS;
+  }
 }
 
 /*
@@ -1053,16 +1088,23 @@ static int mpi_sync_tau_epoch(double **tau, int n, int mpi_size,
 #endif
 
 /*
- * Function:  aco_vrp
+ * Function:  aco_vrp_run_with_timer
  * ------------------
- * runs the hybrid OpenMP+MPI ACO solver for VRP.
+ * internal hybrid solver routine with timer directives already resolved.
  */
-void aco_vrp(int n, int K, int m, int T, double **c, double alpha,
-             double beta, double rho, double tau0, double Q,
-             unsigned int seed, Solution *best_solution, double *best_cost) {
+static void aco_vrp_run_with_timer(int n, int K, int m, int T, double **c,
+                                   double alpha, double beta, double rho,
+                                   double tau0, double Q, unsigned int seed,
+                                   Solution *best_solution, double *best_cost,
+                                   double max_runtime_sec,
+                                   double max_stagnation_sec,
+                                   double improve_eps) {
   int mpi_rank = 0;
   int mpi_size = 1;
   bool mpi_enabled = false;
+  if (improve_eps <= 0.0) {
+    improve_eps = ACO_EPS;
+  }
 
 #ifdef USE_MPI
   int mpi_initialized = 0;
@@ -1160,8 +1202,27 @@ void aco_vrp(int n, int K, int m, int T, double **c, double alpha,
   const double global_deposit_weight = 0.7;
   double tau_max = tau0;
   double tau_min = tau0 * 0.05;
+  double start_wall = wall_time_seconds();
+  double last_improvement_wall = start_wall;
 
   for (int iter = 0; iter < T; ++iter) {
+    int stop_now = 0;
+    if (max_runtime_sec > 0.0) {
+      double now_wall = wall_time_seconds();
+      stop_now = ((now_wall - start_wall) >= max_runtime_sec) ? 1 : 0;
+#ifdef USE_MPI
+      if (mpi_enabled) {
+        int global_stop = 0;
+        MPI_Allreduce(&stop_now, &global_stop, 1, MPI_INT, MPI_MAX,
+                      MPI_COMM_WORLD);
+        stop_now = global_stop;
+      }
+#endif
+    }
+    if (stop_now) {
+      break;
+    }
+
     rank_shared_update_scores(&shared, tau, alpha);
 
     double iter_best_cost = DBL_MAX;
@@ -1337,10 +1398,13 @@ void aco_vrp(int n, int K, int m, int T, double **c, double alpha,
       iter_best_cost = solution_cost(iter_best, c);
     }
 
-    if (iter_best_cost < *best_cost) {
+    int improved_global = 0;
+    if (iter_best_cost < (*best_cost - improve_eps)) {
       *best_cost = iter_best_cost;
       solution_copy(best_solution, iter_best);
       stagnation_iters = 0;
+      improved_global = 1;
+      last_improvement_wall = wall_time_seconds();
 
       if (*best_cost > ACO_EPS) {
         tau_max = 1.0 / ((1.0 - rho) * (*best_cost));
@@ -1432,6 +1496,28 @@ void aco_vrp(int n, int K, int m, int T, double **c, double alpha,
       }
     }
 #endif
+
+    stop_now = 0;
+    double iter_end_wall = wall_time_seconds();
+    if (max_runtime_sec > 0.0 &&
+        (iter_end_wall - start_wall) >= max_runtime_sec) {
+      stop_now = 1;
+    }
+    if (!improved_global && max_stagnation_sec > 0.0 &&
+        (iter_end_wall - last_improvement_wall) >= max_stagnation_sec) {
+      stop_now = 1;
+    }
+#ifdef USE_MPI
+    if (mpi_enabled) {
+      int global_stop = 0;
+      MPI_Allreduce(&stop_now, &global_stop, 1, MPI_INT, MPI_MAX,
+                    MPI_COMM_WORLD);
+      stop_now = global_stop;
+    }
+#endif
+    if (stop_now) {
+      break;
+    }
   }
 
   matrix_free(tau);
@@ -1441,4 +1527,16 @@ void aco_vrp(int n, int K, int m, int T, double **c, double alpha,
   free(tau_sync_reqs);
   free(packed_solution);
 #endif
+}
+
+void aco_vrp(int n, int K, int m, int T, double **c, double alpha,
+             double beta, double rho, double tau0, double Q,
+             unsigned int seed, Solution *best_solution, double *best_cost) {
+  double max_runtime_sec = 0.0;
+  double max_stagnation_sec = 0.0;
+  double improve_eps = ACO_EPS;
+  load_timer_directives(&max_runtime_sec, &max_stagnation_sec, &improve_eps);
+  aco_vrp_run_with_timer(n, K, m, T, c, alpha, beta, rho, tau0, Q, seed,
+                         best_solution, best_cost, max_runtime_sec,
+                         max_stagnation_sec, improve_eps);
 }

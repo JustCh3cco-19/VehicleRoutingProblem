@@ -11,6 +11,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #if defined(__AVX2__)
 #include <immintrin.h>
@@ -216,6 +217,33 @@ static int choose_candidate_count(int n) {
     return 24;
   }
   return 32;
+}
+
+static double wall_time_seconds(void) {
+#ifdef _OPENMP
+  return omp_get_wtime();
+#else
+  struct timespec ts;
+  timespec_get(&ts, TIME_UTC);
+  return (double)ts.tv_sec + (double)ts.tv_nsec * 1e-9;
+#endif
+}
+
+static void load_timer_directives(double *max_runtime_sec,
+                                  double *max_stagnation_sec,
+                                  double *improve_eps) {
+  const char *s_timeout = getenv("ACO_SOLVER_TIMEOUT_SECONDS");
+  const char *s_stagnation = getenv("ACO_SOLVER_STAGNATION_SECONDS");
+  const char *s_eps = getenv("ACO_SOLVER_IMPROVE_EPS");
+
+  *max_runtime_sec = (s_timeout && *s_timeout) ? atof(s_timeout) : 0.0;
+  *max_stagnation_sec =
+      (s_stagnation && *s_stagnation) ? atof(s_stagnation) : 0.0;
+  *improve_eps = (s_eps && *s_eps) ? atof(s_eps) : ACO_EPS;
+
+  if (*improve_eps <= 0.0) {
+    *improve_eps = ACO_EPS;
+  }
 }
 
 /*
@@ -1005,16 +1033,23 @@ static void build_ant_solution(SeqWorkspace *ws, const SeqShared *shared, int K,
 }
 
 /*
- * Function:  aco_vrp
+ * Function:  aco_vrp_run_with_timer
  * ------------------
- * runs the sequential ACO solver for VRP.
+ * internal sequential solver routine with timer directives already resolved.
  */
-void aco_vrp(int n, int K, int m, int T, double **c, double alpha,
-             double beta, double rho, double tau0, double Q,
-             unsigned int seed, Solution *best_solution, double *best_cost) {
+static void aco_vrp_run_with_timer(int n, int K, int m, int T, double **c,
+                                   double alpha, double beta, double rho,
+                                   double tau0, double Q, unsigned int seed,
+                                   Solution *best_solution, double *best_cost,
+                                   double max_runtime_sec,
+                                   double max_stagnation_sec,
+                                   double improve_eps) {
   int total_m = m;
   if (total_m <= 0) {
     total_m = choose_auto_total_ants(n);
+  }
+  if (improve_eps <= 0.0) {
+    improve_eps = ACO_EPS;
   }
 
   double **tau = matrix_alloc(n);
@@ -1067,8 +1102,16 @@ void aco_vrp(int n, int K, int m, int T, double **c, double alpha,
   const double global_deposit_weight = 0.7;
   double tau_max = tau0;
   double tau_min = tau0 * 0.05;
+  double start_wall = wall_time_seconds();
+  double last_improvement_wall = start_wall;
 
   for (int iter = 0; iter < T; ++iter) {
+    double iter_start_wall = wall_time_seconds();
+    if (max_runtime_sec > 0.0 &&
+        (iter_start_wall - start_wall) >= max_runtime_sec) {
+      break;
+    }
+
     int stagnation_level =
         choose_stagnation_level(stagnation_iters, stagnation_trigger);
     int batch_size = choose_ant_batch_size(total_m, stagnation_level);
@@ -1129,10 +1172,13 @@ void aco_vrp(int n, int K, int m, int T, double **c, double alpha,
       iter_best_cost = solution_cost(iter_best, c);
     }
 
-    if (iter_best_cost < *best_cost) {
+    int improved_global = 0;
+    if (iter_best_cost < (*best_cost - improve_eps)) {
       *best_cost = iter_best_cost;
       solution_copy(best_solution, iter_best);
       stagnation_iters = 0;
+      improved_global = 1;
+      last_improvement_wall = wall_time_seconds();
 
       if (*best_cost > ACO_EPS) {
         tau_max = 1.0 / ((1.0 - rho) * (*best_cost));
@@ -1199,10 +1245,32 @@ void aco_vrp(int n, int K, int m, int T, double **c, double alpha,
         stagnation_iters = 0;
       }
     }
+
+    double iter_end_wall = wall_time_seconds();
+    if (max_runtime_sec > 0.0 &&
+        (iter_end_wall - start_wall) >= max_runtime_sec) {
+      break;
+    }
+    if (!improved_global && max_stagnation_sec > 0.0 &&
+        (iter_end_wall - last_improvement_wall) >= max_stagnation_sec) {
+      break;
+    }
   }
 
   seq_workspace_free(&ws);
   seq_shared_free(&shared);
   solution_free(iter_best);
   matrix_free(tau);
+}
+
+void aco_vrp(int n, int K, int m, int T, double **c, double alpha,
+             double beta, double rho, double tau0, double Q,
+             unsigned int seed, Solution *best_solution, double *best_cost) {
+  double max_runtime_sec = 0.0;
+  double max_stagnation_sec = 0.0;
+  double improve_eps = ACO_EPS;
+  load_timer_directives(&max_runtime_sec, &max_stagnation_sec, &improve_eps);
+  aco_vrp_run_with_timer(n, K, m, T, c, alpha, beta, rho, tau0, Q, seed,
+                         best_solution, best_cost, max_runtime_sec,
+                         max_stagnation_sec, improve_eps);
 }

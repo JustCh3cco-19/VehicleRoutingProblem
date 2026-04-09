@@ -1,3 +1,5 @@
+#define _POSIX_C_SOURCE 200809L
+
 #include "aco.h"
 #include "matrix.h"
 #include "solution.h"
@@ -405,6 +407,23 @@ static void print_command_line(FILE *out, int argc, char **argv) {
   fputc('\n', out);
 }
 
+static void apply_solver_timer_env(double timeout_s, double stagnation_s) {
+  char buf[64];
+  if (timeout_s > 0.0) {
+    snprintf(buf, sizeof(buf), "%.6f", timeout_s);
+    setenv("ACO_SOLVER_TIMEOUT_SECONDS", buf, 1);
+  } else {
+    unsetenv("ACO_SOLVER_TIMEOUT_SECONDS");
+  }
+
+  if (stagnation_s > 0.0) {
+    snprintf(buf, sizeof(buf), "%.6f", stagnation_s);
+    setenv("ACO_SOLVER_STAGNATION_SECONDS", buf, 1);
+  } else {
+    unsetenv("ACO_SOLVER_STAGNATION_SECONDS");
+  }
+}
+
 /*
  * Function:  main
  * ------------------------
@@ -425,6 +444,8 @@ int main(int argc, char **argv) {
   int c_max_n = 100000;
   int force = 0;
   int auto_ants = 1;
+  double solver_timeout_seconds = 0.0;
+  double solver_stagnation_seconds = 0.0;
 
   for (int i = 1; i < argc; ++i) {
     if (strcmp(argv[i], "--csv") == 0 && i + 1 < argc) {
@@ -449,9 +470,25 @@ int main(int argc, char **argv) {
       auto_ants = 1;
     } else if (strcmp(argv[i], "--fixed-ants") == 0) {
       auto_ants = 0;
+    } else if (strcmp(argv[i], "--solver-timeout-seconds") == 0 &&
+               i + 1 < argc) {
+      solver_timeout_seconds = atof(argv[++i]);
+      if (solver_timeout_seconds <= 0.0) {
+        fprintf(stderr,
+                "invalid --solver-timeout-seconds, expected positive number.\n");
+        return 1;
+      }
+    } else if (strcmp(argv[i], "--solver-stagnation-seconds") == 0 &&
+               i + 1 < argc) {
+      solver_stagnation_seconds = atof(argv[++i]);
+      if (solver_stagnation_seconds <= 0.0) {
+        fprintf(stderr,
+                "invalid --solver-stagnation-seconds, expected positive number.\n");
+        return 1;
+      }
     } else {
       fprintf(stderr,
-              "usage: %s [--csv PATH] [--input-log PATH] [--memory-utilization X] [--c-max-n N] [--force] [--auto-ants|--fixed-ants]\n",
+              "usage: %s [--csv PATH] [--input-log PATH] [--memory-utilization X] [--c-max-n N] [--force] [--auto-ants|--fixed-ants] [--solver-timeout-seconds X] [--solver-stagnation-seconds X]\n",
               argv[0]);
       return 1;
     }
@@ -497,6 +534,9 @@ int main(int argc, char **argv) {
   printf("[INFO] c_max_n              : %d\n\n", c_max_n);
   printf("[INFO] ants_mode            : %s\n\n",
          auto_ants ? "auto(solver,m=0)" : "fixed(scenario)");
+  printf("[INFO] solver_timeout_s     : %.2f\n", solver_timeout_seconds);
+  printf("[INFO] solver_stagnation_s  : %.2f\n\n",
+         solver_stagnation_seconds);
   printf("[INFO] csv_path             : %s\n", csv_path);
   printf("[INFO] input_log_path       : %s\n", input_log_path);
   printf("[INFO] command              : ");
@@ -511,9 +551,13 @@ int main(int argc, char **argv) {
   fprintf(input_log, "c_max_n=%d\n", c_max_n);
   fprintf(input_log, "force=%d\n", force);
   fprintf(input_log, "auto_ants=%d\n", auto_ants);
+  fprintf(input_log, "solver_timeout_seconds=%.6f\n", solver_timeout_seconds);
+  fprintf(input_log, "solver_stagnation_seconds=%.6f\n",
+          solver_stagnation_seconds);
   fprintf(input_log, "available_mem_gib=%.4f\n", bytes_to_gib(available));
   fprintf(input_log, "threshold_gib=%.4f\n\n", bytes_to_gib(threshold));
   fflush(input_log);
+  apply_solver_timer_env(solver_timeout_seconds, solver_stagnation_seconds);
 
   Scenario scenarios[24];
   int total = 0;

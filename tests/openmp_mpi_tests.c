@@ -1,3 +1,5 @@
+#define _POSIX_C_SOURCE 200809L
+
 #include "aco.h"
 #include "matrix.h"
 #include "solution.h"
@@ -520,6 +522,23 @@ static void print_command_line(FILE *out, int argc, char **argv) {
   fputc('\n', out);
 }
 
+static void apply_solver_timer_env(double timeout_s, double stagnation_s) {
+  char buf[64];
+  if (timeout_s > 0.0) {
+    snprintf(buf, sizeof(buf), "%.6f", timeout_s);
+    setenv("ACO_SOLVER_TIMEOUT_SECONDS", buf, 1);
+  } else {
+    unsetenv("ACO_SOLVER_TIMEOUT_SECONDS");
+  }
+
+  if (stagnation_s > 0.0) {
+    snprintf(buf, sizeof(buf), "%.6f", stagnation_s);
+    setenv("ACO_SOLVER_STAGNATION_SECONDS", buf, 1);
+  } else {
+    unsetenv("ACO_SOLVER_STAGNATION_SECONDS");
+  }
+}
+
 /*
  * Function:  main
  * ------------------------
@@ -553,6 +572,8 @@ int main(int argc, char **argv) {
   int resume = 0;
   int reset_checkpoint = 0;
   int only_n = -1;
+  double solver_timeout_seconds = 0.0;
+  double solver_stagnation_seconds = 0.0;
 
   for (int i = 1; i < argc; ++i) {
     if (strcmp(argv[i], "--csv") == 0 && i + 1 < argc) {
@@ -619,10 +640,32 @@ int main(int argc, char **argv) {
         MPI_Finalize();
         return 1;
       }
+    } else if (strcmp(argv[i], "--solver-timeout-seconds") == 0 &&
+               i + 1 < argc) {
+      solver_timeout_seconds = atof(argv[++i]);
+      if (solver_timeout_seconds <= 0.0) {
+        if (rank == 0) {
+          fprintf(stderr,
+                  "invalid --solver-timeout-seconds, expected positive number.\n");
+        }
+        MPI_Finalize();
+        return 1;
+      }
+    } else if (strcmp(argv[i], "--solver-stagnation-seconds") == 0 &&
+               i + 1 < argc) {
+      solver_stagnation_seconds = atof(argv[++i]);
+      if (solver_stagnation_seconds <= 0.0) {
+        if (rank == 0) {
+          fprintf(stderr,
+                  "invalid --solver-stagnation-seconds, expected positive number.\n");
+        }
+        MPI_Finalize();
+        return 1;
+      }
     } else {
       if (rank == 0) {
         fprintf(stderr,
-          "usage: %s [--csv PATH] [--input-log PATH] [--checkpoint PATH] [--resume] [--reset-checkpoint] [--memory-utilization X] [--time-budget-minutes X] [--estimate-safety X] [--c-max-n N] [--enforce-c-max-n] [--force] [--auto-ants|--fixed-ants] [--only-n N]\n",
+          "usage: %s [--csv PATH] [--input-log PATH] [--checkpoint PATH] [--resume] [--reset-checkpoint] [--memory-utilization X] [--time-budget-minutes X] [--estimate-safety X] [--c-max-n N] [--enforce-c-max-n] [--force] [--auto-ants|--fixed-ants] [--only-n N] [--solver-timeout-seconds X] [--solver-stagnation-seconds X]\n",
                 argv[0]);
       }
       MPI_Finalize();
@@ -703,6 +746,9 @@ int main(int argc, char **argv) {
     printf("[INFO] resume               : %s\n\n", resume ? "yes" : "no");
     printf("[INFO] reset_checkpoint     : %s\n\n",
            reset_checkpoint ? "yes" : "no");
+    printf("[INFO] solver_timeout_s     : %.2f\n", solver_timeout_seconds);
+    printf("[INFO] solver_stagnation_s  : %.2f\n\n",
+           solver_stagnation_seconds);
     printf("[INFO] enforce_c_max_n      : %s\n", enforce_c_max_n ? "yes" : "no");
     printf("[INFO] csv_path             : %s\n", csv_path);
     printf("[INFO] input_log_path       : %s\n", input_log_path);
@@ -733,6 +779,9 @@ int main(int argc, char **argv) {
     fprintf(input_log, "resume=%d\n", resume);
     fprintf(input_log, "reset_checkpoint=%d\n", reset_checkpoint);
     fprintf(input_log, "only_n=%d\n", only_n);
+    fprintf(input_log, "solver_timeout_seconds=%.6f\n", solver_timeout_seconds);
+    fprintf(input_log, "solver_stagnation_seconds=%.6f\n",
+            solver_stagnation_seconds);
     fprintf(input_log, "available_mem_gib=%.4f\n", bytes_to_gib(available));
     fprintf(input_log, "threshold_gib=%.4f\n\n", bytes_to_gib(threshold));
     fflush(input_log);
@@ -783,6 +832,7 @@ int main(int argc, char **argv) {
   cp.skipped_count = cp_i[2];
   cp.failed_count = cp_i[3];
   cp.total_elapsed = cp_elapsed;
+  apply_solver_timer_env(solver_timeout_seconds, solver_stagnation_seconds);
 
   if (rank == 0 && resume) {
     printf("[INFO] resume_next_index    : %d\n", cp.next_index);

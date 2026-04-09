@@ -170,6 +170,12 @@ typedef struct {
  *  best_solution: output best solution container
  *  best_cost: output best cost
  *
+ *  Timer directives (optional, via environment variables):
+ *  - ACO_SOLVER_TIMEOUT_SECONDS: hard timeout in seconds (<=0 disables)
+ *  - ACO_SOLVER_STAGNATION_SECONDS: stop after no improvement for N seconds
+ *    (<=0 disables)
+ *  - ACO_SOLVER_IMPROVE_EPS: minimum delta to count as an improvement
+ *
  *  returns: nothing; on allocation/synchronization errors the function returns
  *           early and leaves partial progress only
  */
