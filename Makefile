@@ -10,6 +10,7 @@ PERF_FLAGS?=
 LIBS=-lm
 NVCC?=$(if $(wildcard /usr/local/cuda-12.8/bin/nvcc),/usr/local/cuda-12.8/bin/nvcc,nvcc)
 CUDA_ARCH?=sm_120
+CUDA_VARIANT?=v2
 NVCC_FLAGS=-Iinclude -O3 -std=c++17
 CUDA_ARCH_FLAG=$(if $(strip $(CUDA_ARCH)),-arch=$(CUDA_ARCH),)
 COVERAGE_FLAGS=-g --coverage
@@ -32,14 +33,16 @@ ACO_SHARED_SRC=$(COMMON_DIR)/aco_shared.c
 SOLUTION_SRC=$(COMMON_DIR)/solution.c
 MATRIX_SRC=$(COMMON_DIR)/matrix.c
 INSTANCE_PARSER_SRC=$(COMMON_DIR)/instance_parser.c
+LOCAL_SEARCH_SRC=$(COMMON_DIR)/local_search.c
 
 SEQ_OBJ=$(SEQ_DIR)/aco_sequential.o
 ACO_SHARED_OBJ=$(COMMON_DIR)/aco_shared.o
 SOLUTION_OBJ=$(COMMON_DIR)/solution.o
 MATRIX_OBJ=$(COMMON_DIR)/matrix.o
 INSTANCE_PARSER_OBJ=$(COMMON_DIR)/instance_parser.o
+LOCAL_SEARCH_OBJ=$(COMMON_DIR)/local_search.o
 
-OBJ=src/main.o $(SEQ_OBJ) $(ACO_SHARED_OBJ) $(SOLUTION_OBJ) $(MATRIX_OBJ) $(INSTANCE_PARSER_OBJ)
+OBJ=src/main.o $(SEQ_OBJ) $(ACO_SHARED_OBJ) $(SOLUTION_OBJ) $(MATRIX_OBJ) $(INSTANCE_PARSER_OBJ) $(LOCAL_SEARCH_OBJ)
 
 SEQUENTIAL_TESTS_SRC=tests/sequential_tests.c
 SEQUENTIAL_TESTS_OBJ=tests/sequential_tests.o
@@ -61,12 +64,12 @@ OPENMP_MPI_BIN=aco_vrp_openmp_mpi.out
 OPENMP_MPI_SRC=src/main.c $(PAR_SRC) $(ACO_SHARED_SRC) $(SOLUTION_SRC) $(MATRIX_SRC) $(INSTANCE_PARSER_SRC)
 CUDA_BIN=aco_vrp_cuda.out
 CUDA_MAIN_SRC=src/cuda/main_vrp.cu
-CUDA_ACO_SRC=src/cuda/aco_cuda_v1.cu
-CUDA_KERNELS_SRC=src/cuda/aco_cuda_v1_kernels.cu
+CUDA_ACO_SRC=src/cuda/aco_cuda_$(CUDA_VARIANT).cu
+CUDA_KERNELS_SRC=src/cuda/aco_cuda_$(CUDA_VARIANT)_kernels.cu
 CUDA_MAIN_OBJ=src/cuda/main_vrp.o
-CUDA_ACO_OBJ=src/cuda/aco_cuda_v1.o
-CUDA_KERNELS_OBJ=src/cuda/aco_cuda_v1_kernels.o
-CUDA_COMMON_OBJ=$(SOLUTION_OBJ) $(MATRIX_OBJ)
+CUDA_ACO_OBJ=src/cuda/aco_cuda_$(CUDA_VARIANT).o
+CUDA_KERNELS_OBJ=src/cuda/aco_cuda_$(CUDA_VARIANT)_kernels.o
+CUDA_COMMON_OBJ=$(SOLUTION_OBJ) $(MATRIX_OBJ) $(LOCAL_SEARCH_OBJ)
 CUDA_OBJ=$(CUDA_MAIN_OBJ) $(CUDA_ACO_OBJ) $(CUDA_KERNELS_OBJ) $(CUDA_COMMON_OBJ) $(INSTANCE_PARSER_OBJ)
 MPI_NP=2
 MPI_OMP_THREADS=2
@@ -97,7 +100,7 @@ SOLVE_CLIENTS?=
 SOLVE_MPI_RANKS?=2
 SOLVE_MPI_OMP_THREADS?=2
 SOLVE_CUDA_IMPROVEMENT?=0.001
-SOLVE_CUDA_VARIANT?=v1
+SOLVE_CUDA_VARIANT?=$(CUDA_VARIANT)
 SOLVE_SEQ_RUNTIME_EFFECTIVE=$(if $(strip $(SOLVE_SEQ_RUNTIME)),$(SOLVE_SEQ_RUNTIME),$(SOLVE_SEQ_RUNTIME_S))
 
 GEN_INST_DIR?=instances/test_aligned
@@ -235,6 +238,9 @@ $(MATRIX_OBJ): $(MATRIX_SRC) include/matrix.h
 $(INSTANCE_PARSER_OBJ): $(INSTANCE_PARSER_SRC) include/instance_parser.h include/matrix.h
 	$(CC) $(EXTRA_FLAGS) $(FLAGS) $(FORCE_OPT) $(PERF_FLAGS) -c $< -o $@
 
+$(LOCAL_SEARCH_OBJ): $(LOCAL_SEARCH_SRC) include/local_search.h include/aco.h include/solution.h
+	$(CC) $(EXTRA_FLAGS) $(FLAGS) $(FORCE_OPT) $(PERF_FLAGS) -c $< -o $@
+
 $(BIN): $(OBJ)
 	$(CC) $(EXTRA_FLAGS) $(FLAGS) $(FORCE_OPT) $(PERF_FLAGS) $^ $(LIBS) -o $@
 
@@ -260,10 +266,10 @@ cuda: $(CUDA_BIN)
 $(CUDA_MAIN_OBJ): $(CUDA_MAIN_SRC) include/aco.h include/instance_parser.h include/matrix.h include/solution.h
 	$(NVCC) $(NVCC_FLAGS) $(CUDA_ARCH_FLAG) -c $< -o $@
 
-$(CUDA_ACO_OBJ): $(CUDA_ACO_SRC) include/aco.h include/aco_cuda_v1_kernels.h include/matrix.h include/solution.h
+$(CUDA_ACO_OBJ): $(CUDA_ACO_SRC) include/aco.h include/aco_cuda_$(CUDA_VARIANT)_kernels.h include/matrix.h include/solution.h include/local_search.h
 	$(NVCC) $(NVCC_FLAGS) $(CUDA_ARCH_FLAG) -c $< -o $@
 
-$(CUDA_KERNELS_OBJ): $(CUDA_KERNELS_SRC) include/aco_cuda_v1_kernels.h
+$(CUDA_KERNELS_OBJ): $(CUDA_KERNELS_SRC) include/aco_cuda_$(CUDA_VARIANT)_kernels.h
 	$(NVCC) $(NVCC_FLAGS) $(CUDA_ARCH_FLAG) -c $< -o $@
 
 $(CUDA_BIN): $(CUDA_OBJ)
@@ -388,11 +394,12 @@ solve_seq: solve_prepare all
 		if [ "$(SOLVE_SEQ_M)" -gt 0 ]; then m_run="$(SOLVE_SEQ_M)"; fi; \
 		if [ "$(SOLVE_SEQ_T)" -gt 0 ]; then T_run="$(SOLVE_SEQ_T)"; fi; \
 		sol_file="$$sol_dir/$${name}_seq_solution.txt"; \
-		start_ns=$$(date +%s%N); \
-		out=$$(ACO_SOLVER_TIMEOUT_SECONDS="$(SOLVE_SEQ_RUNTIME_EFFECTIVE)" ACO_SOLVER_STAGNATION_ITERS="$(SOLVE_SEQ_STAGNATION_ITERS)" ./aco_vrp_seq.out "$$instance_path" "$$K" "$$m_run" "$$T_run" "$$solver_seed" 2>&1); \
+		time_file=$$(mktemp); \
+		out=$$(/usr/bin/time -f "%e" -o "$$time_file" env ACO_SOLVER_TIMEOUT_SECONDS="$(SOLVE_SEQ_RUNTIME_EFFECTIVE)" ACO_SOLVER_STAGNATION_ITERS="$(SOLVE_SEQ_STAGNATION_ITERS)" ./aco_vrp_seq.out "$$instance_path" "$$K" "$$m_run" "$$T_run" "$$solver_seed" 2>&1); \
 		rc=$$?; \
-		end_ns=$$(date +%s%N); \
-		elapsed=$$(awk "BEGIN {printf \"%.6f\", ($$end_ns-$$start_ns)/1000000000}"); \
+		elapsed=$$(cat "$$time_file" 2>/dev/null); \
+		rm -f "$$time_file"; \
+		[ -n "$$elapsed" ] || elapsed=""; \
 		printf '%s\n' "$$out" > "$$sol_file"; \
 		if [ $$rc -eq 0 ]; then \
 			cost=$$(printf '%s\n' "$$out" | sed -n 's/^best cost: //p' | tail -n1); \
@@ -413,11 +420,12 @@ solve_cuda: solve_prepare cuda
 			| { if [ -n "$(SOLVE_CLIENTS)" ]; then awk -F, -v list="$(SOLVE_CLIENTS)" 'BEGIN{split(list,a,","); for(i in a) wanted[a[i]]=1} ($$4 in wanted)'; else cat; fi; } \
 			| { if [ "$(SOLVE_LIMIT)" -gt 0 ]; then head -n "$(SOLVE_LIMIT)"; else cat; fi; } ) | while IFS=, read -r profile name instance_path n K m T solver_seed instance_seed layout_id capacity_formula; do \
 			sol_file="$$sol_dir/$${name}_cuda_$(SOLVE_CUDA_VARIANT)_solution.txt"; \
-			start_ns=$$(date +%s%N); \
-			out=$$(ACO_SOLVER_TIMEOUT_SECONDS="$(SOLVE_SEQ_RUNTIME_EFFECTIVE)" ACO_SOLVER_STAGNATION_ITERS="$(SOLVE_SEQ_STAGNATION_ITERS)" ./aco_vrp_cuda.out "$$instance_path" "$$K" "$$m" "$$T" "$$solver_seed" 2>&1); \
+			time_file=$$(mktemp); \
+			out=$$(/usr/bin/time -f "%e" -o "$$time_file" env ACO_SOLVER_TIMEOUT_SECONDS="$(SOLVE_SEQ_RUNTIME_EFFECTIVE)" ACO_SOLVER_STAGNATION_ITERS="$(SOLVE_SEQ_STAGNATION_ITERS)" ./aco_vrp_cuda.out "$$instance_path" "$$K" "$$m" "$$T" "$$solver_seed" 2>&1); \
 			rc=$$?; \
-			end_ns=$$(date +%s%N); \
-		elapsed=$$(awk "BEGIN {printf \"%.6f\", ($$end_ns-$$start_ns)/1000000000}"); \
+			elapsed=$$(cat "$$time_file" 2>/dev/null); \
+			rm -f "$$time_file"; \
+		[ -n "$$elapsed" ] || elapsed=""; \
 		printf '%s\n' "$$out" > "$$sol_file"; \
 		if [ $$rc -eq 0 ]; then \
 			cost=$$(printf '%s\n' "$$out" | sed -n -e 's/^best cost: //p' -e 's/^Final Best Cost: //p' | tail -n1); \
@@ -436,14 +444,15 @@ solve_mpi: solve_prepare openmp_mpi
 	echo "name,profile,instance_path,n,K,m,T,solver_seed,instance_seed,layout_id,status,elapsed_s,best_cost,error" > "$$csv"; \
 	( tail -n +2 "$(SOLVE_MANIFEST_MPI)" \
 		| { if [ -n "$(SOLVE_CLIENTS)" ]; then awk -F, -v list="$(SOLVE_CLIENTS)" 'BEGIN{split(list,a,","); for(i in a) wanted[a[i]]=1} ($$4 in wanted)'; else cat; fi; } \
-		| { if [ "$(SOLVE_LIMIT)" -gt 0 ]; then head -n "$(SOLVE_LIMIT)"; else cat; fi; } ) | while IFS=, read -r profile name instance_path n K m T solver_seed instance_seed layout_id capacity_formula; do \
-		sol_file="$$sol_dir/$${name}_mpi_solution.txt"; \
-		start_ns=$$(date +%s%N); \
-		out=$$(ACO_SOLVER_TIMEOUT_SECONDS="$(SOLVE_MPI_RUNTIME_S)" ACO_SOLVER_STAGNATION_ITERS="$(SOLVE_MPI_STAGNATION_ITERS)" OMP_NUM_THREADS="$(SOLVE_MPI_OMP_THREADS)" mpirun -np "$(SOLVE_MPI_RANKS)" ./aco_vrp_openmp_mpi.out "$$instance_path" "$$K" "$$m" "$$T" "$$solver_seed" </dev/null 2>&1); \
-		rc=$$?; \
-		end_ns=$$(date +%s%N); \
-		elapsed=$$(awk "BEGIN {printf \"%.6f\", ($$end_ns-$$start_ns)/1000000000}"); \
-		printf '%s\n' "$$out" > "$$sol_file"; \
+			| { if [ "$(SOLVE_LIMIT)" -gt 0 ]; then head -n "$(SOLVE_LIMIT)"; else cat; fi; } ) | while IFS=, read -r profile name instance_path n K m T solver_seed instance_seed layout_id capacity_formula; do \
+			sol_file="$$sol_dir/$${name}_mpi_solution.txt"; \
+			time_file=$$(mktemp); \
+			out=$$(/usr/bin/time -f "%e" -o "$$time_file" env ACO_SOLVER_TIMEOUT_SECONDS="$(SOLVE_MPI_RUNTIME_S)" ACO_SOLVER_STAGNATION_ITERS="$(SOLVE_MPI_STAGNATION_ITERS)" OMP_NUM_THREADS="$(SOLVE_MPI_OMP_THREADS)" mpirun -np "$(SOLVE_MPI_RANKS)" ./aco_vrp_openmp_mpi.out "$$instance_path" "$$K" "$$m" "$$T" "$$solver_seed" </dev/null 2>&1); \
+			rc=$$?; \
+			elapsed=$$(cat "$$time_file" 2>/dev/null); \
+			rm -f "$$time_file"; \
+			[ -n "$$elapsed" ] || elapsed=""; \
+			printf '%s\n' "$$out" > "$$sol_file"; \
 		if [ $$rc -eq 0 ]; then \
 			cost=$$(printf '%s\n' "$$out" | sed -n 's/^best cost: //p' | tail -n1); \
 			echo "$$name,$$profile,$$instance_path,$$n,$$K,$$m,$$T,$$solver_seed,$$instance_seed,$$layout_id,ok,$$elapsed,$$cost," >> "$$csv"; \

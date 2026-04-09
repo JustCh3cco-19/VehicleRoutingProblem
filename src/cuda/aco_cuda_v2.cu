@@ -4,7 +4,7 @@ extern "C" {
 #include "solution.h"
 }
 
-#include "aco_cuda_v1_kernels.h"
+#include "aco_cuda_v2_kernels.h"
 
 #include <cuda_runtime.h>
 #include <float.h>
@@ -85,7 +85,7 @@ static float *flatten_costs_float(double **c, int n) {
   return flat;
 }
 
-static int select_iter_best_host(const CudaV1AntSummary *summary, int m,
+static int select_iter_best_host(const CudaV2AntSummary *summary, int m,
                                  int *best_idx, float *best_cost) {
   int found = 0;
   int idx = -1;
@@ -209,7 +209,7 @@ int aco_vrp_cuda(int n, int K, int m, int T, double **c, double alpha,
                  double beta, double rho, double tau0, double Q,
                  unsigned int seed, Solution *best_solution,
                  double *best_cost) {
-  CudaV1Params params;
+  CudaV2Params params;
   double max_runtime_sec = 0.0;
   int max_stagnation_iters = 0;
   double improve_eps = ACO_EPS;
@@ -223,7 +223,7 @@ int aco_vrp_cuda(int n, int K, int m, int T, double **c, double alpha,
   int side;
   size_t matrix_elems;
   float *h_costs = NULL;
-  CudaV1AntSummary *h_ant_summary = NULL;
+  CudaV2AntSummary *h_ant_summary = NULL;
   int *h_routes = NULL;
   int *h_route_lengths = NULL;
   float *d_costs = NULL;
@@ -236,7 +236,7 @@ int aco_vrp_cuda(int n, int K, int m, int T, double **c, double alpha,
   int *d_curr_nodes = NULL;
   uint64_t *d_visited = NULL;
   unsigned int *d_rng_states = NULL;
-  CudaV1AntSummary *d_ant_summary = NULL;
+  CudaV2AntSummary *d_ant_summary = NULL;
   Solution *iter_best_solution = NULL;
   int iter;
   int status = 1;
@@ -272,7 +272,7 @@ int aco_vrp_cuda(int n, int K, int m, int T, double **c, double alpha,
 
   h_costs = flatten_costs_float(c, n);
   h_ant_summary =
-      (CudaV1AntSummary *)malloc((size_t)total_m * sizeof(*h_ant_summary));
+      (CudaV2AntSummary *)malloc((size_t)total_m * sizeof(*h_ant_summary));
   h_routes = (int *)malloc((size_t)total_m * (size_t)K * (size_t)route_stride *
                            sizeof(int));
   h_route_lengths =
@@ -281,7 +281,7 @@ int aco_vrp_cuda(int n, int K, int m, int T, double **c, double alpha,
 
   if (!h_costs || !h_ant_summary || !h_routes || !h_route_lengths ||
       !iter_best_solution) {
-    fprintf(stderr, "cuda v1: host allocation failure\n");
+    fprintf(stderr, "cuda v2: host allocation failure\n");
     goto cleanup;
   }
 
@@ -310,20 +310,20 @@ int aco_vrp_cuda(int n, int K, int m, int T, double **c, double alpha,
       cudaMalloc((void **)&d_rng_states,
                  (size_t)total_m * sizeof(unsigned int)) != cudaSuccess ||
       cudaMalloc((void **)&d_ant_summary,
-                 (size_t)total_m * sizeof(CudaV1AntSummary)) != cudaSuccess) {
-    fprintf(stderr, "cuda v1: device allocation failure\n");
+                 (size_t)total_m * sizeof(CudaV2AntSummary)) != cudaSuccess) {
+    fprintf(stderr, "cuda v2: device allocation failure\n");
     goto cleanup;
   }
 
   CHECK_CUDA(cudaMemcpy(d_costs, h_costs, matrix_elems * sizeof(float),
                         cudaMemcpyHostToDevice));
 
-  launch_build_candidate_lists_v1(d_costs, d_candidate_idx, d_eta_beta, n,
+  launch_build_candidate_lists_v2(d_costs, d_candidate_idx, d_eta_beta, n,
                                   cand_k, (float)beta);
   CHECK_CUDA(cudaGetLastError());
   CHECK_CUDA(cudaDeviceSynchronize());
 
-  launch_init_tau_v1(d_tau, n, (float)tau0);
+  launch_init_tau_v2(d_tau, n, (float)tau0);
   CHECK_CUDA(cudaGetLastError());
   CHECK_CUDA(cudaDeviceSynchronize());
 
@@ -342,12 +342,12 @@ int aco_vrp_cuda(int n, int K, int m, int T, double **c, double alpha,
       break;
     }
 
-    launch_reset_ant_state_v1(d_routes, d_route_lengths, d_route_loads,
+    launch_reset_ant_state_v2(d_routes, d_route_lengths, d_route_loads,
                               d_curr_nodes, d_visited, d_rng_states,
                               d_ant_summary, params, seed + (unsigned int)iter);
     CHECK_CUDA(cudaGetLastError());
 
-    launch_construct_solutions_v1(d_costs, d_tau, d_candidate_idx, d_eta_beta,
+    launch_construct_solutions_v2(d_costs, d_tau, d_candidate_idx, d_eta_beta,
                                   d_routes, d_route_lengths, d_route_loads,
                                   d_curr_nodes, d_visited, d_rng_states,
                                   d_ant_summary, params);
@@ -355,7 +355,7 @@ int aco_vrp_cuda(int n, int K, int m, int T, double **c, double alpha,
     CHECK_CUDA(cudaDeviceSynchronize());
 
     CHECK_CUDA(cudaMemcpy(h_ant_summary, d_ant_summary,
-                          (size_t)total_m * sizeof(CudaV1AntSummary),
+                          (size_t)total_m * sizeof(CudaV2AntSummary),
                           cudaMemcpyDeviceToHost));
 
     if (!select_iter_best_host(h_ant_summary, total_m, &iter_best_idx,
@@ -378,13 +378,13 @@ int aco_vrp_cuda(int n, int K, int m, int T, double **c, double alpha,
 
     if (!copy_ant_to_solution(h_routes, h_route_lengths, K, route_stride,
                               iter_best_idx, iter_best_solution)) {
-      fprintf(stderr, "cuda v1: failed to copy iter best solution\n");
+      fprintf(stderr, "cuda v2: failed to copy iter best solution\n");
       goto cleanup;
     }
 
     if (!validate_cuda_solution(iter_best_solution, n, K, cap, errbuf,
                                 sizeof(errbuf))) {
-      fprintf(stderr, "cuda v1: invalid iter best solution: %s\n", errbuf);
+      fprintf(stderr, "cuda v2: invalid iter best solution: %s\n", errbuf);
       goto cleanup;
     }
 
@@ -401,17 +401,17 @@ int aco_vrp_cuda(int n, int K, int m, int T, double **c, double alpha,
       ++no_improve_iters;
     }
 
-    launch_evaporate_tau_v1(d_tau, n, (float)rho);
+    launch_evaporate_tau_v2(d_tau, n, (float)rho);
     CHECK_CUDA(cudaGetLastError());
 
-    launch_deposit_solution_v1(
+    launch_deposit_solution_v2(
         d_tau,
         d_routes + ((size_t)iter_best_idx * (size_t)K * (size_t)route_stride),
         d_route_lengths + ((size_t)iter_best_idx * (size_t)K), K, route_stride,
         n, (float)(Q / (double)iter_best_cost_f));
     CHECK_CUDA(cudaGetLastError());
 
-    launch_clamp_tau_v1(d_tau, n, params.tau_min, params.tau_max);
+    launch_clamp_tau_v2(d_tau, n, params.tau_min, params.tau_max);
     CHECK_CUDA(cudaGetLastError());
     CHECK_CUDA(cudaDeviceSynchronize());
 
