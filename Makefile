@@ -29,11 +29,13 @@ PAR_SRC=$(PAR_DIR)/aco_parallel.c
 ACO_SHARED_SRC=$(COMMON_DIR)/aco_shared.c
 SOLUTION_SRC=$(COMMON_DIR)/solution.c
 MATRIX_SRC=$(COMMON_DIR)/matrix.c
+INSTANCE_PARSER_SRC=$(COMMON_DIR)/instance_parser.c
 
 SEQ_OBJ=$(SEQ_DIR)/aco_sequential.o
 ACO_SHARED_OBJ=$(COMMON_DIR)/aco_shared.o
 SOLUTION_OBJ=$(COMMON_DIR)/solution.o
 MATRIX_OBJ=$(COMMON_DIR)/matrix.o
+INSTANCE_PARSER_OBJ=$(COMMON_DIR)/instance_parser.o
 
 OBJ=src/main.o $(SEQ_OBJ) $(ACO_SHARED_OBJ) $(SOLUTION_OBJ) $(MATRIX_OBJ)
 
@@ -63,9 +65,7 @@ CUDA_MAIN_OBJ=src/cuda/main_vrp.o
 CUDA_ACO_OBJ=src/cuda/aco_cuda.o
 CUDA_KERNELS_OBJ=src/cuda/aco_cuda_kernels.o
 CUDA_COMMON_OBJ=$(SOLUTION_OBJ) $(MATRIX_OBJ)
-CUDA_PARSER_SRC=$(firstword $(wildcard src/common/instance_parser.c src/cuda/instance_parser.c src/instance_parser.c))
-CUDA_PARSER_OBJ=$(patsubst %.c,%.o,$(CUDA_PARSER_SRC))
-CUDA_OBJ=$(CUDA_MAIN_OBJ) $(CUDA_ACO_OBJ) $(CUDA_KERNELS_OBJ) $(CUDA_COMMON_OBJ) $(CUDA_PARSER_OBJ)
+CUDA_OBJ=$(CUDA_MAIN_OBJ) $(CUDA_ACO_OBJ) $(CUDA_KERNELS_OBJ) $(CUDA_COMMON_OBJ) $(INSTANCE_PARSER_OBJ)
 MPI_NP=2
 MPI_OMP_THREADS=2
 MPI_TEST_ARGS?=
@@ -147,6 +147,9 @@ $(SOLUTION_OBJ): $(SOLUTION_SRC) include/solution.h
 $(MATRIX_OBJ): $(MATRIX_SRC) include/matrix.h
 	$(CC) $(EXTRA_FLAGS) $(FLAGS) $(FORCE_OPT) $(PERF_FLAGS) -c $< -o $@
 
+$(INSTANCE_PARSER_OBJ): $(INSTANCE_PARSER_SRC) include/instance_parser.h include/matrix.h
+	$(CC) $(EXTRA_FLAGS) $(FLAGS) $(FORCE_OPT) $(PERF_FLAGS) -c $< -o $@
+
 $(BIN): $(OBJ)
 	$(CC) $(EXTRA_FLAGS) $(FLAGS) $(FORCE_OPT) $(PERF_FLAGS) $^ $(LIBS) -o $@
 
@@ -169,24 +172,17 @@ $(OPENMP_MPI_BIN): $(OPENMP_MPI_SRC) include/aco.h include/matrix.h include/solu
 
 cuda: $(CUDA_BIN)
 
-$(CUDA_MAIN_OBJ): $(CUDA_MAIN_SRC) include/acocopy.h include/instance_parser.h include/matrixcopy.h include/solutioncopy.h
+$(CUDA_MAIN_OBJ): $(CUDA_MAIN_SRC) include/aco.h include/instance_parser.h include/matrix.h include/solution.h
 	$(NVCC) $(NVCC_FLAGS) $(CUDA_ARCH_FLAG) -c $< -o $@
 
-$(CUDA_ACO_OBJ): $(CUDA_ACO_SRC) include/acocopy.h include/aco_cuda_kernels.h
+$(CUDA_ACO_OBJ): $(CUDA_ACO_SRC) include/aco.h include/aco_cuda_kernels.h include/matrix.h include/solution.h
 	$(NVCC) $(NVCC_FLAGS) $(CUDA_ARCH_FLAG) -c $< -o $@
 
 $(CUDA_KERNELS_OBJ): $(CUDA_KERNELS_SRC) include/aco_cuda_kernels.h
 	$(NVCC) $(NVCC_FLAGS) $(CUDA_ARCH_FLAG) -c $< -o $@
 
-$(CUDA_PARSER_OBJ): %.o: %.c
-	$(CC) $(EXTRA_FLAGS) $(FLAGS) $(FORCE_OPT) $(PERF_FLAGS) -c $< -o $@
-
 $(CUDA_BIN): $(CUDA_OBJ)
 	$(NVCC) $(CUDA_ARCH_FLAG) $^ -o $@
-	@if [ -z "$(CUDA_PARSER_SRC)" ]; then \
-		echo "[WARN] instance parser source not found (looked for src/common/instance_parser.c, src/cuda/instance_parser.c, src/instance_parser.c)"; \
-		echo "[WARN] Link may fail with undefined reference to vrp_load_tsplib_euc2d_matrix"; \
-	fi
 
 $(OPENMP_MPI_TESTS_BIN): $(OPENMP_MPI_TESTS_BUILD_SRC) include/aco.h include/matrix.h include/solution.h
 	$(MPICC) $(EXTRA_FLAGS) $(FLAGS) $(FORCE_OPT) $(PERF_FLAGS) $(OMPFLAG) -DUSE_MPI $(OPENMP_MPI_TESTS_BUILD_SRC) $(LIBS) -o $@

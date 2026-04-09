@@ -1,10 +1,14 @@
-#include "acocopy.h"
+extern "C" {
+#include "aco.h"
+#include "matrix.h"
+#include "solution.h"
+}
 #include "aco_cuda_kernels.h"
 #include <cuda_runtime.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <float.h>
-#include <chrono>
+#include <time.h>
 
 #define THREADS_PER_BLOCK 128
 
@@ -14,6 +18,12 @@
         fprintf(stderr, "CUDA Error in %s at line %d: %s\n", __FILE__, __LINE__, cudaGetErrorString(err)); \
         exit(EXIT_FAILURE); \
     } \
+}
+
+static double get_wall_time() {
+    struct timespec ts;
+    timespec_get(&ts, TIME_UTC);
+    return (double)ts.tv_sec + (double)ts.tv_nsec * 1e-9;
 }
 
 float* flatten_costs_float(double **c, int n) {
@@ -26,16 +36,17 @@ float* flatten_costs_float(double **c, int n) {
     return flat;
 }
 
-int aco_vrp_cuda(int n, int K, double timeout_minutes, double improvement_threshold,
+int aco_vrp_cuda(int n, int K, int m, double timeout_minutes, double improvement_threshold,
                  double **c, double alpha, double beta, double rho,
                  double tau0, double Q, unsigned int seed,
                  Solution *best_solution, double *best_cost) {
 
     cudaDeviceProp prop;
     CHECK_CUDA(cudaGetDeviceProperties(&prop, 0));
-    // Test con poche formiche per isolare il problema del timer
-    int m = 64; 
-    printf("[Init] GPU: %s, Ants: %d, Timeout: %.2f min\n", prop.name, m, timeout_minutes);
+    
+    // Se m=0, usiamo il compromesso ideale (64 formiche) per bilanciare occupancy e speed
+    int total_m = (m <= 0) ? 64 : m; 
+    printf("[Init] GPU: %s, Ants: %d, Timeout: %.2f min\n", prop.name, total_m, timeout_minutes);
 
     int size_n = (n + 1) * (n + 1);
     float *h_c_flat = flatten_costs_float(c, n);
@@ -44,12 +55,15 @@ int aco_vrp_cuda(int n, int K, double timeout_minutes, double improvement_thresh
     int *d_cand_list, *d_ant_routes;
     float *d_ant_costs;
 
+    int route_steps = n + 2;
+    int total_ant_steps = K * route_steps;
+
     CHECK_CUDA(cudaMalloc(&d_costs, size_n * sizeof(float)));
     CHECK_CUDA(cudaMalloc(&d_tau, size_n * sizeof(float)));
     CHECK_CUDA(cudaMalloc(&d_cand_list, (n + 1) * MAX_CANDIDATES * sizeof(int)));
     CHECK_CUDA(cudaMalloc(&d_cand_scores, (n + 1) * MAX_CANDIDATES * sizeof(float)));
-    CHECK_CUDA(cudaMalloc(&d_ant_costs, m * sizeof(float)));
-    CHECK_CUDA(cudaMalloc(&d_ant_routes, m * (n + 2 * K) * sizeof(int)));
+    CHECK_CUDA(cudaMalloc(&d_ant_costs, total_m * sizeof(float)));
+    CHECK_CUDA(cudaMalloc(&d_ant_routes, total_m * total_ant_steps * sizeof(int)));
 
     CHECK_CUDA(cudaMemcpy(d_costs, h_c_flat, size_n * sizeof(float), cudaMemcpyHostToDevice));
 
@@ -58,40 +72,42 @@ int aco_vrp_cuda(int n, int K, double timeout_minutes, double improvement_thresh
     CHECK_CUDA(cudaMemcpy(d_tau, h_tau_init, size_n * sizeof(float), cudaMemcpyHostToDevice));
     free(h_tau_init);
 
-    launch_setup_aco(d_costs, d_cand_list, n, 32);
+    int words_per_mask = (n + 1 + 31) / 32;
+    size_t shared_mem_size_setup = words_per_mask * sizeof(uint32_t);
+    launch_setup_aco(d_costs, d_cand_list, n, 32, shared_mem_size_setup);
     CHECK_CUDA(cudaDeviceSynchronize());
 
-    int words_per_mask = (n + 1 + 31) / 32;
     int warps_per_block = THREADS_PER_BLOCK / 32;
-    size_t shared_mem_size_k4 = warps_per_block * (words_per_mask * sizeof(uint32_t) + K * sizeof(VehicleState));
+    int words_per_vehicle = sizeof(VehicleState) / sizeof(uint32_t);
+    size_t shared_mem_size_k4 = warps_per_block * (words_per_mask + K * words_per_vehicle) * sizeof(uint32_t);
     size_t shared_mem_size_k2 = words_per_mask * sizeof(uint32_t);
 
     *best_cost = DBL_MAX;
     int no_improvement_count = 0;
-    float *h_ant_costs = (float*)malloc(m * sizeof(float));
+    float *h_ant_costs = (float*)malloc(total_m * sizeof(float));
     
-    auto start_time = std::chrono::steady_clock::now();
+    double start_time = get_wall_time();
     double timeout_seconds = timeout_minutes * 60.0;
     int iter = 0;
 
     printf("[Main] Loop start...\n");
 
     while (true) {
-        auto now = std::chrono::steady_clock::now();
-        double elapsed = std::chrono::duration<double>(now - start_time).count();
+        double now = get_wall_time();
+        double elapsed = now - start_time;
         
         if (elapsed >= timeout_seconds) {
             printf("\n[Main] TIMER TIMEOUT: %.2fs >= %.2fs. Exiting loop.\n", elapsed, timeout_seconds);
             break;
         }
 
-        CHECK_CUDA(cudaMemset(d_ant_routes, 0, m * (n + 2 * K) * sizeof(int)));
+        CHECK_CUDA(cudaMemset(d_ant_routes, 0, total_m * total_ant_steps * sizeof(int)));
 
         // K2
         launch_precompute_candidate_scores(d_tau, d_costs, d_cand_list, d_cand_scores, n, (float)alpha, (float)beta, 32, shared_mem_size_k2);
         
         // K4
-        launch_construct_solutions(m, K, n, (float)Q, seed + iter, d_costs, d_tau, (float)alpha, (float)beta, d_cand_list, d_cand_scores, d_ant_costs, d_ant_routes, THREADS_PER_BLOCK, shared_mem_size_k4);
+        launch_construct_solutions(total_m, K, n, (float)Q, seed + iter, d_costs, d_tau, (float)alpha, (float)beta, d_cand_list, d_cand_scores, d_ant_costs, d_ant_routes, THREADS_PER_BLOCK, shared_mem_size_k4);
 
         // Sincronizzazione critica per il timer
         cudaError_t sync_err = cudaDeviceSynchronize();
@@ -100,11 +116,11 @@ int aco_vrp_cuda(int n, int K, double timeout_minutes, double improvement_thresh
             break;
         }
 
-        CHECK_CUDA(cudaMemcpy(h_ant_costs, d_ant_costs, m * sizeof(float), cudaMemcpyDeviceToHost));
+        CHECK_CUDA(cudaMemcpy(h_ant_costs, d_ant_costs, total_m * sizeof(float), cudaMemcpyDeviceToHost));
         
         float iter_best = FLT_MAX;
         int iter_best_idx = -1;
-        for (int i = 0; i < m; i++) {
+        for (int i = 0; i < total_m; i++) {
             if (h_ant_costs[i] < iter_best) {
                 iter_best = h_ant_costs[i];
                 iter_best_idx = i;
@@ -113,37 +129,41 @@ int aco_vrp_cuda(int n, int K, double timeout_minutes, double improvement_thresh
 
         if (iter_best_idx != -1) {
             float deposit = (float)Q / iter_best;
-            launch_deposit_pheromones(d_tau, d_ant_routes + iter_best_idx * (n + 2 * K), n, K, deposit);
+            launch_deposit_pheromones(d_tau, d_ant_routes + iter_best_idx * total_ant_steps, n, K, deposit);
             
             if (iter_best < *best_cost) {
                 *best_cost = iter_best;
                 no_improvement_count = 0;
                 
-                // Aggiornamento soluzione host (solo se migliorata)
-                int total_steps = n + 2 * K;
-                int *h_best_ant_route = (int*)malloc(total_steps * sizeof(int));
-                CHECK_CUDA(cudaMemcpy(h_best_ant_route, d_ant_routes + iter_best_idx * total_steps, total_steps * sizeof(int), cudaMemcpyDeviceToHost));
+                // Aggiornamento soluzione host (sequenziale)
+                int *h_best_ant_routes = (int*)malloc(total_ant_steps * sizeof(int));
+                CHECK_CUDA(cudaMemcpy(h_best_ant_routes, d_ant_routes + iter_best_idx * total_ant_steps, total_ant_steps * sizeof(int), cudaMemcpyDeviceToHost));
                 
                 solution_reset(best_solution);
                 for (int v = 0; v < K; v++) {
                     Route *r = &best_solution->routes[v];
-                    r->len = 0; r->nodes[r->len++] = 0;
-                    for (int s = v; s < total_steps; s += K) {
-                        int node = h_best_ant_route[s];
-                        if (node > 0 && node <= n) r->nodes[r->len++] = node;
+                    r->len = 0; 
+                    r->nodes[r->len++] = 0;
+                    
+                    int route_offset = v * route_steps;
+                    for (int s = 0; s < route_steps; s++) {
+                        int node = h_best_ant_routes[route_offset + s];
+                        if (node > 0 && node <= n) {
+                            r->nodes[r->len++] = node;
+                        } else if (s > 0 && node == 0) {
+                            break;
+                        }
                     }
                     r->nodes[r->len++] = 0;
                 }
-                free(h_best_ant_route);
+                free(h_best_ant_routes);
             } else {
                 no_improvement_count++;
             }
         }
 
         // K5
-        int evaporate_threads = 256;
-        int evaporate_blocks = (size_n + evaporate_threads - 1) / evaporate_threads;
-        kernel_evaporate_pheromones<<<evaporate_blocks, evaporate_threads>>>(d_tau, (float)rho, size_n);
+        launch_evaporate_pheromones(d_tau, (float)rho, size_n, 256);
 
         // Print SEMPRE
         printf("Iter %d: Best = %.3f, Elapsed: %.2fs\n", iter, *best_cost, elapsed);
