@@ -72,6 +72,8 @@ MPI_TEST_ARGS?=
 CHECKPOINT_MODE?=fresh
 LIGHT_CHECKPOINT_PATH?=results/openmp_mpi_tests_light.checkpoint
 HEAVY_CHECKPOINT_PATH?=results/openmp_mpi_tests_heavy.checkpoint
+LIGHT_CP_FLAGS=--checkpoint $(LIGHT_CHECKPOINT_PATH) $(if $(filter resume,$(CHECKPOINT_MODE)),--resume,$(if $(filter reset,$(CHECKPOINT_MODE)),--reset-checkpoint,))
+HEAVY_CP_FLAGS=--checkpoint $(HEAVY_CHECKPOINT_PATH) $(if $(filter resume,$(CHECKPOINT_MODE)),--resume,$(if $(filter reset,$(CHECKPOINT_MODE)),--reset-checkpoint,))
 
 COVERAGE_FILES=src/*.gcno src/*.gcda src/seq/*.gcno src/seq/*.gcda src/openmp-mpi/*.gcno src/openmp-mpi/*.gcda src/common/*.gcno src/common/*.gcda tests/*.gcno tests/*.gcda
 LEGACY_BINARIES=aco_vrp_seq aco_vrp_hybrid aco_vrp_openmp_mpi tests/test tests/test_mpi tests/test_final tests/test_final.out tests/test_final_mpi.out tests/c_scaling_tests tests/c_scaling_tests.out
@@ -196,10 +198,10 @@ sequential_tests: $(SEQUENTIAL_TESTS_BIN)
 	$(call RUN_TEST_CMD,sequential_tests,./$(SEQUENTIAL_TESTS_BIN))
 
 openmp_mpi_tests: $(OPENMP_MPI_TESTS_BIN)
-	$(call RUN_TEST_CMD,openmp_mpi_tests,OMP_NUM_THREADS=$(MPI_OMP_THREADS) bash -lc 'cp_flags="--checkpoint $(LIGHT_CHECKPOINT_PATH)"; if [ "$(CHECKPOINT_MODE)" = "resume" ]; then cp_flags="$$cp_flags --resume"; elif [ "$(CHECKPOINT_MODE)" = "reset" ]; then cp_flags="$$cp_flags --reset-checkpoint"; fi; mpirun -np $(MPI_NP) ./$(OPENMP_MPI_TESTS_BIN) $$cp_flags $(MPI_TEST_ARGS)')
+	$(call RUN_TEST_CMD,openmp_mpi_tests,OMP_NUM_THREADS=$(MPI_OMP_THREADS) mpirun -np $(MPI_NP) ./$(OPENMP_MPI_TESTS_BIN) $(LIGHT_CP_FLAGS) $(MPI_TEST_ARGS))
 
 openmp_mpi_tests_heavy: $(OPENMP_MPI_TESTS_HEAVY_BIN)
-	$(call RUN_TEST_CMD,openmp_mpi_tests_heavy,OMP_NUM_THREADS=$(MPI_OMP_THREADS) bash -lc 'cp_flags="--checkpoint $(HEAVY_CHECKPOINT_PATH)"; if [ "$(CHECKPOINT_MODE)" = "resume" ]; then cp_flags="$$cp_flags --resume"; elif [ "$(CHECKPOINT_MODE)" = "reset" ]; then cp_flags="$$cp_flags --reset-checkpoint"; fi; mpirun -np $(MPI_NP) ./$(OPENMP_MPI_TESTS_HEAVY_BIN) $$cp_flags $(MPI_TEST_ARGS)')
+	$(call RUN_TEST_CMD,openmp_mpi_tests_heavy,OMP_NUM_THREADS=$(MPI_OMP_THREADS) mpirun -np $(MPI_NP) ./$(OPENMP_MPI_TESTS_HEAVY_BIN) $(HEAVY_CP_FLAGS) $(MPI_TEST_ARGS))
 
 openmp_mpi_tests_resume:
 	$(MAKE) openmp_mpi_tests CHECKPOINT_MODE=resume TEST_MODE=$(TEST_MODE) MPI_NP=$(MPI_NP) MPI_OMP_THREADS=$(MPI_OMP_THREADS) MPI_TEST_ARGS="$(MPI_TEST_ARGS)" LIGHT_CHECKPOINT_PATH="$(LIGHT_CHECKPOINT_PATH)"
