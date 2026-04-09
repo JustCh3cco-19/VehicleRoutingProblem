@@ -1,274 +1,197 @@
 # VehicleRoutingProblem
 
-Implementazione in C di Ant Colony Optimization (ACO) per Vehicle Routing Problem (VRP), con due eseguibili:
-- `aco_vrp_seq.out` (sequenziale)
-- `aco_vrp_openmp_mpi.out` (ibrido OpenMP + MPI)
-- `aco_vrp_cuda.out` (CUDA)
+Repository per risolvere istanze VRP con ACO usando 4 backend:
+- `pyvrp` (Python, riferimento)
+- `seq` (C sequenziale)
+- `openmp-mpi` (C + MPI/OpenMP)
+- `cuda` (CUDA)
 
-Il solver usa layout hardware-aware (matrici allineate 64-byte, candidate list per-rank, workspace persistente per-thread/per-run, MMAS bounds, sincronizzazione MPI per epoche).
+Questa guida è operativa: copia/incolla i comandi e ottieni CSV + route.
 
-## Requisiti
-- `gcc`
-- `make`
-- `mpicc` e `mpirun` (solo target MPI/OpenMP)
-- `python3` + `pandas`, `numpy`, `matplotlib` (report scaling)
-- `pyvrp` (solo confronto C vs PyVRP)
-- `sbatch` (opzionale, per esecuzione su cluster SLURM)
+## Requisiti minimi
+- `make`, `gcc`
+- `mpicc`, `mpirun` (solo MPI)
+- `nvcc` (solo CUDA)
+- `python3`
+- ambiente Python con `pyvrp` (se presente `VRP/bin/python`, il Makefile lo usa automaticamente)
 
-## Struttura progetto
-- `src/seq/aco_sequential.c`: solver ACO sequenziale
-- `src/openmp-mpi/aco_parallel.c`: solver ACO OpenMP+MPI
-- `src/common/matrix.c`: allocazione matrici dense allineate/paddate
-- `src/common/solution.c`: storage contiguo flat delle soluzioni
-- `tests/sequential_tests.c`: scaling progressivo C
-- `tests/openmp_mpi_tests.c`: scaling OpenMP+MPI light (fino a 16k clienti)
-- `tests/openmp_mpi_tests_heavy.c`: scaling OpenMP+MPI heavy (da 24k a 100k clienti)
-- `tests/openmp_mpi_scaling_report.py`: report/plot da CSV MPI
-- `tests/c_compare_case.c`: runner C single-scenario per confronto con PyVRP
-- `tests/pyvrp_compare.py`: confronto C vs PyVRP con gap su CSV
-- `scripts/run_openmp_mpi_tests.sbatch`: job batch SLURM
+## 1) Generare i problemi (dal Makefile)
+Default:
 
-## Build
-Sequenziale:
-```sh
-make
+```bash
+make generate_problems
 ```
 
-Ibrido OpenMP+MPI:
-```sh
-make openmp_mpi
+Questo comando crea:
+- `instances/test_aligned/*.vrp`
+- `instances/test_aligned/manifest.csv`
+- `instances/test_aligned/manifest_openmp_mpi.csv`
+
+Esempi utili:
+
+```bash
+# taglie custom
+make generate_problems GEN_CLIENTS=500,1000,4000,8000
+
+# capacità "illimitata" (usa --unlimited del generatore)
+make generate_problems GEN_CAPACITY_MODE=unlimited
+
+# output in una directory diversa
+make generate_problems GEN_INST_DIR=instances/my_batch GEN_SEED_BASE=25000
 ```
 
-CUDA:
-```sh
-make cuda
+Pulizia file generati:
+
+```bash
+make generate_clean
 ```
 
-CUDA con architettura esplicita (esempio):
-```sh
-make cuda CUDA_ARCH=sm_86
+Variabili generazione:
+- `GEN_INST_DIR=instances/test_aligned`
+- `GEN_CLIENTS=500,1000,2000,4000,8000,16000`
+- `GEN_SEED_BASE=19000`
+- `GEN_GRID=100`
+- `GEN_SOLVER_SEED=1234`
+- `GEN_CAPACITY_MODE=formula|unlimited`
+
+Colonne principali del manifest:
+- `n` = numero clienti
+- `K` = numero veicoli
+- `m` = formiche
+- `T` = iterazioni
+- `solver_seed` = seed solver
+
+## 2) Risolvere tutto (quick start)
+Esegui tutti i backend in una volta:
+
+```bash
+make solve_all
 ```
 
-Help Makefile:
-```sh
+Questo comando:
+1. legge i manifest
+2. lancia `pyvrp`, `seq`, `cuda`, `mpi`
+3. salva CSV risultati
+4. salva le route complete per ogni istanza/backend
+
+## 3) Eseguire solo una parte (filtro per clienti)
+Esempi:
+
+```bash
+# solo istanze con n=500 e n=1000
+make solve_all SOLVE_CLIENTS=500,1000
+
+# solo n=4000, con runtime pyvrp più alto
+make solve_pyvrp SOLVE_CLIENTS=4000 SOLVE_PYVRP_RUNTIME_S=30
+
+# prime 3 istanze dopo il filtro
+make solve_seq SOLVE_CLIENTS=500,1000,2000 SOLVE_LIMIT=3
+```
+
+## Dove finiscono i risultati
+Output base:
+- `RESULTS_ROOT` (default `results`)
+- `SOLVE_OUT_DIR` (default `results/solve_manifest`)
+- `SOLVE_CSV_DIR` (default `results/solve_manifest/csv`)
+- `SOLVE_SOLUTIONS_DIR` (default `results/solve_manifest/solutions`)
+
+CSV:
+- `$(SOLVE_CSV_DIR)/manifest_pyvrp_per_instance_results.csv`
+- `$(SOLVE_CSV_DIR)/manifest_seq_per_instance_results.csv`
+- `$(SOLVE_CSV_DIR)/manifest_cuda_per_instance_results.csv`
+- `$(SOLVE_CSV_DIR)/manifest_openmp_mpi_per_instance_results.csv`
+
+Route complete:
+- `$(SOLVE_SOLUTIONS_DIR)/pyvrp/*.txt`
+- `$(SOLVE_SOLUTIONS_DIR)/seq/*.txt`
+- `$(SOLVE_SOLUTIONS_DIR)/cuda/*.txt`
+- `$(SOLVE_SOLUTIONS_DIR)/mpi/*.txt`
+
+Note:
+- nel CSV PyVRP c’è anche `max_rss_kb` (picco memoria RSS in KB per istanza)
+- se MPI fallisce per ambiente (PMIx/OpenMPI), vedrai `status=error` nel CSV MPI
+
+## Target principali Makefile
+Generazione istanze:
+
+```bash
+make generate_problems
+make generate_clean
+```
+
+Build:
+
+```bash
+make all          # seq
+make openmp_mpi   # mpi+openmp
+make cuda         # cuda
+```
+
+Solve da manifest:
+
+```bash
+make solve_pyvrp
+make solve_seq
+make solve_cuda
+make solve_mpi
+make solve_all
+```
+
+Aiuto completo:
+
+```bash
 make help
 ```
 
-## Esecuzione binari solver
-### Sequenziale
-```sh
-./aco_vrp_seq.out [n K m T seed]
+## Variabili utili (solve_*)
+- `SOLVE_OUT_DIR=...` cartella output
+- `SOLVE_CSV_DIR=...` cartella CSV
+- `SOLVE_SOLUTIONS_DIR=...` cartella route
+- `SOLVE_MANIFEST=...` manifest per `solve_pyvrp/solve_seq/solve_cuda`
+- `SOLVE_MANIFEST_MPI=...` manifest per `solve_mpi`
+- `SOLVE_CLIENTS=500,1000,...` filtro per `n`
+- `SOLVE_LIMIT=N` limita il numero di righe (0 = tutte)
+- `SOLVE_PYVRP_RUNTIME_S=10`
+- `SOLVE_PYVRP_SEED=1234`
+- `SOLVE_MPI_RANKS=2`
+- `SOLVE_MPI_OMP_THREADS=2`
+- `SOLVE_CUDA_TIMEOUT_MIN=2.0`
+- `SOLVE_CUDA_IMPROVEMENT=0.001`
+
+Esempio completo:
+
+```bash
+make solve_all \
+  SOLVE_OUT_DIR=results/run_01 \
+  SOLVE_MANIFEST=instances/test_aligned/manifest.csv \
+  SOLVE_MANIFEST_MPI=instances/test_aligned/manifest_openmp_mpi.csv \
+  SOLVE_CLIENTS=500,1000,2000 \
+  SOLVE_PYVRP_RUNTIME_S=20 \
+  SOLVE_MPI_RANKS=4 \
+  SOLVE_MPI_OMP_THREADS=8
 ```
 
-Esempio:
-```sh
-./aco_vrp_seq.out 200 16 0 100 1234
-```
+## Modalità test legacy (scaling)
+Restano disponibili i target storici:
+- `make sequential_tests`
+- `make openmp_mpi_tests`
+- `make openmp_mpi_tests_heavy`
 
-Note:
-- `m=0` abilita auto-scaling delle formiche.
-- senza argomenti, usa un esempio minimale interno.
+Output legacy scaling:
+- `$(RESULTS_ROOT)/scaling/scaling_progressive_c.csv`
+- `$(RESULTS_ROOT)/scaling/scaling_progressive_openmp_mpi_light.csv`
+- `$(RESULTS_ROOT)/scaling/scaling_progressive_openmp_mpi_heavy.csv`
+- checkpoint MPI in `$(RESULTS_ROOT)/scaling/`
+- log detached in `$(RESULTS_ROOT)/detached/`
 
-### OpenMP + MPI
-```sh
-OMP_NUM_THREADS=2 mpirun -np 2 ./aco_vrp_openmp_mpi.out [n K m T seed]
-```
+Con supporto detached:
+- `TEST_MODE=background` (default)
+- `TEST_MODE=foreground`
+- `TEST_LOGS_DIR=...`
 
-## Test mode (foreground/background)
-I target `sequential_tests`, `openmp_mpi_tests` e `openmp_mpi_tests_heavy` usano:
-- `TEST_MODE=background` (default): run detached con `nohup`
-- `TEST_MODE=foreground`: output live nel terminale
-- `TEST_LOGS_DIR=...`: directory log detached (`.log`, `.pid`, `.cmd`)
-
-Esempi:
-```sh
-make sequential_tests TEST_MODE=foreground
-make openmp_mpi_tests TEST_MODE=foreground MPI_NP=4 MPI_OMP_THREADS=8
-make openmp_mpi_tests_heavy TEST_MODE=foreground MPI_NP=2 MPI_OMP_THREADS=32
-make sequential_tests TEST_LOGS_DIR=/tmp/vrp_logs
-```
-
-Output runtime semplificato (esempio):
-- `[RUN xx/yy] ...`
-- `[INPUT] solver : n=... K=... m=... T=... alpha=... beta=... rho=... tau0=... Q=... seed=...`
-- `[INPUT] instance : seed=... layout_id=...`
-- `[OK] ...` oppure `[SKIP] ...` oppure `[FAIL] ...`
-
-## Sequential scaling runner
-Build + run:
-```sh
-make sequential_tests
-```
-
-CSV default:
-- `results/scaling_progressive_c.csv`
-
-Esecuzione manuale:
-```sh
-./tests/sequential_tests.out --memory-utilization 0.70 --c-max-n 100000
-```
-
-Opzioni CLI:
-- `--csv PATH`
-- `--input-log PATH` (default: `results/sequential_test_inputs.log`)
-- `--memory-utilization X` con `0 < X <= 1`
-- `--c-max-n N`
-- `--force` (ignora soglia memoria stimata)
-- `--auto-ants` (default, passa `m=0` al solver)
-- `--fixed-ants` (usa `m` dallo scenario)
-
-Nota memoria: il runner stima `c` + `tau` dense e matrici candidate (`candidate_idx`, `eta_beta`, `score`) con overhead di sicurezza.
-
-## OpenMP+MPI scaling runner
-Build + run via Make (light <= 16k):
-```sh
-make openmp_mpi_tests
-```
-
-Build + run via Make (heavy > 16k):
-```sh
-make openmp_mpi_tests_heavy
-```
-
-Il target usa:
-- `MPI_NP` (default `2`)
-- `MPI_OMP_THREADS` (default `2`)
-
-Comando equivalente:
-```sh
-OMP_NUM_THREADS=${MPI_OMP_THREADS} mpirun -np ${MPI_NP} ./tests/openmp_mpi_tests.out
-```
-
-CSV default:
-- `results/scaling_progressive_openmp_mpi_light.csv`
-- `results/scaling_progressive_openmp_mpi_heavy.csv`
-
-Esecuzione manuale:
-```sh
-mpirun -np 2 ./tests/openmp_mpi_tests.out --memory-utilization 0.70 --c-max-n 100000
-mpirun -np 2 ./tests/openmp_mpi_tests_heavy.out --memory-utilization 0.70 --c-max-n 100000
-```
-
-Opzioni CLI:
-- `--csv PATH`
-- `--input-log PATH` (default: `results/openmp_mpi_test_inputs.log`)
-- `--checkpoint PATH` (default: `results/openmp_mpi_tests_light.checkpoint` o `..._heavy.checkpoint`)
-- `--resume` (riparte da checkpoint, append a CSV/log)
-- `--memory-utilization X` con `0 < X <= 1`
-- `--time-budget-minutes X` (default `30`)
-- `--estimate-safety X` (default `1.25`)
-- `--c-max-n N`
-- `--enforce-c-max-n` (salta `n > c_max_n`)
-- `--force` (ignora soglia memoria stimata)
-- `--auto-ants` (default, passa `m=0` al solver)
-- `--fixed-ants` (usa `m` dallo scenario)
-
-Durante i test, il runner stampa esplicitamente gli input passati al solver per ogni run (`n,K,m,T,alpha,beta,rho,tau0,Q,seed`) e salva gli stessi dati nel file `--input-log`.
-
-## Esecuzione SLURM
-Submit diretto:
-```sh
-./scripts/submit_openmp_mpi_tests.sh
-```
-
-Con argomenti passati al test runner:
-```sh
-./scripts/submit_openmp_mpi_tests.sh "--memory-utilization 0.70 --c-max-n 100000 --enforce-c-max-n"
-```
-
-Profilo heavy:
-```sh
-./scripts/submit_openmp_mpi_tests.sh "--memory-utilization 0.70 --c-max-n 100000 --enforce-c-max-n" heavy
-```
-
-Con checkpoint mode esplicito (`fresh|resume|reset`):
-```sh
-./scripts/submit_openmp_mpi_tests.sh "--time-budget-minutes 30" heavy resume
-./scripts/submit_openmp_mpi_tests.sh "--time-budget-minutes 30" heavy reset
-```
-
-Run pulita e ripresa dopo blocco:
-```sh
-# 1) run da zero (pulisce checkpoint precedente)
-./scripts/submit_openmp_mpi_tests.sh "--time-budget-minutes 30 --memory-utilization 0.70 --estimate-safety 1.25" heavy reset
-
-# 2) se il job viene interrotto/scade, riprende dal checkpoint
-./scripts/submit_openmp_mpi_tests.sh "--time-budget-minutes 30 --memory-utilization 0.70 --estimate-safety 1.25" heavy resume
-```
-
-Target Make utili:
-```sh
-make openmp_mpi_tests_resume TEST_MODE=foreground
-make openmp_mpi_tests_reset TEST_MODE=foreground
-make openmp_mpi_tests_heavy_resume TEST_MODE=foreground
-make openmp_mpi_tests_heavy_reset TEST_MODE=foreground
-```
-
-Lo script batch:
-- compila `tests/openmp_mpi_tests.out` (o `tests/openmp_mpi_tests_heavy.out` con `TEST_PROFILE=heavy`)
-- imposta `OMP_NUM_THREADS=$SLURM_CPUS_PER_TASK`
-- esegue `mpirun -n $SLURM_NTASKS ...`
-- salva output/error in `results/slurm/`
-
-## Report scaling OpenMP+MPI
-Da CSV a report markdown + grafici:
-```sh
-python3 tests/openmp_mpi_scaling_report.py \
-  --csv results/scaling_progressive_openmp_mpi.csv \
-  --out-dir results
-```
-
-Output principali:
-- `results/openmp_mpi_scaling_report.md`
-- `results/openmp_mpi_runtime_vs_n.png`
-- `results/openmp_mpi_throughput_vs_n.png`
-- `results/openmp_mpi_empirical_exponent.png`
-- `results/openmp_mpi_memory_vs_n.png`
-
-## Confronto C vs PyVRP
-Build helper C:
-```sh
-make c_compare_case
-make c_compare_case_mpi
-```
-
-Confronto rapido su un solo scenario (solo sequenziale):
-```sh
-python3 tests/pyvrp_compare.py --mode seq --single-n 500 --enforce-c-max-n --c-max-n 500
-```
-
-Confronto sequenziale + parallelo (MPI/OpenMP):
-```sh
-python3 tests/pyvrp_compare.py --mode both --single-n 500 --mpi-ranks-list 1,2,4 --omp-threads 2 --enforce-c-max-n --c-max-n 500
-```
-
-Nota: lo script prova automaticamente a rieseguirsi con `VRP/bin/python` se presente.
-
-Output CSV default:
-- `results/c_vs_pyvrp_compare.csv`
-- `results/c_vs_pyvrp_scaling_report.md`
-
-Opzioni utili:
-- `--mode seq|mpi|both` (default: `both`)
-- `--mpi-ranks-list 1,2,4` (usato in modalità MPI)
-- `--omp-threads N` (thread OpenMP per rank in modalità MPI)
-- `--fixed-ants` (default usa `m=0` auto)
-- `--timeout N` (secondi, stop PyVRP a runtime; `0` usa iterazioni `T`)
-- `--helper-bin-seq PATH` (default `tests/c_compare_case.out`)
-- `--helper-bin-mpi PATH` (default `tests/c_compare_case_mpi.out`)
-- `--no-build-helpers` (non lancia `make` automatico)
-
-Metriche scaling nel CSV/report:
-- **Strong scaling**: `strong_speedup`, `strong_efficiency` (stesso `n`, rank diversi)
-- **Weak scaling**: `weak_efficiency` con `n_per_rank` circa costante
-
-## Debug e pulizia
-Build debug:
-```sh
-make debug
-```
-
-Pulizia:
-```sh
+## Pulizia
+```bash
 make clean
 ```
+
+Rimuove binari, oggetti, coverage e artefatti CUDA intermedi (`.ptx`, `.cubin`, `.fatbin`).

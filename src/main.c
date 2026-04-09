@@ -35,6 +35,22 @@ static void fill_example_costs(double **c, int n) {
   }
 }
 
+static void print_solution_routes(const Solution *best, int K) {
+  for (int i = 0; i < K; ++i) {
+    const Route *r = &best->routes[i];
+    int printed = 0;
+    printf("Route %d:", i + 1);
+    for (int t = 0; t < r->len; ++t) {
+      int node = r->nodes[t];
+      if (node != 0) {
+        printf("%s%d", printed ? " " : " ", node);
+        printed = 1;
+      }
+    }
+    printf("\n");
+  }
+}
+
 /*
  * Function:  parse_int_arg
  * ------------------------
@@ -222,9 +238,13 @@ int main(int argc, char **argv) {
 
 #ifdef USE_MPI
   if (mpi_rank == 0) {
+    print_solution_routes(best, K);
+    printf("Cost: %.3f\n", best_cost);
     printf("best cost: %.3f\n", best_cost);
   }
 #else
+  print_solution_routes(best, K);
+  printf("Cost: %.3f\n", best_cost);
   printf("best cost: %.3f\n", best_cost);
 #endif
 
