@@ -84,6 +84,15 @@ make solve_all SOLVE_CLIENTS=500,1000
 # solo n=4000, con runtime pyvrp più alto
 make solve_pyvrp SOLVE_CLIENTS=4000 SOLVE_PYVRP_RUNTIME_S=30
 
+# seq con budget 20s per istanza
+make solve_seq SOLVE_CLIENTS=500,1000 SOLVE_SEQ_RUNTIME_S=20
+
+# mpi con budget 20s per istanza
+make solve_mpi SOLVE_CLIENTS=4000,8000 SOLVE_MPI_RUNTIME_S=20
+
+# cuda
+make solve_cuda SOLVE_CLIENTS=500,1000
+
 # prime 3 istanze dopo il filtro
 make solve_seq SOLVE_CLIENTS=500,1000,2000 SOLVE_LIMIT=3
 ```
@@ -152,10 +161,11 @@ make help
 - `SOLVE_CLIENTS=500,1000,...` filtro per `n`
 - `SOLVE_LIMIT=N` limita il numero di righe (0 = tutte)
 - `SOLVE_PYVRP_RUNTIME_S=10`
+- `SOLVE_SEQ_RUNTIME_S=0` (0 = disattivo)
+- `SOLVE_MPI_RUNTIME_S=0` (0 = disattivo)
 - `SOLVE_PYVRP_SEED=1234`
 - `SOLVE_MPI_RANKS=2`
 - `SOLVE_MPI_OMP_THREADS=2`
-- `SOLVE_CUDA_TIMEOUT_MIN=2.0`
 - `SOLVE_CUDA_IMPROVEMENT=0.001`
 
 Esempio completo:
