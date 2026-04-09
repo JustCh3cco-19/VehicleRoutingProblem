@@ -162,6 +162,7 @@ make help
 - `SOLVE_LIMIT=N` limita il numero di righe (0 = tutte)
 - `SOLVE_PYVRP_RUNTIME_S=10`
 - `SOLVE_SEQ_RUNTIME_S=0` (0 = disattivo)
+- `SOLVE_SEQ_RUNTIME=60` (alias compatibile)
 - `SOLVE_MPI_RUNTIME_S=0` (0 = disattivo)
 - `SOLVE_PYVRP_SEED=1234`
 - `SOLVE_MPI_RANKS=2`

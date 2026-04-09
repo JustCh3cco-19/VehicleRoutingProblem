@@ -84,6 +84,7 @@ SOLVE_SOLUTIONS_DIR?=$(SOLVE_OUT_DIR)/solutions
 SOLVE_MANIFEST?=instances/test_aligned/manifest.csv
 SOLVE_MANIFEST_MPI?=instances/test_aligned/manifest_openmp_mpi.csv
 SOLVE_PYVRP_RUNTIME_S?=10
+SOLVE_SEQ_RUNTIME?=
 SOLVE_SEQ_RUNTIME_S?=0
 SOLVE_MPI_RUNTIME_S?=0
 SOLVE_PYVRP_SEED?=1234
@@ -92,6 +93,7 @@ SOLVE_CLIENTS?=
 SOLVE_MPI_RANKS?=2
 SOLVE_MPI_OMP_THREADS?=2
 SOLVE_CUDA_IMPROVEMENT?=0.001
+SOLVE_SEQ_RUNTIME_EFFECTIVE=$(if $(strip $(SOLVE_SEQ_RUNTIME)),$(SOLVE_SEQ_RUNTIME),$(SOLVE_SEQ_RUNTIME_S))
 
 GEN_INST_DIR?=instances/test_aligned
 GEN_CLIENTS?=500,1000,2000,4000,8000,16000
@@ -177,7 +179,8 @@ help:
 	@printf "  %-60s | %s\n" "SOLVE_CLIENTS=500,1000,4000" "Filtra per numero clienti n (colonna 4 del manifest)"
 	@printf "  %-60s | %s\n" "SOLVE_LIMIT=5" "Limita alle prime N righe dopo i filtri (0 = tutte)"
 	@printf "  %-60s | %s\n" "SOLVE_PYVRP_RUNTIME_S=10" "Budget tempo per istanza PyVRP (secondi)"
-	@printf "  %-60s | %s\n" "SOLVE_SEQ_RUNTIME_S=0" "Budget tempo per istanza sequenziale (secondi, 0=disattivo)"
+	@printf "  %-60s | %s\n" "SOLVE_SEQ_RUNTIME_S=0" "Budget tempo seq (secondi, 0=disattivo)"
+	@printf "  %-60s | %s\n" "SOLVE_SEQ_RUNTIME=60" "Alias compatibile di SOLVE_SEQ_RUNTIME_S"
 	@printf "  %-60s | %s\n" "SOLVE_MPI_RUNTIME_S=0" "Budget tempo per istanza MPI+OpenMP (secondi, 0=disattivo)"
 	@printf "  %-60s | %s\n" "SOLVE_PYVRP_SEED=1234" "Seed PyVRP"
 	@printf "  %-60s | %s\n" "SOLVE_MPI_RANKS=2" "Numero processi MPI per solve_mpi"
@@ -374,7 +377,7 @@ solve_seq: solve_prepare all
 		| { if [ "$(SOLVE_LIMIT)" -gt 0 ]; then head -n "$(SOLVE_LIMIT)"; else cat; fi; } ) | while IFS=, read -r profile name instance_path n K m T solver_seed instance_seed layout_id capacity_formula; do \
 		sol_file="$$sol_dir/$${name}_seq_solution.txt"; \
 		start_ns=$$(date +%s%N); \
-		out=$$(ACO_SOLVER_TIMEOUT_SECONDS="$(SOLVE_SEQ_RUNTIME_S)" ./aco_vrp_seq.out "$$instance_path" "$$K" "$$m" "$$T" "$$solver_seed" 2>&1); \
+		out=$$(ACO_SOLVER_TIMEOUT_SECONDS="$(SOLVE_SEQ_RUNTIME_EFFECTIVE)" ./aco_vrp_seq.out "$$instance_path" "$$K" "$$m" "$$T" "$$solver_seed" 2>&1); \
 		rc=$$?; \
 		end_ns=$$(date +%s%N); \
 		elapsed=$$(awk "BEGIN {printf \"%.6f\", ($$end_ns-$$start_ns)/1000000000}"); \
