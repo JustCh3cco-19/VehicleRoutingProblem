@@ -8,6 +8,10 @@ FLAGS=-Wall -Wextra -std=c11 -Iinclude
 FORCE_OPT=-O3
 PERF_FLAGS?=
 LIBS=-lm
+NVCC?=nvcc
+CUDA_ARCH?=
+NVCC_FLAGS=-Iinclude -O3 -std=c++17
+CUDA_ARCH_FLAG=$(if $(strip $(CUDA_ARCH)),-arch=$(CUDA_ARCH),)
 COVERAGE_FLAGS=-g --coverage
 COVERAGE_LIBS=--coverage
 EXTRA_FLAGS=
@@ -51,6 +55,17 @@ OPENMP_MPI_TESTS_HEAVY_BUILD_SRC=$(OPENMP_MPI_TESTS_HEAVY_SRC) $(PAR_SRC) $(ACO_
 
 OPENMP_MPI_BIN=aco_vrp_openmp_mpi.out
 OPENMP_MPI_SRC=src/main.c $(PAR_SRC) $(ACO_SHARED_SRC) $(SOLUTION_SRC) $(MATRIX_SRC)
+CUDA_BIN=aco_vrp_cuda.out
+CUDA_MAIN_SRC=src/cuda/main_vrp.cu
+CUDA_ACO_SRC=src/cuda/aco_cuda.cu
+CUDA_KERNELS_SRC=src/cuda/aco_cuda_kernels.cu
+CUDA_MAIN_OBJ=src/cuda/main_vrp.o
+CUDA_ACO_OBJ=src/cuda/aco_cuda.o
+CUDA_KERNELS_OBJ=src/cuda/aco_cuda_kernels.o
+CUDA_COMMON_OBJ=$(SOLUTION_OBJ) $(MATRIX_OBJ)
+CUDA_PARSER_SRC=$(firstword $(wildcard src/common/instance_parser.c src/cuda/instance_parser.c src/instance_parser.c))
+CUDA_PARSER_OBJ=$(patsubst %.c,%.o,$(CUDA_PARSER_SRC))
+CUDA_OBJ=$(CUDA_MAIN_OBJ) $(CUDA_ACO_OBJ) $(CUDA_KERNELS_OBJ) $(CUDA_COMMON_OBJ) $(CUDA_PARSER_OBJ)
 MPI_NP=2
 MPI_OMP_THREADS=2
 MPI_TEST_ARGS?=
@@ -95,6 +110,7 @@ help:
 	@printf "Build Targets:\n"
 	@printf "  %-18s %s\n" "all" "Build sequential binary"
 	@printf "  %-18s %s\n" "openmp_mpi" "Build MPI+OpenMP binary"
+	@printf "  %-18s %s\n" "cuda" "Build CUDA binary"
 	@printf "  %-18s %s\n" "debug" "Build with -DDEBUG"
 	@printf "  %-18s %s\n\n" "clean" "Remove binaries, objects, and coverage artifacts"
 	@printf "Test Targets:\n"
@@ -149,6 +165,27 @@ openmp_mpi: $(OPENMP_MPI_BIN)
 $(OPENMP_MPI_BIN): $(OPENMP_MPI_SRC) include/aco.h include/matrix.h include/solution.h
 	$(MPICC) $(EXTRA_FLAGS) $(FLAGS) $(FORCE_OPT) $(PERF_FLAGS) $(OMPFLAG) -DUSE_MPI $(OPENMP_MPI_SRC) $(LIBS) -o $@
 
+cuda: $(CUDA_BIN)
+
+$(CUDA_MAIN_OBJ): $(CUDA_MAIN_SRC) include/acocopy.h include/instance_parser.h include/matrixcopy.h include/solutioncopy.h
+	$(NVCC) $(NVCC_FLAGS) $(CUDA_ARCH_FLAG) -c $< -o $@
+
+$(CUDA_ACO_OBJ): $(CUDA_ACO_SRC) include/acocopy.h include/aco_cuda_kernels.h
+	$(NVCC) $(NVCC_FLAGS) $(CUDA_ARCH_FLAG) -c $< -o $@
+
+$(CUDA_KERNELS_OBJ): $(CUDA_KERNELS_SRC) include/aco_cuda_kernels.h
+	$(NVCC) $(NVCC_FLAGS) $(CUDA_ARCH_FLAG) -c $< -o $@
+
+$(CUDA_PARSER_OBJ): %.o: %.c
+	$(CC) $(EXTRA_FLAGS) $(FLAGS) $(FORCE_OPT) $(PERF_FLAGS) -c $< -o $@
+
+$(CUDA_BIN): $(CUDA_OBJ)
+	$(NVCC) $(CUDA_ARCH_FLAG) $^ -o $@
+	@if [ -z "$(CUDA_PARSER_SRC)" ]; then \
+		echo "[WARN] instance parser source not found (looked for src/common/instance_parser.c, src/cuda/instance_parser.c, src/instance_parser.c)"; \
+		echo "[WARN] Link may fail with undefined reference to vrp_load_tsplib_euc2d_matrix"; \
+	fi
+
 $(OPENMP_MPI_TESTS_BIN): $(OPENMP_MPI_TESTS_BUILD_SRC) include/aco.h include/matrix.h include/solution.h
 	$(MPICC) $(EXTRA_FLAGS) $(FLAGS) $(FORCE_OPT) $(PERF_FLAGS) $(OMPFLAG) -DUSE_MPI $(OPENMP_MPI_TESTS_BUILD_SRC) $(LIBS) -o $@
 
@@ -181,9 +218,9 @@ c_compare_case: $(C_COMPARE_CASE_BIN)
 c_compare_case_mpi: $(C_COMPARE_CASE_MPI_BIN)
 
 clean:
-	rm -f $(BIN) $(OBJ) $(SEQUENTIAL_TESTS_BIN) $(SEQUENTIAL_TESTS_OBJ) $(OPENMP_MPI_BIN) $(LEGACY_BINARIES) \
+	rm -f $(BIN) $(OBJ) $(SEQUENTIAL_TESTS_BIN) $(SEQUENTIAL_TESTS_OBJ) $(OPENMP_MPI_BIN) $(CUDA_BIN) $(LEGACY_BINARIES) \
 		$(OPENMP_MPI_TESTS_BIN) $(OPENMP_MPI_TESTS_HEAVY_BIN) \
-		src/*.o src/seq/*.o src/openmp-mpi/*.o src/common/*.o \
+		src/*.o src/seq/*.o src/openmp-mpi/*.o src/common/*.o src/cuda/*.o \
 		tests/*.o tests/*.out \
 		$(COVERAGE_FILES) \
 		report/*.aux report/*.log report/*.out
@@ -191,4 +228,4 @@ clean:
 debug:
 	$(MAKE) EXTRA_FLAGS=-DDEBUG
 
-.PHONY: all help clean debug openmp_mpi sequential_tests openmp_mpi_tests openmp_mpi_tests_heavy openmp_mpi_tests_resume openmp_mpi_tests_reset openmp_mpi_tests_heavy_resume openmp_mpi_tests_heavy_reset c_compare_case c_compare_case_mpi
+.PHONY: all help clean debug openmp_mpi cuda sequential_tests openmp_mpi_tests openmp_mpi_tests_heavy openmp_mpi_tests_resume openmp_mpi_tests_reset openmp_mpi_tests_heavy_resume openmp_mpi_tests_heavy_reset c_compare_case c_compare_case_mpi

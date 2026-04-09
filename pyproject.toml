@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vehicle-routing-problem"
+version = "0.1.0"
+description = "Vehicle Routing Problem experiments with C/CUDA and Python benchmarking utilities"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "pyvrp>=0.11.0",
+  "numpy>=1.24.0",
+  "matplotlib>=3.7.0",
+  "pandas>=2.0.0",
+  "pytest>=7.0.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py", "*_test.py"]

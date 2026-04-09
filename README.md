@@ -3,6 +3,7 @@
 Implementazione in C di Ant Colony Optimization (ACO) per Vehicle Routing Problem (VRP), con due eseguibili:
 - `aco_vrp_seq.out` (sequenziale)
 - `aco_vrp_openmp_mpi.out` (ibrido OpenMP + MPI)
+- `aco_vrp_cuda.out` (CUDA)
 
 Il solver usa layout hardware-aware (matrici allineate 64-byte, candidate list per-rank, workspace persistente per-thread/per-run, MMAS bounds, sincronizzazione MPI per epoche).
 
@@ -36,6 +37,16 @@ make
 Ibrido OpenMP+MPI:
 ```sh
 make openmp_mpi
+```
+
+CUDA:
+```sh
+make cuda
+```
+
+CUDA con architettura esplicita (esempio):
+```sh
+make cuda CUDA_ARCH=sm_86
 ```
 
 Help Makefile:
