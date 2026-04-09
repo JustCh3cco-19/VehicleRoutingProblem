@@ -12,7 +12,7 @@ except ImportError:
     print("Error: pyvrp is not installed. Please run in the created .venv.")
     sys.exit(1)
 
-def generate_instance(name, num_clients, num_vehicles, capacity=None, grid_size=100, seed=None):
+def generate_instance(name, num_clients, num_vehicles, grid_size=100, seed=None):
     if seed is not None:
         np.random.seed(seed)
     
@@ -25,9 +25,9 @@ def generate_instance(name, num_clients, num_vehicles, capacity=None, grid_size=
     demands = np.ones(num_clients, dtype=int)
     all_demands = np.concatenate(([0], demands))
     
-    # Formula: capacity = n - K + 3
-    if capacity is None:
-        capacity = num_clients - num_vehicles + 3
+    capacity = num_clients - num_vehicles + 3
+    if capacity < 1:
+        capacity = 1
     
     instance_data = {
         "NAME": name,
@@ -77,8 +77,6 @@ def main():
     parser.add_argument("--name", default="synthetic_vrp", help="Name of the instance")
     parser.add_argument("--clients", "--nodes", type=int, default=20, help="Number of customer nodes")
     parser.add_argument("--vehicles", type=int, default=5, help="Number of vehicles available")
-    parser.add_argument("--capacity", type=int, help="Vehicle capacity")
-    parser.add_argument("--unlimited", action="store_true", help="Set capacity to sum of all demands (effectively unlimited)")
     parser.add_argument("--grid", type=int, default=100, help="Coordinate grid size (0 to grid)")
     parser.add_argument("--seed", type=int, help="Random seed for reproducibility")
     parser.add_argument("--output", default="problem.vrp", help="Output .vrp file path")
@@ -87,13 +85,7 @@ def main():
 
     args = parser.parse_args()
 
-    instance = generate_instance(args.name, args.clients, args.vehicles, args.capacity, args.grid, args.seed)
-    
-    if args.unlimited:
-        # Sum of all client demands (demands[0] is depot, which is 0)
-        total_demand = sum(instance["DEMAND_SECTION"])
-        instance["CAPACITY"] = int(total_demand)
-        print(f"Unlimited mode: Setting capacity to {total_demand}")
+    instance = generate_instance(args.name, args.clients, args.vehicles, args.grid, args.seed)
 
     # Save instance
     vrplib.write_instance(args.output, instance)

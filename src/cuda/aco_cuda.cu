@@ -105,7 +105,7 @@ int aco_vrp_cuda(int n, int K, int m, double timeout_minutes, double improvement
 
         // K2
         launch_precompute_candidate_scores(d_tau, d_costs, d_cand_list, d_cand_scores, n, (float)alpha, (float)beta, 32, shared_mem_size_k2);
-        
+
         // K4
         launch_construct_solutions(total_m, K, n, (float)Q, seed + iter, d_costs, d_tau, (float)alpha, (float)beta, d_cand_list, d_cand_scores, d_ant_costs, d_ant_routes, THREADS_PER_BLOCK, shared_mem_size_k4);
 
@@ -170,8 +170,9 @@ int aco_vrp_cuda(int n, int K, int m, double timeout_minutes, double improvement
         fflush(stdout);
         
         iter++;
-        if (no_improvement_count >= 100) {
-            printf("[Main] Early stoppage at iter %d\n", iter);
+        // Early stoppage scatta solo se improvement_threshold > 0
+        if (improvement_threshold > 0.0 && no_improvement_count >= 100) {
+            printf("[Main] Early stoppage at iter %d (No improvement for 100 iterations)\n", iter);
             break;
         }
     }

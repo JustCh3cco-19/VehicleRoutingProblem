@@ -198,10 +198,14 @@ __global__ void kernel_construct_solutions(
             }
 
             // 2. Fallback Globale
+            // Loop chunk-based: tutte le 32 lane eseguono lo stesso numero di iterazioni
+            // per evitare divergenza warp con le primitive __shfl_sync/__ballot_sync.
             if (next_node == -1) {
+                int num_chunks = (n + 31) / 32;
                 float local_sum = 0.0f;
-                for (int j = 1 + lane; j <= n; j += 32) {
-                    if (!get_bit(my_bitmask, j)) {
+                for (int chunk = 0; chunk < num_chunks; chunk++) {
+                    int j = 1 + lane + chunk * 32;
+                    if (j <= n && !get_bit(my_bitmask, j)) {
                         float tau = d_tau[curr * (n + 1) + j];
                         float cost = d_costs[curr * (n + 1) + j];
                         float eta = 1.0f / (cost + 1e-9f);
@@ -214,10 +218,14 @@ __global__ void kernel_construct_solutions(
                     float r_val;
                     if (lane == 0) r_val = fast_rand(&rng_state);
                     float r = __shfl_sync(0xFFFFFFFF, r_val, 0) * total_fallback_p;
+                    // running_sum è tenuto uguale per tutte le lane via broadcast:
+                    // dopo ogni chunk, tutte le lane ricevono il totale cumulativo corretto
+                    // da lane 0, evitando selezioni errate da running_sum per-lane (suffix sum).
                     float running_sum = 0.0f;
-                    for (int j = 1 + lane; j <= n; j += 32) {
+                    for (int chunk = 0; chunk < num_chunks; chunk++) {
+                        int j = 1 + lane + chunk * 32;
                         float s = 0.0f;
-                        if (!get_bit(my_bitmask, j)) {
+                        if (j <= n && !get_bit(my_bitmask, j)) {
                             float tau = d_tau[curr * (n + 1) + j];
                             float cost = d_costs[curr * (n + 1) + j];
                             float eta = 1.0f / (cost + 1e-9f);
@@ -227,11 +235,12 @@ __global__ void kernel_construct_solutions(
                         float current_total = __shfl_sync(0xFFFFFFFF, running_sum + chunk_sum, 0);
                         if (r <= current_total) {
                             float prefix = warp_prefix_sum(s, lane);
-                            unsigned int mask = __ballot_sync(0xFFFFFFFF, (running_sum + prefix) >= r && s > 0);
-                            if (mask != 0) next_node = __shfl_sync(0xFFFFFFFF, (int)j, __ffs(mask) - 1);
+                            unsigned int sel_mask = __ballot_sync(0xFFFFFFFF,
+                                (running_sum + prefix) >= r && s > 0 && j <= n);
+                            if (sel_mask != 0) next_node = __shfl_sync(0xFFFFFFFF, j, __ffs(sel_mask) - 1);
                             break;
                         }
-                        running_sum += chunk_sum;
+                        running_sum = current_total;  // broadcast totale corretto a tutte le lane
                     }
                 }
             }
@@ -242,10 +251,8 @@ __global__ void kernel_construct_solutions(
                     my_fleet[v_idx].cost += d_costs[curr * (n + 1) + next_node];
                     my_fleet[v_idx].curr_node = next_node;
                     my_fleet[v_idx].capacity -= 1.0f;
-                    // Salvataggio contiguo: rotta v parte all'offset v * (n/K + 2) circa
-                    // Per semplicità usiamo un layout flat: [R1][R2]...[RK] dove ogni Ri ha spazio per n+2
                     int route_offset = v_idx * (n + 2);
-                    d_ant_routes[global_warp_id * (n + 2 * K) + route_offset + route_len] = next_node;
+                    d_ant_routes[global_warp_id * K * (n + 2) + route_offset + route_len] = next_node;
                     route_len++;
                 }
                 if (__shfl_sync(0xFFFFFFFF, next_node != -1, 0)) unvisited--;

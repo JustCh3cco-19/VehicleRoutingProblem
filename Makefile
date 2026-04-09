@@ -8,8 +8,8 @@ FLAGS=-Wall -Wextra -std=c11 -Iinclude
 FORCE_OPT=-O3
 PERF_FLAGS?=
 LIBS=-lm
-NVCC?=nvcc
-CUDA_ARCH?=
+NVCC?=$(if $(wildcard /usr/local/cuda-12.8/bin/nvcc),/usr/local/cuda-12.8/bin/nvcc,nvcc)
+CUDA_ARCH?=sm_120
 NVCC_FLAGS=-Iinclude -O3 -std=c++17
 CUDA_ARCH_FLAG=$(if $(strip $(CUDA_ARCH)),-arch=$(CUDA_ARCH),)
 COVERAGE_FLAGS=-g --coverage
@@ -18,7 +18,7 @@ EXTRA_FLAGS=
 RESULTS_ROOT?=results
 TEST_MODE?=background
 TEST_LOGS_DIR?=$(RESULTS_ROOT)/detached
-PYTHON_BIN?=python3
+PYTHON_BIN?=$(if $(wildcard .venv/bin/python),.venv/bin/python,python3)
 
 # Targets
 BIN=aco_vrp_seq.out
@@ -61,11 +61,11 @@ OPENMP_MPI_BIN=aco_vrp_openmp_mpi.out
 OPENMP_MPI_SRC=src/main.c $(PAR_SRC) $(ACO_SHARED_SRC) $(SOLUTION_SRC) $(MATRIX_SRC) $(INSTANCE_PARSER_SRC)
 CUDA_BIN=aco_vrp_cuda.out
 CUDA_MAIN_SRC=src/cuda/main_vrp.cu
-CUDA_ACO_SRC=src/cuda/aco_cuda.cu
-CUDA_KERNELS_SRC=src/cuda/aco_cuda_kernels.cu
+CUDA_ACO_SRC=src/cuda/aco_cuda_v1.cu
+CUDA_KERNELS_SRC=src/cuda/aco_cuda_v1_kernels.cu
 CUDA_MAIN_OBJ=src/cuda/main_vrp.o
-CUDA_ACO_OBJ=src/cuda/aco_cuda.o
-CUDA_KERNELS_OBJ=src/cuda/aco_cuda_kernels.o
+CUDA_ACO_OBJ=src/cuda/aco_cuda_v1.o
+CUDA_KERNELS_OBJ=src/cuda/aco_cuda_v1_kernels.o
 CUDA_COMMON_OBJ=$(SOLUTION_OBJ) $(MATRIX_OBJ)
 CUDA_OBJ=$(CUDA_MAIN_OBJ) $(CUDA_ACO_OBJ) $(CUDA_KERNELS_OBJ) $(CUDA_COMMON_OBJ) $(INSTANCE_PARSER_OBJ)
 MPI_NP=2
@@ -97,6 +97,7 @@ SOLVE_CLIENTS?=
 SOLVE_MPI_RANKS?=2
 SOLVE_MPI_OMP_THREADS?=2
 SOLVE_CUDA_IMPROVEMENT?=0.001
+SOLVE_CUDA_VARIANT?=v1
 SOLVE_SEQ_RUNTIME_EFFECTIVE=$(if $(strip $(SOLVE_SEQ_RUNTIME)),$(SOLVE_SEQ_RUNTIME),$(SOLVE_SEQ_RUNTIME_S))
 
 GEN_INST_DIR?=instances/test_aligned
@@ -104,7 +105,6 @@ GEN_CLIENTS?=500,1000,2000,4000,8000,16000
 GEN_SEED_BASE?=19000
 GEN_GRID?=100
 GEN_SOLVER_SEED?=1234
-GEN_CAPACITY_MODE?=formula
 
 COVERAGE_FILES=src/*.gcno src/*.gcda src/seq/*.gcno src/seq/*.gcda src/openmp-mpi/*.gcno src/openmp-mpi/*.gcda src/common/*.gcno src/common/*.gcda tests/*.gcno tests/*.gcda
 LEGACY_BINARIES=aco_vrp_seq aco_vrp_hybrid aco_vrp_openmp_mpi tests/test tests/test_mpi tests/test_final tests/test_final.out tests/test_final_mpi.out tests/c_scaling_tests tests/c_scaling_tests.out
@@ -200,7 +200,7 @@ help:
 	@printf "  %-60s | %s\n" "GEN_SEED_BASE=19000" "Seed base; per ogni istanza incrementa di 1"
 	@printf "  %-60s | %s\n" "GEN_GRID=100" "Griglia coordinate passata al generatore"
 	@printf "  %-60s | %s\n" "GEN_SOLVER_SEED=1234" "Seed solver scritto nei manifest"
-	@printf "  %-60s | %s\n\n" "GEN_CAPACITY_MODE=formula|unlimited" "Capacita: formula n-K+3 oppure --unlimited"
+	@printf "  %-60s | %s\n\n" "Capacita generata" "Sempre n-K+3 con domanda unitaria per cliente"
 	@printf "OUTPUT GENERATI DA solve_*:\n"
 	@printf "  %-85s | %s\n" "$(SOLVE_CSV_DIR)/manifest_pyvrp_per_instance_results.csv" "CSV PyVRP con elapsed, memoria (max_rss_kb), costo"
 	@printf "  %-85s | %s\n" "$(SOLVE_CSV_DIR)/manifest_seq_per_instance_results.csv" "CSV solver sequenziale"
@@ -260,10 +260,10 @@ cuda: $(CUDA_BIN)
 $(CUDA_MAIN_OBJ): $(CUDA_MAIN_SRC) include/aco.h include/instance_parser.h include/matrix.h include/solution.h
 	$(NVCC) $(NVCC_FLAGS) $(CUDA_ARCH_FLAG) -c $< -o $@
 
-$(CUDA_ACO_OBJ): $(CUDA_ACO_SRC) include/aco.h include/aco_cuda_kernels.h include/matrix.h include/solution.h
+$(CUDA_ACO_OBJ): $(CUDA_ACO_SRC) include/aco.h include/aco_cuda_v1_kernels.h include/matrix.h include/solution.h
 	$(NVCC) $(NVCC_FLAGS) $(CUDA_ARCH_FLAG) -c $< -o $@
 
-$(CUDA_KERNELS_OBJ): $(CUDA_KERNELS_SRC) include/aco_cuda_kernels.h
+$(CUDA_KERNELS_OBJ): $(CUDA_KERNELS_SRC) include/aco_cuda_v1_kernels.h
 	$(NVCC) $(NVCC_FLAGS) $(CUDA_ARCH_FLAG) -c $< -o $@
 
 $(CUDA_BIN): $(CUDA_OBJ)
@@ -320,9 +320,8 @@ generate_problems:
 		else m_seq=3; T_seq=3; m_mpi=4; T_mpi=6; fi; \
 		name="n$${n}_k$${K}_s$${seed}"; \
 		inst_path="$(GEN_INST_DIR)/$${name}.vrp"; \
-		cap_formula="n-K+3"; cap_flag=""; \
-		if [ "$(GEN_CAPACITY_MODE)" = "unlimited" ]; then cap_formula="unlimited"; cap_flag="--unlimited"; fi; \
-		$(PYTHON_BIN) scripts/generate_vrp_problem.py --name "$$name" --clients "$$n" --vehicles "$$K" --grid "$(GEN_GRID)" --seed "$$seed" --output "$$inst_path" $$cap_flag; \
+		cap_formula="n-K+3"; \
+		$(PYTHON_BIN) scripts/generate_vrp_problem.py --name "$$name" --clients "$$n" --vehicles "$$K" --grid "$(GEN_GRID)" --seed "$$seed" --output "$$inst_path" || exit $$?; \
 		echo "generated,$$name,$$inst_path,$$n,$$K,$$m_seq,$$T_seq,$(GEN_SOLVER_SEED),$$seed,grid$(GEN_GRID),$$cap_formula" >> "$$manifest_seq"; \
 		echo "generated_mpi,$$name,$$inst_path,$$n,$$K,$$m_mpi,$$T_mpi,$(GEN_SOLVER_SEED),$$seed,grid$(GEN_GRID),$$cap_formula" >> "$$manifest_mpi"; \
 		echo "[gen] $$name"; \
@@ -341,6 +340,7 @@ solve_prepare:
 	@mkdir -p $(SOLVE_SOLUTIONS_DIR)/pyvrp
 	@mkdir -p $(SOLVE_SOLUTIONS_DIR)/seq
 	@mkdir -p $(SOLVE_SOLUTIONS_DIR)/cuda
+	@mkdir -p $(SOLVE_SOLUTIONS_DIR)/cuda_$(SOLVE_CUDA_VARIANT)
 	@mkdir -p $(SOLVE_SOLUTIONS_DIR)/mpi
 	@mkdir -p $(SCALING_DIR)
 	@test -f "$(SOLVE_MANIFEST)" || (echo "missing manifest: $(SOLVE_MANIFEST)" && exit 1)
@@ -406,21 +406,21 @@ solve_seq: solve_prepare all
 	echo "wrote $$csv"
 
 solve_cuda: solve_prepare cuda
-	@csv="$(SOLVE_CSV_DIR)/manifest_cuda_per_instance_results.csv"; \
-	sol_dir="$(SOLVE_SOLUTIONS_DIR)/cuda"; \
-	echo "name,profile,instance_path,n,K,m,T,solver_seed,instance_seed,layout_id,status,elapsed_s,best_cost,error" > "$$csv"; \
-	( tail -n +2 "$(SOLVE_MANIFEST)" \
-		| { if [ -n "$(SOLVE_CLIENTS)" ]; then awk -F, -v list="$(SOLVE_CLIENTS)" 'BEGIN{split(list,a,","); for(i in a) wanted[a[i]]=1} ($$4 in wanted)'; else cat; fi; } \
-		| { if [ "$(SOLVE_LIMIT)" -gt 0 ]; then head -n "$(SOLVE_LIMIT)"; else cat; fi; } ) | while IFS=, read -r profile name instance_path n K m T solver_seed instance_seed layout_id capacity_formula; do \
-		sol_file="$$sol_dir/$${name}_cuda_solution.txt"; \
-		start_ns=$$(date +%s%N); \
-		out=$$(./aco_vrp_cuda.out "$$instance_path" "$$K" "2.0" "$(SOLVE_CUDA_IMPROVEMENT)" "$$solver_seed" 2>&1); \
-		rc=$$?; \
-		end_ns=$$(date +%s%N); \
+	@csv="$(SOLVE_CSV_DIR)/manifest_cuda_$(SOLVE_CUDA_VARIANT)_per_instance_results.csv"; \
+	sol_dir="$(SOLVE_SOLUTIONS_DIR)/cuda_$(SOLVE_CUDA_VARIANT)"; \
+		echo "name,profile,instance_path,n,K,m,T,solver_seed,instance_seed,layout_id,status,elapsed_s,best_cost,error" > "$$csv"; \
+		( tail -n +2 "$(SOLVE_MANIFEST)" \
+			| { if [ -n "$(SOLVE_CLIENTS)" ]; then awk -F, -v list="$(SOLVE_CLIENTS)" 'BEGIN{split(list,a,","); for(i in a) wanted[a[i]]=1} ($$4 in wanted)'; else cat; fi; } \
+			| { if [ "$(SOLVE_LIMIT)" -gt 0 ]; then head -n "$(SOLVE_LIMIT)"; else cat; fi; } ) | while IFS=, read -r profile name instance_path n K m T solver_seed instance_seed layout_id capacity_formula; do \
+			sol_file="$$sol_dir/$${name}_cuda_$(SOLVE_CUDA_VARIANT)_solution.txt"; \
+			start_ns=$$(date +%s%N); \
+			out=$$(ACO_SOLVER_TIMEOUT_SECONDS="$(SOLVE_SEQ_RUNTIME_EFFECTIVE)" ACO_SOLVER_STAGNATION_ITERS="$(SOLVE_SEQ_STAGNATION_ITERS)" ./aco_vrp_cuda.out "$$instance_path" "$$K" "$$m" "$$T" "$$solver_seed" 2>&1); \
+			rc=$$?; \
+			end_ns=$$(date +%s%N); \
 		elapsed=$$(awk "BEGIN {printf \"%.6f\", ($$end_ns-$$start_ns)/1000000000}"); \
 		printf '%s\n' "$$out" > "$$sol_file"; \
 		if [ $$rc -eq 0 ]; then \
-			cost=$$(printf '%s\n' "$$out" | sed -n 's/^Final Best Cost: //p' | tail -n1); \
+			cost=$$(printf '%s\n' "$$out" | sed -n -e 's/^best cost: //p' -e 's/^Final Best Cost: //p' | tail -n1); \
 			echo "$$name,$$profile,$$instance_path,$$n,$$K,$$m,$$T,$$solver_seed,$$instance_seed,$$layout_id,ok,$$elapsed,$$cost," >> "$$csv"; \
 		else \
 			err=$$(printf '%s' "$$out" | tr '\n' ' ' | tr ',' ';'); \
