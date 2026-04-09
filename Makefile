@@ -86,9 +86,11 @@ SOLVE_MANIFEST_MPI?=instances/test_aligned/manifest_openmp_mpi.csv
 SOLVE_PYVRP_RUNTIME_S?=10
 SOLVE_SEQ_RUNTIME?=
 SOLVE_SEQ_RUNTIME_S?=0
+SOLVE_SEQ_STAGNATION_ITERS?=0
 SOLVE_SEQ_M?=0
 SOLVE_SEQ_T?=0
 SOLVE_MPI_RUNTIME_S?=0
+SOLVE_MPI_STAGNATION_ITERS?=0
 SOLVE_PYVRP_SEED?=1234
 SOLVE_LIMIT?=0
 SOLVE_CLIENTS?=
@@ -141,9 +143,9 @@ help:
 	@printf "COMANDI ESEMPIO:\n"
 	@printf "  make generate_problems GEN_CLIENTS=500,1000,4000,8000\n"
 	@printf "  make solve_pyvrp SOLVE_CLIENTS=500,1000 SOLVE_PYVRP_RUNTIME_S=20\n"
-	@printf "  make solve_seq   SOLVE_CLIENTS=500,1000,2000 SOLVE_SEQ_RUNTIME_S=20 SOLVE_SEQ_T=500\n"
+	@printf "  make solve_seq   SOLVE_CLIENTS=500,1000,2000 SOLVE_SEQ_RUNTIME_S=20 SOLVE_SEQ_T=500 SOLVE_SEQ_STAGNATION_ITERS=80\n"
 	@printf "  make solve_cuda  SOLVE_CLIENTS=500,1000\n"
-	@printf "  make solve_mpi   SOLVE_CLIENTS=4000,8000 SOLVE_MPI_RANKS=4 SOLVE_MPI_OMP_THREADS=8 SOLVE_MPI_RUNTIME_S=20\n"
+	@printf "  make solve_mpi   SOLVE_CLIENTS=4000,8000 SOLVE_MPI_RANKS=4 SOLVE_MPI_OMP_THREADS=8 SOLVE_MPI_RUNTIME_S=20 SOLVE_MPI_STAGNATION_ITERS=80\n"
 	@printf "  make solve_all   SOLVE_CLIENTS=500,1000\n\n"
 	@printf "TARGET GENERAZIONE PROBLEMI:\n"
 	@printf "  %-42s | %s\n" "generate_problems" "Genera istanze .vrp + manifest.csv + manifest_openmp_mpi.csv"
@@ -183,9 +185,11 @@ help:
 	@printf "  %-60s | %s\n" "SOLVE_PYVRP_RUNTIME_S=10" "Budget tempo per istanza PyVRP (secondi)"
 	@printf "  %-60s | %s\n" "SOLVE_SEQ_RUNTIME_S=0" "Budget tempo seq (secondi, 0=disattivo)"
 	@printf "  %-60s | %s\n" "SOLVE_SEQ_RUNTIME=60" "Alias compatibile di SOLVE_SEQ_RUNTIME_S"
+	@printf "  %-60s | %s\n" "SOLVE_SEQ_STAGNATION_ITERS=0" "Stop seq per N iterazioni senza miglioramento (0=off)"
 	@printf "  %-60s | %s\n" "SOLVE_SEQ_M=0" "Override m (formiche) per solve_seq; 0=usa manifest"
 	@printf "  %-60s | %s\n" "SOLVE_SEQ_T=0" "Override T (iterazioni) per solve_seq; 0=usa manifest"
 	@printf "  %-60s | %s\n" "SOLVE_MPI_RUNTIME_S=0" "Budget tempo per istanza MPI+OpenMP (secondi, 0=disattivo)"
+	@printf "  %-60s | %s\n" "SOLVE_MPI_STAGNATION_ITERS=0" "Stop MPI per N iterazioni senza miglioramento (0=off)"
 	@printf "  %-60s | %s\n" "SOLVE_PYVRP_SEED=1234" "Seed PyVRP"
 	@printf "  %-60s | %s\n" "SOLVE_MPI_RANKS=2" "Numero processi MPI per solve_mpi"
 	@printf "  %-60s | %s\n" "SOLVE_MPI_OMP_THREADS=2" "Thread OpenMP per rank MPI"
@@ -385,7 +389,7 @@ solve_seq: solve_prepare all
 		if [ "$(SOLVE_SEQ_T)" -gt 0 ]; then T_run="$(SOLVE_SEQ_T)"; fi; \
 		sol_file="$$sol_dir/$${name}_seq_solution.txt"; \
 		start_ns=$$(date +%s%N); \
-		out=$$(ACO_SOLVER_TIMEOUT_SECONDS="$(SOLVE_SEQ_RUNTIME_EFFECTIVE)" ./aco_vrp_seq.out "$$instance_path" "$$K" "$$m_run" "$$T_run" "$$solver_seed" 2>&1); \
+		out=$$(ACO_SOLVER_TIMEOUT_SECONDS="$(SOLVE_SEQ_RUNTIME_EFFECTIVE)" ACO_SOLVER_STAGNATION_ITERS="$(SOLVE_SEQ_STAGNATION_ITERS)" ./aco_vrp_seq.out "$$instance_path" "$$K" "$$m_run" "$$T_run" "$$solver_seed" 2>&1); \
 		rc=$$?; \
 		end_ns=$$(date +%s%N); \
 		elapsed=$$(awk "BEGIN {printf \"%.6f\", ($$end_ns-$$start_ns)/1000000000}"); \
@@ -435,7 +439,7 @@ solve_mpi: solve_prepare openmp_mpi
 		| { if [ "$(SOLVE_LIMIT)" -gt 0 ]; then head -n "$(SOLVE_LIMIT)"; else cat; fi; } ) | while IFS=, read -r profile name instance_path n K m T solver_seed instance_seed layout_id capacity_formula; do \
 		sol_file="$$sol_dir/$${name}_mpi_solution.txt"; \
 		start_ns=$$(date +%s%N); \
-		out=$$(ACO_SOLVER_TIMEOUT_SECONDS="$(SOLVE_MPI_RUNTIME_S)" OMP_NUM_THREADS="$(SOLVE_MPI_OMP_THREADS)" mpirun -np "$(SOLVE_MPI_RANKS)" ./aco_vrp_openmp_mpi.out "$$instance_path" "$$K" "$$m" "$$T" "$$solver_seed" </dev/null 2>&1); \
+		out=$$(ACO_SOLVER_TIMEOUT_SECONDS="$(SOLVE_MPI_RUNTIME_S)" ACO_SOLVER_STAGNATION_ITERS="$(SOLVE_MPI_STAGNATION_ITERS)" OMP_NUM_THREADS="$(SOLVE_MPI_OMP_THREADS)" mpirun -np "$(SOLVE_MPI_RANKS)" ./aco_vrp_openmp_mpi.out "$$instance_path" "$$K" "$$m" "$$T" "$$solver_seed" </dev/null 2>&1); \
 		rc=$$?; \
 		end_ns=$$(date +%s%N); \
 		elapsed=$$(awk "BEGIN {printf \"%.6f\", ($$end_ns-$$start_ns)/1000000000}"); \

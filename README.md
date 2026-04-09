@@ -84,11 +84,11 @@ make solve_all SOLVE_CLIENTS=500,1000
 # solo n=4000, con runtime pyvrp più alto
 make solve_pyvrp SOLVE_CLIENTS=4000 SOLVE_PYVRP_RUNTIME_S=30
 
-# seq con budget 20s per istanza + più iterazioni (per non finire troppo presto)
-make solve_seq SOLVE_CLIENTS=500,1000 SOLVE_SEQ_RUNTIME_S=20 SOLVE_SEQ_T=500
+# seq con budget 20s + stop per stagnazione in epoche (80 iterazioni senza miglioramento)
+make solve_seq SOLVE_CLIENTS=500,1000 SOLVE_SEQ_RUNTIME_S=20 SOLVE_SEQ_T=500 SOLVE_SEQ_STAGNATION_ITERS=80
 
-# mpi con budget 20s per istanza
-make solve_mpi SOLVE_CLIENTS=4000,8000 SOLVE_MPI_RUNTIME_S=20
+# mpi con budget 20s + stop per stagnazione in epoche
+make solve_mpi SOLVE_CLIENTS=4000,8000 SOLVE_MPI_RUNTIME_S=20 SOLVE_MPI_STAGNATION_ITERS=80
 
 # cuda
 make solve_cuda SOLVE_CLIENTS=500,1000
@@ -163,9 +163,11 @@ make help
 - `SOLVE_PYVRP_RUNTIME_S=10`
 - `SOLVE_SEQ_RUNTIME_S=0` (0 = disattivo)
 - `SOLVE_SEQ_RUNTIME=60` (alias compatibile)
+- `SOLVE_SEQ_STAGNATION_ITERS=0` (0 = off, stop per epoche senza miglioramento)
 - `SOLVE_SEQ_M=0` (override `m` solo per `solve_seq`)
 - `SOLVE_SEQ_T=0` (override `T` solo per `solve_seq`)
 - `SOLVE_MPI_RUNTIME_S=0` (0 = disattivo)
+- `SOLVE_MPI_STAGNATION_ITERS=0` (0 = off, stop per epoche senza miglioramento)
 - `SOLVE_PYVRP_SEED=1234`
 - `SOLVE_MPI_RANKS=2`
 - `SOLVE_MPI_OMP_THREADS=2`

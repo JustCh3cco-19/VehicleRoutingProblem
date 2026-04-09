@@ -230,17 +230,20 @@ static double wall_time_seconds(void) {
 }
 
 static void load_timer_directives(double *max_runtime_sec,
-                                  double *max_stagnation_sec,
+                                  int *max_stagnation_iters,
                                   double *improve_eps) {
   const char *s_timeout = getenv("ACO_SOLVER_TIMEOUT_SECONDS");
-  const char *s_stagnation = getenv("ACO_SOLVER_STAGNATION_SECONDS");
+  const char *s_stagnation = getenv("ACO_SOLVER_STAGNATION_ITERS");
   const char *s_eps = getenv("ACO_SOLVER_IMPROVE_EPS");
 
   *max_runtime_sec = (s_timeout && *s_timeout) ? atof(s_timeout) : 0.0;
-  *max_stagnation_sec =
-      (s_stagnation && *s_stagnation) ? atof(s_stagnation) : 0.0;
+  *max_stagnation_iters =
+      (s_stagnation && *s_stagnation) ? atoi(s_stagnation) : 0;
   *improve_eps = (s_eps && *s_eps) ? atof(s_eps) : ACO_EPS;
 
+  if (*max_stagnation_iters < 0) {
+    *max_stagnation_iters = 0;
+  }
   if (*improve_eps <= 0.0) {
     *improve_eps = ACO_EPS;
   }
@@ -1042,7 +1045,7 @@ static void aco_vrp_run_with_timer(int n, int K, int m, int T, double **c,
                                    double tau0, double Q, unsigned int seed,
                                    Solution *best_solution, double *best_cost,
                                    double max_runtime_sec,
-                                   double max_stagnation_sec,
+                                   int max_stagnation_iters,
                                    double improve_eps) {
   int total_m = m;
   if (total_m <= 0) {
@@ -1103,7 +1106,7 @@ static void aco_vrp_run_with_timer(int n, int K, int m, int T, double **c,
   double tau_max = tau0;
   double tau_min = tau0 * 0.05;
   double start_wall = wall_time_seconds();
-  double last_improvement_wall = start_wall;
+  int no_improve_iters = 0;
 
   for (int iter = 0; iter < T; ++iter) {
     double iter_start_wall = wall_time_seconds();
@@ -1177,8 +1180,8 @@ static void aco_vrp_run_with_timer(int n, int K, int m, int T, double **c,
       *best_cost = iter_best_cost;
       solution_copy(best_solution, iter_best);
       stagnation_iters = 0;
+      no_improve_iters = 0;
       improved_global = 1;
-      last_improvement_wall = wall_time_seconds();
 
       if (*best_cost > ACO_EPS) {
         tau_max = 1.0 / ((1.0 - rho) * (*best_cost));
@@ -1186,6 +1189,7 @@ static void aco_vrp_run_with_timer(int n, int K, int m, int T, double **c,
       }
     } else {
       ++stagnation_iters;
+      ++no_improve_iters;
     }
 
     if (iter_best_cost < DBL_MAX) {
@@ -1251,8 +1255,8 @@ static void aco_vrp_run_with_timer(int n, int K, int m, int T, double **c,
         (iter_end_wall - start_wall) >= max_runtime_sec) {
       break;
     }
-    if (!improved_global && max_stagnation_sec > 0.0 &&
-        (iter_end_wall - last_improvement_wall) >= max_stagnation_sec) {
+    if (!improved_global && max_stagnation_iters > 0 &&
+        no_improve_iters >= max_stagnation_iters) {
       break;
     }
   }
@@ -1267,10 +1271,10 @@ void aco_vrp(int n, int K, int m, int T, double **c, double alpha,
              double beta, double rho, double tau0, double Q,
              unsigned int seed, Solution *best_solution, double *best_cost) {
   double max_runtime_sec = 0.0;
-  double max_stagnation_sec = 0.0;
+  int max_stagnation_iters = 0;
   double improve_eps = ACO_EPS;
-  load_timer_directives(&max_runtime_sec, &max_stagnation_sec, &improve_eps);
+  load_timer_directives(&max_runtime_sec, &max_stagnation_iters, &improve_eps);
   aco_vrp_run_with_timer(n, K, m, T, c, alpha, beta, rho, tau0, Q, seed,
                          best_solution, best_cost, max_runtime_sec,
-                         max_stagnation_sec, improve_eps);
+                         max_stagnation_iters, improve_eps);
 }
