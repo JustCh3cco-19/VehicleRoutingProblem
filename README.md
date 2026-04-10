@@ -201,6 +201,7 @@ Note cluster:
 - default submit per target:
   - `solve_seq` (e altri non-MPI): `--nodes=1 --ntasks=1 --cpus-per-task=32`
   - `solve_mpi`: `--nodes=4 --ntasks=4 --cpus-per-task=8`
+- launcher MPI in `solve_mpi`: usa `srun --mpi=pmix` quando rileva Slurm (`SLURM_JOB_ID`), altrimenti usa `mpirun`
 - per CUDA sul tuo cluster usa `CUDA_ARCH=sm_75` nei `--make-args`
 
 Esempi:

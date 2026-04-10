@@ -18,6 +18,14 @@ if [ "$repeats" -lt 1 ]; then
 fi
 improve_rel="$(awk "BEGIN { printf \"%.12g\", (${improve_rel_pct}) / 100.0 }")"
 
+launcher_kind="mpirun"
+launcher_cmd=(mpirun -np "$mpi_ranks")
+if [ -n "${SLURM_JOB_ID:-}" ] && command -v srun >/dev/null 2>&1; then
+  launcher_kind="srun"
+  launcher_cmd=(srun --mpi=pmix -n "$mpi_ranks" --cpus-per-task "$omp_threads")
+fi
+echo "[mpi] launcher=${launcher_kind}"
+
 echo "name,profile,instance_path,n,K,m,solver_seed,instance_seed,layout_id,run_id,status,elapsed_s,max_rss_kb,best_cost,error" > "$csv"
 
 tail -n +2 "$manifest" \
@@ -34,7 +42,7 @@ tail -n +2 "$manifest" \
           ACO_SOLVER_STAGNATION_EPOCHS="$stag_iters" \
           ACO_SOLVER_MIN_REL_IMPROVEMENT="$improve_rel" \
           OMP_NUM_THREADS="$omp_threads" \
-          mpirun -np "$mpi_ranks" ./aco_vrp_openmp_mpi.out "$instance_path" "$K" "$m" "$seed_run" </dev/null 2>&1)
+          "${launcher_cmd[@]}" ./aco_vrp_openmp_mpi.out "$instance_path" "$K" "$m" "$seed_run" </dev/null 2>&1)
         rc=$?
 
         elapsed="$(cut -d, -f1 "$stats_file" 2>/dev/null)"
