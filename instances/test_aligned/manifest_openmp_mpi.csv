@@ -1,7 +1,8 @@
-profile,name,instance_path,n,K,m,T,solver_seed,instance_seed,layout_id,capacity_formula
-generated_mpi,n500_k8_s19000,instances/test_aligned/n500_k8_s19000.vrp,500,8,64,40,1234,19000,grid100,ceil(n/K)
-generated_mpi,n1000_k8_s19001,instances/test_aligned/n1000_k8_s19001.vrp,1000,8,64,40,1234,19001,grid100,ceil(n/K)
-generated_mpi,n2000_k8_s19002,instances/test_aligned/n2000_k8_s19002.vrp,2000,8,64,40,1234,19002,grid100,ceil(n/K)
-generated_mpi,n4000_k8_s19003,instances/test_aligned/n4000_k8_s19003.vrp,4000,8,32,20,1234,19003,grid100,ceil(n/K)
-generated_mpi,n8000_k8_s19004,instances/test_aligned/n8000_k8_s19004.vrp,8000,8,32,20,1234,19004,grid100,ceil(n/K)
-generated_mpi,n16000_k16_s19005,instances/test_aligned/n16000_k16_s19005.vrp,16000,16,16,12,1234,19005,grid100,ceil(n/K)
+profile,name,instance_path,n,K,m,solver_seed,instance_seed,layout_id,capacity_formula
+generated_mpi,n4000_k8_s19000,instances/test_aligned/n4000_k8_s19000.vrp,4000,8,32,1234,19000,grid100,ceil(n/K)
+generated_mpi,n8000_k8_s19001,instances/test_aligned/n8000_k8_s19001.vrp,8000,8,32,1234,19001,grid100,ceil(n/K)
+generated_mpi,n16000_k16_s19002,instances/test_aligned/n16000_k16_s19002.vrp,16000,16,16,1234,19002,grid100,ceil(n/K)
+generated_mpi,n32000_k32_s19003,instances/test_aligned/n32000_k32_s19003.vrp,32000,32,8,1234,19003,grid100,ceil(n/K)
+generated_mpi,n64000_k63_s19004,instances/test_aligned/n64000_k63_s19004.vrp,64000,63,4,1234,19004,grid100,ceil(n/K)
+generated_mpi,n128000_k125_s19005,instances/test_aligned/n128000_k125_s19005.vrp,128000,125,4,1234,19005,grid100,ceil(n/K)
+generated_mpi,n200000_k196_s19006,instances/test_aligned/n200000_k196_s19006.vrp,200000,196,4,1234,19006,grid100,ceil(n/K)

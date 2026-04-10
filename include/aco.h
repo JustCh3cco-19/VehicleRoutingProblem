@@ -62,11 +62,11 @@ typedef struct {
   unsigned int rng_state;
 } SeqWorkspace;
 
-void aco_vrp(int n, int K, int m, int T, double **c, double alpha,
+void aco_vrp(int n, int K, int m, double **c, double alpha,
              double beta, double rho, double tau0, double Q,
              unsigned int seed, Solution *best_solution, double *best_cost);
 void aco_vrp_with_capacity(int n, int K, int vehicle_capacity_customers, int m,
-                           int T, double **c, double alpha, double beta,
+                           double **c, double alpha, double beta,
                            double rho, double tau0, double Q,
                            unsigned int seed, Solution *best_solution,
                            double *best_cost);

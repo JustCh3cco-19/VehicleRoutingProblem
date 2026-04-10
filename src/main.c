@@ -132,49 +132,45 @@ int main(int argc, char **argv) {
   int n = 5;
   int K = 2;
   int m = 10;
-  int T = 50;
-
-  if (argc == 6 && parse_int_arg(argv[1], &n)) {
+  if (argc == 5 && parse_int_arg(argv[1], &n)) {
     int ok = 1;
     ok = ok && parse_int_arg(argv[2], &K);
     ok = ok && parse_int_arg(argv[3], &m);
-    ok = ok && parse_int_arg(argv[4], &T);
-    seed = parse_uint_arg(argv[5], &ok);
+    seed = parse_uint_arg(argv[4], &ok);
 
-    if (!ok || n <= 0 || K <= 0 || m < 0 || T <= 0) {
+    if (!ok || n <= 0 || K <= 0 || m < 0) {
       if (
 #ifdef USE_MPI
           mpi_rank == 0 &&
 #endif
           1) {
         fprintf(stderr,
-                "usage: %s [n K m T seed]\n"
-                "example: %s 200 16 0 100 1234   (m=0 => auto ants)\n",
+                "usage: %s [n K m seed]\n"
+                "example: %s 200 16 0 1234   (m=0 => auto ants)\n",
                 argv[0], argv[0]);
       }
       status = 1;
       goto cleanup_mpi;
     }
-  } else if ((argc == 5 || argc == 6) && argv[1] != NULL) {
+  } else if ((argc == 4 || argc == 5) && argv[1] != NULL) {
     int ok = 1;
     instance_path = argv[1];
     ok = ok && parse_int_arg(argv[2], &K);
     ok = ok && parse_int_arg(argv[3], &m);
-    ok = ok && parse_int_arg(argv[4], &T);
-    if (argc == 6) {
-      seed = parse_uint_arg(argv[5], &ok);
+    if (argc == 5) {
+      seed = parse_uint_arg(argv[4], &ok);
     }
 
-    if (!ok || K <= 0 || m < 0 || T <= 0) {
+    if (!ok || K <= 0 || m < 0) {
       if (
 #ifdef USE_MPI
           mpi_rank == 0 &&
 #endif
           1) {
         fprintf(stderr,
-                "usage: %s [n K m T seed]\n"
-                "   or: %s <instance.vrp> <K> <m> <T> [seed]\n"
-                "example: %s instances/test_aligned/n500_k8_s19000.vrp 8 32 20 9000\n",
+                "usage: %s [n K m seed]\n"
+                "   or: %s <instance.vrp> <K> <m> [seed]\n"
+                "example: %s instances/test_aligned/n500_k8_s19000.vrp 8 32 9000\n",
                 argv[0], argv[0], argv[0]);
       }
       status = 1;
@@ -188,9 +184,9 @@ int main(int argc, char **argv) {
 #endif
         1) {
       fprintf(stderr,
-              "usage: %s [n K m T seed]\n"
-              "   or: %s <instance.vrp> <K> <m> <T> [seed]\n"
-              "example: %s 200 16 0 100 1234   (m=0 => auto ants)\n",
+              "usage: %s [n K m seed]\n"
+              "   or: %s <instance.vrp> <K> <m> [seed]\n"
+              "example: %s 200 16 0 1234   (m=0 => auto ants)\n",
               argv[0], argv[0], argv[0]);
     }
     status = 1;
@@ -246,10 +242,10 @@ int main(int argc, char **argv) {
       matrix_free(c);
       goto cleanup_mpi;
     }
-    aco_vrp_with_capacity(n, K, instance_meta.capacity, m, T, c, alpha, beta,
+    aco_vrp_with_capacity(n, K, instance_meta.capacity, m, c, alpha, beta,
                           rho, tau0, Q, seed, best, &best_cost);
   } else {
-    aco_vrp(n, K, m, T, c, alpha, beta, rho, tau0, Q, seed, best,
+    aco_vrp(n, K, m, c, alpha, beta, rho, tau0, Q, seed, best,
             &best_cost);
   }
 

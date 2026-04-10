@@ -97,82 +97,6 @@ static int choose_auto_total_ants(int n) {
 }
 
 /*
- * Function:  choose_stagnation_level
- * ----------------------------------
- * maps the global stagnation counter to a discrete level:
- * 0 = low, 1 = medium, 2 = high.
- */
-static int choose_stagnation_level(int stagnation_iters,
-                                   int stagnation_trigger) {
-  if (stagnation_iters >= 2 * stagnation_trigger) {
-    return 2;
-  }
-  if (stagnation_iters >= stagnation_trigger) {
-    return 1;
-  }
-  return 0;
-}
-
-/*
- * Function:  choose_ant_batch_size
- * --------------------------------
- * picks a batch size for adaptive in-iteration ant evaluation.
- */
-static int choose_ant_batch_size(int total_ants, int stagnation_level) {
-  if (total_ants <= 0) {
-    return 0;
-  }
-
-  int divisor = 8;
-  if (stagnation_level <= 0) {
-    divisor = 6;
-  } else if (stagnation_level >= 2) {
-    divisor = 12;
-  }
-
-  int batch = total_ants / divisor;
-  return clamp_int(batch, 1, total_ants);
-}
-
-/*
- * Function:  choose_min_ants_before_stop
- * --------------------------------------
- * picks the minimum ants to evaluate before allowing early stop.
- */
-static int choose_min_ants_before_stop(int total_ants, int stagnation_level) {
-  if (total_ants <= 0) {
-    return 0;
-  }
-
-  int min_ants = total_ants / 4;
-  if (stagnation_level == 1) {
-    min_ants = total_ants / 2;
-  } else if (stagnation_level >= 2) {
-    min_ants = (3 * total_ants) / 4;
-  }
-  return clamp_int(min_ants, 1, total_ants);
-}
-
-/*
- * Function:  choose_no_improve_patience
- * -------------------------------------
- * picks tolerated non-improving batches before early stop.
- */
-static int choose_no_improve_patience(int total_ants, int stagnation_level) {
-  if (total_ants <= 0) {
-    return 1;
-  }
-
-  int patience = (total_ants >= 128) ? 3 : 2;
-  if (stagnation_level == 1) {
-    ++patience;
-  } else if (stagnation_level >= 2) {
-    patience += 2;
-  }
-  return clamp_int(patience, 1, 6);
-}
-
-/*
  * Function:  fast_pow_nonneg
  * --------------------------
  * evaluates base^exponent with fast paths for common exponents.
@@ -230,23 +154,36 @@ static double wall_time_seconds(void) {
 }
 
 static void load_timer_directives(double *max_runtime_sec,
-                                  int *max_stagnation_iters,
-                                  double *improve_eps) {
+                                  int *max_stagnation_epochs,
+                                  double *min_rel_improvement) {
   const char *s_timeout = getenv("ACO_SOLVER_TIMEOUT_SECONDS");
-  const char *s_stagnation = getenv("ACO_SOLVER_STAGNATION_ITERS");
-  const char *s_eps = getenv("ACO_SOLVER_IMPROVE_EPS");
+  const char *s_stagnation = getenv("ACO_SOLVER_STAGNATION_EPOCHS");
+  const char *s_rel = getenv("ACO_SOLVER_MIN_REL_IMPROVEMENT");
 
   *max_runtime_sec = (s_timeout && *s_timeout) ? atof(s_timeout) : 0.0;
-  *max_stagnation_iters =
+  *max_stagnation_epochs =
       (s_stagnation && *s_stagnation) ? atoi(s_stagnation) : 0;
-  *improve_eps = (s_eps && *s_eps) ? atof(s_eps) : ACO_EPS;
+  *min_rel_improvement = (s_rel && *s_rel) ? atof(s_rel) : 1e-3;
 
-  if (*max_stagnation_iters < 0) {
-    *max_stagnation_iters = 0;
+  if (*max_stagnation_epochs < 0) {
+    *max_stagnation_epochs = 0;
   }
-  if (*improve_eps <= 0.0) {
-    *improve_eps = ACO_EPS;
+  if (*min_rel_improvement <= 0.0) {
+    *min_rel_improvement = 1e-3;
   }
+}
+
+static int is_significant_improvement(double prev_best, double new_best,
+                                      double min_rel_improvement) {
+  if (prev_best >= DBL_MAX || new_best >= DBL_MAX) {
+    return (new_best < prev_best);
+  }
+  if (new_best >= prev_best - ACO_EPS) {
+    return 0;
+  }
+  double abs_gain = prev_best - new_best;
+  double rel_gain = abs_gain / fmax(prev_best, ACO_EPS);
+  return rel_gain + ACO_EPS >= min_rel_improvement;
 }
 
 /*
@@ -717,19 +654,19 @@ static void build_ant_solution(SeqWorkspace *ws, const SeqShared *shared, int K,
  * internal sequential solver routine with timer directives already resolved.
  */
 static void aco_vrp_run_with_timer(int n, int K, int vehicle_capacity_customers,
-                                   int m, int T, double **c, double alpha,
+                                   int m, double **c, double alpha,
                                    double beta, double rho, double tau0,
                                    double Q, unsigned int seed,
                                    Solution *best_solution, double *best_cost,
                                    double max_runtime_sec,
-                                   int max_stagnation_iters,
-                                   double improve_eps) {
+                                   int max_stagnation_epochs,
+                                   double min_rel_improvement) {
   int total_m = m;
   if (total_m <= 0) {
     total_m = choose_auto_total_ants(n);
   }
-  if (improve_eps <= 0.0) {
-    improve_eps = ACO_EPS;
+  if (min_rel_improvement <= 0.0) {
+    min_rel_improvement = 1e-3;
   }
 
   double **tau = matrix_alloc(n);
@@ -772,7 +709,8 @@ static void aco_vrp_run_with_timer(int n, int K, int vehicle_capacity_customers,
   }
 
   int stagnation_iters = 0;
-  int stagnation_trigger = T / 4;
+  int stagnation_trigger =
+      (max_stagnation_epochs > 0) ? (max_stagnation_epochs / 2) : 32;
   if (stagnation_trigger < 4) {
     stagnation_trigger = 4;
   }
@@ -782,75 +720,41 @@ static void aco_vrp_run_with_timer(int n, int K, int vehicle_capacity_customers,
   double tau_max = tau0;
   double tau_min = tau0 * 0.05;
   double start_wall = wall_time_seconds();
-  int no_improve_iters = 0;
+  int no_improve_epochs = 0;
 
-  for (int iter = 0; iter < T; ++iter) {
+  for (int iter = 0;; ++iter) {
     double iter_start_wall = wall_time_seconds();
     if (max_runtime_sec > 0.0 &&
         (iter_start_wall - start_wall) >= max_runtime_sec) {
       break;
     }
 
-    int stagnation_level =
-        choose_stagnation_level(stagnation_iters, stagnation_trigger);
-    int batch_size = choose_ant_batch_size(total_m, stagnation_level);
-    int min_ants_before_stop =
-        choose_min_ants_before_stop(total_m, stagnation_level);
-    int no_improve_patience =
-        choose_no_improve_patience(total_m, stagnation_level);
-
     seq_shared_update_scores(&shared, tau, alpha);
 
     double iter_best_cost = DBL_MAX;
     int iter_best_ant = INT_MAX;
 
-    int ants_evaluated = 0;
-    int consecutive_no_improve_batches = 0;
+    for (int ant = 0; ant < total_m; ++ant) {
+      ws.rng_state = aco_make_ant_seed(seed, iter, ant);
 
-    for (int batch_start = 0; batch_start < total_m; batch_start += batch_size) {
-      int batch_end = batch_start + batch_size;
-      if (batch_end > total_m) {
-        batch_end = total_m;
-      }
+      build_ant_solution(&ws, &shared, K, vehicle_capacity_customers, c);
+      double cost = solution_cost(ws.sol, c);
 
-      double prev_best_cost = iter_best_cost;
-      int prev_best_ant = iter_best_ant;
-
-      for (int ant = batch_start; ant < batch_end; ++ant) {
-        ws.rng_state = aco_make_ant_seed(seed, iter, ant);
-
-        build_ant_solution(&ws, &shared, K, vehicle_capacity_customers, c);
-        double cost = solution_cost(ws.sol, c);
-
-        if (cost < iter_best_cost ||
-            (fabs(cost - iter_best_cost) <= ACO_EPS && ant < iter_best_ant)) {
-          iter_best_cost = cost;
-          iter_best_ant = ant;
-          solution_copy(iter_best, ws.sol);
-        }
-      }
-
-      ants_evaluated += (batch_end - batch_start);
-      if (iter_best_cost < prev_best_cost - ACO_EPS ||
-          (fabs(iter_best_cost - prev_best_cost) <= ACO_EPS &&
-           iter_best_ant < prev_best_ant)) {
-        consecutive_no_improve_batches = 0;
-      } else {
-        ++consecutive_no_improve_batches;
-      }
-
-      if (ants_evaluated >= min_ants_before_stop &&
-          consecutive_no_improve_batches >= no_improve_patience) {
-        break;
+      if (cost < iter_best_cost ||
+          (fabs(cost - iter_best_cost) <= ACO_EPS && ant < iter_best_ant)) {
+        iter_best_cost = cost;
+        iter_best_ant = ant;
+        solution_copy(iter_best, ws.sol);
       }
     }
 
     int improved_global = 0;
-    if (iter_best_cost < (*best_cost - improve_eps)) {
+    if (is_significant_improvement(*best_cost, iter_best_cost,
+                                   min_rel_improvement)) {
       *best_cost = iter_best_cost;
       solution_copy(best_solution, iter_best);
       stagnation_iters = 0;
-      no_improve_iters = 0;
+      no_improve_epochs = 0;
       improved_global = 1;
 
       if (*best_cost > ACO_EPS) {
@@ -859,7 +763,7 @@ static void aco_vrp_run_with_timer(int n, int K, int vehicle_capacity_customers,
       }
     } else {
       ++stagnation_iters;
-      ++no_improve_iters;
+      ++no_improve_epochs;
     }
 
     if (iter_best_cost < DBL_MAX) {
@@ -925,8 +829,8 @@ static void aco_vrp_run_with_timer(int n, int K, int vehicle_capacity_customers,
         (iter_end_wall - start_wall) >= max_runtime_sec) {
       break;
     }
-    if (!improved_global && max_stagnation_iters > 0 &&
-        no_improve_iters >= max_stagnation_iters) {
+    if (!improved_global && max_stagnation_epochs > 0 &&
+        no_improve_epochs >= max_stagnation_epochs) {
       break;
     }
   }
@@ -937,24 +841,26 @@ static void aco_vrp_run_with_timer(int n, int K, int vehicle_capacity_customers,
   matrix_free(tau);
 }
 
-void aco_vrp(int n, int K, int m, int T, double **c, double alpha,
+void aco_vrp(int n, int K, int m, double **c, double alpha,
              double beta, double rho, double tau0, double Q,
              unsigned int seed, Solution *best_solution, double *best_cost) {
   int vehicle_capacity_customers = (K > 0) ? ((n + K - 1) / K) : n;
-  aco_vrp_with_capacity(n, K, vehicle_capacity_customers, m, T, c, alpha,
+  aco_vrp_with_capacity(n, K, vehicle_capacity_customers, m, c, alpha,
                         beta, rho, tau0, Q, seed, best_solution, best_cost);
 }
 
 void aco_vrp_with_capacity(int n, int K, int vehicle_capacity_customers, int m,
-                           int T, double **c, double alpha, double beta,
+                           double **c, double alpha, double beta,
                            double rho, double tau0, double Q,
                            unsigned int seed, Solution *best_solution,
                            double *best_cost) {
   double max_runtime_sec = 0.0;
-  int max_stagnation_iters = 0;
-  double improve_eps = ACO_EPS;
-  load_timer_directives(&max_runtime_sec, &max_stagnation_iters, &improve_eps);
-  aco_vrp_run_with_timer(n, K, vehicle_capacity_customers, m, T, c, alpha,
+  int max_stagnation_epochs = 0;
+  double min_rel_improvement = 1e-3;
+  load_timer_directives(&max_runtime_sec, &max_stagnation_epochs,
+                        &min_rel_improvement);
+  aco_vrp_run_with_timer(n, K, vehicle_capacity_customers, m, c, alpha,
                          beta, rho, tau0, Q, seed, best_solution, best_cost,
-                         max_runtime_sec, max_stagnation_iters, improve_eps);
+                         max_runtime_sec, max_stagnation_epochs,
+                         min_rel_improvement);
 }

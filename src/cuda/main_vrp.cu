@@ -9,7 +9,7 @@ extern "C" {
 #include <stdlib.h>
 #include <errno.h>
 
-int aco_vrp_cuda(int n, int K, int m, int T, double **c, double alpha,
+int aco_vrp_cuda(int n, int K, int m, double **c, double alpha,
                  double beta, double rho, double tau0, double Q,
                  unsigned int seed, Solution *best_solution,
                  double *best_cost);
@@ -64,7 +64,6 @@ int main(int argc, char **argv) {
     const char *path;
     int K = 0;
     int m = 0;
-    int T = 0;
     int ok = 1;
     unsigned int seed = 1234u;
     int n = 0;
@@ -78,22 +77,21 @@ int main(int argc, char **argv) {
     Solution *best;
     double best_cost = 0.0;
 
-    if (argc < 5 || argc > 6) {
-        fprintf(stderr, "usage: %s <instance.vrp> <K> <m> <T> [seed]\n", argv[0]);
-        fprintf(stderr, "example: %s instances/test_aligned/n500_k8_s19000.vrp 8 0 100 1234\n", argv[0]);
+    if (argc < 4 || argc > 5) {
+        fprintf(stderr, "usage: %s <instance.vrp> <K> <m> [seed]\n", argv[0]);
+        fprintf(stderr, "example: %s instances/test_aligned/n500_k8_s19000.vrp 8 0 1234\n", argv[0]);
         return 1;
     }
 
     path = argv[1];
     ok = ok && parse_int_arg(argv[2], &K);
     ok = ok && parse_int_arg(argv[3], &m);
-    ok = ok && parse_int_arg(argv[4], &T);
-    if (argc == 6) {
-        seed = parse_uint_arg(argv[5], &ok);
+    if (argc == 5) {
+        seed = parse_uint_arg(argv[4], &ok);
     }
 
-    if (!ok || K <= 0 || m < 0 || T <= 0) {
-        fprintf(stderr, "usage: %s <instance.vrp> <K> <m> <T> [seed]\n", argv[0]);
+    if (!ok || K <= 0 || m < 0) {
+        fprintf(stderr, "usage: %s <instance.vrp> <K> <m> [seed]\n", argv[0]);
         return 1;
     }
 
@@ -114,7 +112,7 @@ int main(int argc, char **argv) {
         return 1;
     }
     
-    if (aco_vrp_cuda(n, K, m, T, c, alpha, beta, rho, tau0, Q, seed, best, &best_cost) != 0) {
+    if (aco_vrp_cuda(n, K, m, c, alpha, beta, rho, tau0, Q, seed, best, &best_cost) != 0) {
         fprintf(stderr, "CUDA solver failed\n");
         solution_free(best);
         matrix_free(c);

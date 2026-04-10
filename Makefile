@@ -86,11 +86,12 @@ SOLVE_MANIFEST_MPI?=instances/test_aligned/manifest_openmp_mpi.csv
 SOLVE_PYVRP_RUNTIME_S?=10
 SOLVE_SEQ_RUNTIME?=
 SOLVE_SEQ_RUNTIME_S?=0
-SOLVE_SEQ_STAGNATION_ITERS?=0
+SOLVE_SEQ_STAGNATION_EPOCHS?=0
+SOLVE_SEQ_MIN_REL_IMPROVEMENT?=0.001
 SOLVE_SEQ_M?=0
-SOLVE_SEQ_T?=0
 SOLVE_MPI_RUNTIME_S?=0
-SOLVE_MPI_STAGNATION_ITERS?=0
+SOLVE_MPI_STAGNATION_EPOCHS?=0
+SOLVE_MPI_MIN_REL_IMPROVEMENT?=0.001
 SOLVE_PYVRP_SEED?=1234
 SOLVE_LIMIT?=0
 SOLVE_CLIENTS?=
@@ -101,10 +102,13 @@ SOLVE_CUDA_VARIANT?=$(CUDA_VARIANT)
 SOLVE_SEQ_RUNTIME_EFFECTIVE=$(if $(strip $(SOLVE_SEQ_RUNTIME)),$(SOLVE_SEQ_RUNTIME),$(SOLVE_SEQ_RUNTIME_S))
 
 GEN_INST_DIR?=instances/test_aligned
-GEN_CLIENTS?=500,1000,2000,4000,8000,16000
+GEN_CLIENTS?=4000,8000,16000,32000,64000,128000,200000
 GEN_SEED_BASE?=19000
 GEN_GRID?=100
 GEN_SOLVER_SEED?=1234
+GEN_TARGET_CUSTOMERS_PER_VEHICLE?=1024
+GEN_MIN_VEHICLES?=8
+GEN_MAX_VEHICLES?=512
 
 COVERAGE_FILES=src/*.gcno src/*.gcda src/seq/*.gcno src/seq/*.gcda src/openmp-mpi/*.gcno src/openmp-mpi/*.gcda src/common/*.gcno src/common/*.gcda tests/*.gcno tests/*.gcda
 LEGACY_BINARIES=aco_vrp_seq aco_vrp_hybrid aco_vrp_openmp_mpi tests/test tests/test_mpi tests/test_final tests/test_final.out tests/test_final_mpi.out tests/c_scaling_tests tests/c_scaling_tests.out
@@ -141,11 +145,11 @@ help:
 	@printf "VehicleRoutingProblem - Make Help\n"
 	@printf "=================================\n\n"
 	@printf "COMANDI ESEMPIO:\n"
-	@printf "  make generate_problems GEN_CLIENTS=500,1000,4000,8000\n"
+	@printf "  make generate_problems GEN_CLIENTS=4000,8000,16000,32000,64000,128000,200000\n"
 	@printf "  make solve_pyvrp SOLVE_CLIENTS=500,1000 SOLVE_PYVRP_RUNTIME_S=20\n"
-	@printf "  make solve_seq   SOLVE_CLIENTS=500,1000,2000 SOLVE_SEQ_RUNTIME_S=20 SOLVE_SEQ_T=500 SOLVE_SEQ_STAGNATION_ITERS=80\n"
+	@printf "  make solve_seq   SOLVE_CLIENTS=500,1000,2000 SOLVE_SEQ_RUNTIME_S=20 SOLVE_SEQ_STAGNATION_EPOCHS=80 SOLVE_SEQ_MIN_REL_IMPROVEMENT=0.001\n"
 	@printf "  make solve_cuda  SOLVE_CLIENTS=500,1000\n"
-	@printf "  make solve_mpi   SOLVE_CLIENTS=4000,8000 SOLVE_MPI_RANKS=4 SOLVE_MPI_OMP_THREADS=8 SOLVE_MPI_RUNTIME_S=20 SOLVE_MPI_STAGNATION_ITERS=80\n"
+	@printf "  make solve_mpi   SOLVE_CLIENTS=4000,8000 SOLVE_MPI_RANKS=4 SOLVE_MPI_OMP_THREADS=8 SOLVE_MPI_RUNTIME_S=20 SOLVE_MPI_STAGNATION_EPOCHS=80 SOLVE_MPI_MIN_REL_IMPROVEMENT=0.001\n"
 	@printf "  make solve_all   SOLVE_CLIENTS=500,1000\n\n"
 	@printf "TARGET GENERAZIONE PROBLEMI:\n"
 	@printf "  %-42s | %s\n" "generate_problems" "Genera istanze .vrp + manifest.csv + manifest_openmp_mpi.csv"
@@ -185,22 +189,26 @@ help:
 	@printf "  %-60s | %s\n" "SOLVE_PYVRP_RUNTIME_S=10" "Budget tempo per istanza PyVRP (secondi)"
 	@printf "  %-60s | %s\n" "SOLVE_SEQ_RUNTIME_S=0" "Budget tempo seq (secondi, 0=disattivo)"
 	@printf "  %-60s | %s\n" "SOLVE_SEQ_RUNTIME=60" "Alias compatibile di SOLVE_SEQ_RUNTIME_S"
-	@printf "  %-60s | %s\n" "SOLVE_SEQ_STAGNATION_ITERS=0" "Stop seq per N iterazioni senza miglioramento (0=off)"
+	@printf "  %-60s | %s\n" "SOLVE_SEQ_STAGNATION_EPOCHS=0" "Stop seq dopo N epoche senza miglioramento relativo significativo (0=off)"
+	@printf "  %-60s | %s\n" "SOLVE_SEQ_MIN_REL_IMPROVEMENT=0.001" "Miglioramento relativo minimo per considerare convergente un'epoca"
 	@printf "  %-60s | %s\n" "SOLVE_SEQ_M=0" "Override m (formiche) per solve_seq; 0=usa manifest"
-	@printf "  %-60s | %s\n" "SOLVE_SEQ_T=0" "Override T (iterazioni) per solve_seq; 0=usa manifest"
 	@printf "  %-60s | %s\n" "SOLVE_MPI_RUNTIME_S=0" "Budget tempo per istanza MPI+OpenMP (secondi, 0=disattivo)"
-	@printf "  %-60s | %s\n" "SOLVE_MPI_STAGNATION_ITERS=0" "Stop MPI per N iterazioni senza miglioramento (0=off)"
+	@printf "  %-60s | %s\n" "SOLVE_MPI_STAGNATION_EPOCHS=0" "Stop MPI dopo N epoche senza miglioramento relativo significativo (0=off)"
+	@printf "  %-60s | %s\n" "SOLVE_MPI_MIN_REL_IMPROVEMENT=0.001" "Miglioramento relativo minimo per considerare convergente un'epoca MPI"
 	@printf "  %-60s | %s\n" "SOLVE_PYVRP_SEED=1234" "Seed PyVRP"
 	@printf "  %-60s | %s\n" "SOLVE_MPI_RANKS=2" "Numero processi MPI per solve_mpi"
 	@printf "  %-60s | %s\n" "SOLVE_MPI_OMP_THREADS=2" "Thread OpenMP per rank MPI"
 	@printf "  %-60s | %s\n\n" "SOLVE_CUDA_IMPROVEMENT=0.001" "Soglia miglioramento early-stop CUDA"
 	@printf "VARIABILI GENERAZIONE:\n"
 	@printf "  %-60s | %s\n" "GEN_INST_DIR=instances/test_aligned" "Directory dove scrivere .vrp e manifest"
-	@printf "  %-60s | %s\n" "GEN_CLIENTS=500,1000,2000" "Taglie n da generare (CSV separato da virgole)"
+	@printf "  %-60s | %s\n" "GEN_CLIENTS=4000,8000,16000,32000,64000,128000,200000" "Taglie n da generare (CSV separato da virgole)"
 	@printf "  %-60s | %s\n" "GEN_SEED_BASE=19000" "Seed base; per ogni istanza incrementa di 1"
 	@printf "  %-60s | %s\n" "GEN_GRID=100" "Griglia coordinate passata al generatore"
 	@printf "  %-60s | %s\n" "GEN_SOLVER_SEED=1234" "Seed solver scritto nei manifest"
-	@printf "  %-60s | %s\n\n" "Capacita generata" "Sempre n-K+3 con domanda unitaria per cliente"
+	@printf "  %-60s | %s\n" "GEN_TARGET_CUSTOMERS_PER_VEHICLE=1024" "Obiettivo medio clienti/veicolo: K = ceil(n / target)"
+	@printf "  %-60s | %s\n" "GEN_MIN_VEHICLES=8" "Minimo veicoli generati"
+	@printf "  %-60s | %s\n" "GEN_MAX_VEHICLES=512" "Massimo veicoli generati"
+	@printf "  %-60s | %s\n\n" "Capacita generata" "Sempre ceil(n/K) con domanda unitaria per cliente"
 	@printf "OUTPUT GENERATI DA solve_*:\n"
 	@printf "  %-85s | %s\n" "$(SOLVE_CSV_DIR)/manifest_pyvrp_per_instance_results.csv" "CSV PyVRP con elapsed, memoria (max_rss_kb), costo"
 	@printf "  %-85s | %s\n" "$(SOLVE_CSV_DIR)/manifest_seq_per_instance_results.csv" "CSV solver sequenziale"
@@ -304,26 +312,30 @@ generate_problems:
 	@mkdir -p "$(GEN_INST_DIR)"
 	@manifest_seq="$(GEN_INST_DIR)/manifest.csv"; \
 	manifest_mpi="$(GEN_INST_DIR)/manifest_openmp_mpi.csv"; \
-	echo "profile,name,instance_path,n,K,m,T,solver_seed,instance_seed,layout_id,capacity_formula" > "$$manifest_seq"; \
-	echo "profile,name,instance_path,n,K,m,T,solver_seed,instance_seed,layout_id,capacity_formula" > "$$manifest_mpi"; \
+	echo "profile,name,instance_path,n,K,m,solver_seed,instance_seed,layout_id,capacity_formula" > "$$manifest_seq"; \
+	echo "profile,name,instance_path,n,K,m,solver_seed,instance_seed,layout_id,capacity_formula" > "$$manifest_mpi"; \
+	target_cppv="$(GEN_TARGET_CUSTOMERS_PER_VEHICLE)"; \
+	min_vehicles="$(GEN_MIN_VEHICLES)"; \
+	max_vehicles="$(GEN_MAX_VEHICLES)"; \
 	idx=0; \
 	for n in $$(echo "$(GEN_CLIENTS)" | tr ',' ' '); do \
 		idx=$$((idx + 1)); \
 		seed=$$(( $(GEN_SEED_BASE) + idx - 1 )); \
-		K=$$(( n / 1000 )); \
-		if [ $$K -lt 8 ]; then K=8; fi; \
-		if [ $$K -gt 128 ]; then K=128; fi; \
-		if [ $$n -le 2000 ]; then m_seq=32; T_seq=20; m_mpi=64; T_mpi=40; \
-		elif [ $$n -le 8000 ]; then m_seq=16; T_seq=10; m_mpi=32; T_mpi=20; \
-		elif [ $$n -le 16000 ]; then m_seq=8; T_seq=6; m_mpi=16; T_mpi=12; \
-		elif [ $$n -le 32000 ]; then m_seq=4; T_seq=4; m_mpi=8; T_mpi=8; \
-		else m_seq=3; T_seq=3; m_mpi=4; T_mpi=6; fi; \
+		if [ "$$target_cppv" -lt 1 ]; then target_cppv=1; fi; \
+		K=$$(( (n + target_cppv - 1) / target_cppv )); \
+		if [ $$K -lt $$min_vehicles ]; then K=$$min_vehicles; fi; \
+		if [ $$K -gt $$max_vehicles ]; then K=$$max_vehicles; fi; \
+		if [ $$n -le 2000 ]; then m_seq=32; m_mpi=64; \
+		elif [ $$n -le 8000 ]; then m_seq=16; m_mpi=32; \
+		elif [ $$n -le 16000 ]; then m_seq=8; m_mpi=16; \
+		elif [ $$n -le 32000 ]; then m_seq=4; m_mpi=8; \
+		else m_seq=3; m_mpi=4; fi; \
 		name="n$${n}_k$${K}_s$${seed}"; \
 		inst_path="$(GEN_INST_DIR)/$${name}.vrp"; \
 		cap_formula="ceil(n/K)"; \
 		$(PYTHON_BIN) scripts/generate_vrp_problem.py --name "$$name" --clients "$$n" --vehicles "$$K" --grid "$(GEN_GRID)" --seed "$$seed" --output "$$inst_path" || exit $$?; \
-		echo "generated,$$name,$$inst_path,$$n,$$K,$$m_seq,$$T_seq,$(GEN_SOLVER_SEED),$$seed,grid$(GEN_GRID),$$cap_formula" >> "$$manifest_seq"; \
-		echo "generated_mpi,$$name,$$inst_path,$$n,$$K,$$m_mpi,$$T_mpi,$(GEN_SOLVER_SEED),$$seed,grid$(GEN_GRID),$$cap_formula" >> "$$manifest_mpi"; \
+		echo "generated,$$name,$$inst_path,$$n,$$K,$$m_seq,$(GEN_SOLVER_SEED),$$seed,grid$(GEN_GRID),$$cap_formula" >> "$$manifest_seq"; \
+		echo "generated_mpi,$$name,$$inst_path,$$n,$$K,$$m_mpi,$(GEN_SOLVER_SEED),$$seed,grid$(GEN_GRID),$$cap_formula" >> "$$manifest_mpi"; \
 		echo "[gen] $$name"; \
 	done; \
 	echo "wrote $$manifest_seq"; \
@@ -349,12 +361,12 @@ solve_prepare:
 solve_pyvrp: solve_prepare
 	@csv="$(SOLVE_CSV_DIR)/manifest_pyvrp_per_instance_results.csv"; \
 	sol_dir="$(SOLVE_SOLUTIONS_DIR)/pyvrp"; \
-	echo "name,profile,instance_path,n,K,m,T,solver_seed,instance_seed,layout_id,status,elapsed_s,max_rss_kb,best_cost,error" > "$$csv"; \
+	echo "name,profile,instance_path,n,K,m,solver_seed,instance_seed,layout_id,status,elapsed_s,max_rss_kb,best_cost,error" > "$$csv"; \
 	py="$(PYTHON_BIN)"; \
 	if [ -x "VRP/bin/python" ]; then py="VRP/bin/python"; fi; \
 	( tail -n +2 "$(SOLVE_MANIFEST)" \
 		| { if [ -n "$(SOLVE_CLIENTS)" ]; then awk -F, -v list="$(SOLVE_CLIENTS)" 'BEGIN{split(list,a,","); for(i in a) wanted[a[i]]=1} ($$4 in wanted)'; else cat; fi; } \
-		| { if [ "$(SOLVE_LIMIT)" -gt 0 ]; then head -n "$(SOLVE_LIMIT)"; else cat; fi; } ) | while IFS=, read -r profile name instance_path n K m T solver_seed instance_seed layout_id capacity_formula; do \
+		| { if [ "$(SOLVE_LIMIT)" -gt 0 ]; then head -n "$(SOLVE_LIMIT)"; else cat; fi; } ) | while IFS=, read -r profile name instance_path n K m solver_seed instance_seed layout_id capacity_formula; do \
 		sol_file="$$sol_dir/$${name}_pyvrp_solution.txt"; \
 		rss_file=$$(mktemp); \
 		start_ns=$$(date +%s%N); \
@@ -367,10 +379,10 @@ solve_pyvrp: solve_prepare
 		if [ $$rc -eq 0 ]; then \
 			cost=$$(printf '%s\n' "$$out" | sed -n 's/^best_cost=//p' | tail -n1); \
 			[ -n "$$cost" ] || cost=""; \
-			echo "$$name,$$profile,$$instance_path,$$n,$$K,$$m,$$T,$$solver_seed,$$instance_seed,$$layout_id,ok,$$elapsed,$$rss_kb,$$cost," >> "$$csv"; \
+			echo "$$name,$$profile,$$instance_path,$$n,$$K,$$m,$$solver_seed,$$instance_seed,$$layout_id,ok,$$elapsed,$$rss_kb,$$cost," >> "$$csv"; \
 		else \
 			err=$$(printf '%s' "$$out" | tr '\n' ' ' | tr ',' ';'); \
-			echo "$$name,$$profile,$$instance_path,$$n,$$K,$$m,$$T,$$solver_seed,$$instance_seed,$$layout_id,error,$$elapsed,$$rss_kb,,$$err" >> "$$csv"; \
+			echo "$$name,$$profile,$$instance_path,$$n,$$K,$$m,$$solver_seed,$$instance_seed,$$layout_id,error,$$elapsed,$$rss_kb,,$$err" >> "$$csv"; \
 		fi; \
 		echo "[pyvrp] $$name done"; \
 	done; \
@@ -379,17 +391,15 @@ solve_pyvrp: solve_prepare
 solve_seq: solve_prepare all
 	@csv="$(SOLVE_CSV_DIR)/manifest_seq_per_instance_results.csv"; \
 	sol_dir="$(SOLVE_SOLUTIONS_DIR)/seq"; \
-	echo "name,profile,instance_path,n,K,m,T,solver_seed,instance_seed,layout_id,status,elapsed_s,best_cost,error" > "$$csv"; \
+	echo "name,profile,instance_path,n,K,m,solver_seed,instance_seed,layout_id,status,elapsed_s,best_cost,error" > "$$csv"; \
 	( tail -n +2 "$(SOLVE_MANIFEST)" \
 		| { if [ -n "$(SOLVE_CLIENTS)" ]; then awk -F, -v list="$(SOLVE_CLIENTS)" 'BEGIN{split(list,a,","); for(i in a) wanted[a[i]]=1} ($$4 in wanted)'; else cat; fi; } \
-		| { if [ "$(SOLVE_LIMIT)" -gt 0 ]; then head -n "$(SOLVE_LIMIT)"; else cat; fi; } ) | while IFS=, read -r profile name instance_path n K m T solver_seed instance_seed layout_id capacity_formula; do \
+		| { if [ "$(SOLVE_LIMIT)" -gt 0 ]; then head -n "$(SOLVE_LIMIT)"; else cat; fi; } ) | while IFS=, read -r profile name instance_path n K m solver_seed instance_seed layout_id capacity_formula; do \
 		m_run="$$m"; \
-		T_run="$$T"; \
 		if [ "$(SOLVE_SEQ_M)" -gt 0 ]; then m_run="$(SOLVE_SEQ_M)"; fi; \
-		if [ "$(SOLVE_SEQ_T)" -gt 0 ]; then T_run="$(SOLVE_SEQ_T)"; fi; \
 		sol_file="$$sol_dir/$${name}_seq_solution.txt"; \
 		time_file=$$(mktemp); \
-		out=$$(/usr/bin/time -f "%e" -o "$$time_file" env ACO_SOLVER_TIMEOUT_SECONDS="$(SOLVE_SEQ_RUNTIME_EFFECTIVE)" ACO_SOLVER_STAGNATION_ITERS="$(SOLVE_SEQ_STAGNATION_ITERS)" ./aco_vrp_seq.out "$$instance_path" "$$K" "$$m_run" "$$T_run" "$$solver_seed" 2>&1); \
+		out=$$(/usr/bin/time -f "%e" -o "$$time_file" env ACO_SOLVER_TIMEOUT_SECONDS="$(SOLVE_SEQ_RUNTIME_EFFECTIVE)" ACO_SOLVER_STAGNATION_EPOCHS="$(SOLVE_SEQ_STAGNATION_EPOCHS)" ACO_SOLVER_MIN_REL_IMPROVEMENT="$(SOLVE_SEQ_MIN_REL_IMPROVEMENT)" ./aco_vrp_seq.out "$$instance_path" "$$K" "$$m_run" "$$solver_seed" 2>&1); \
 		rc=$$?; \
 		elapsed=$$(cat "$$time_file" 2>/dev/null); \
 		rm -f "$$time_file"; \
@@ -397,10 +407,10 @@ solve_seq: solve_prepare all
 		printf '%s\n' "$$out" > "$$sol_file"; \
 		if [ $$rc -eq 0 ]; then \
 			cost=$$(printf '%s\n' "$$out" | sed -n 's/^best cost: //p' | tail -n1); \
-			echo "$$name,$$profile,$$instance_path,$$n,$$K,$$m_run,$$T_run,$$solver_seed,$$instance_seed,$$layout_id,ok,$$elapsed,$$cost," >> "$$csv"; \
+			echo "$$name,$$profile,$$instance_path,$$n,$$K,$$m_run,$$solver_seed,$$instance_seed,$$layout_id,ok,$$elapsed,$$cost," >> "$$csv"; \
 		else \
 			err=$$(printf '%s' "$$out" | tr '\n' ' ' | tr ',' ';'); \
-			echo "$$name,$$profile,$$instance_path,$$n,$$K,$$m_run,$$T_run,$$solver_seed,$$instance_seed,$$layout_id,error,$$elapsed,,$$err" >> "$$csv"; \
+			echo "$$name,$$profile,$$instance_path,$$n,$$K,$$m_run,$$solver_seed,$$instance_seed,$$layout_id,error,$$elapsed,,$$err" >> "$$csv"; \
 		fi; \
 		echo "[seq] $$name done"; \
 	done; \
@@ -409,13 +419,13 @@ solve_seq: solve_prepare all
 solve_cuda: solve_prepare cuda
 	@csv="$(SOLVE_CSV_DIR)/manifest_cuda_$(SOLVE_CUDA_VARIANT)_per_instance_results.csv"; \
 	sol_dir="$(SOLVE_SOLUTIONS_DIR)/cuda_$(SOLVE_CUDA_VARIANT)"; \
-		echo "name,profile,instance_path,n,K,m,T,solver_seed,instance_seed,layout_id,status,elapsed_s,best_cost,error" > "$$csv"; \
+		echo "name,profile,instance_path,n,K,m,solver_seed,instance_seed,layout_id,status,elapsed_s,best_cost,error" > "$$csv"; \
 		( tail -n +2 "$(SOLVE_MANIFEST)" \
 			| { if [ -n "$(SOLVE_CLIENTS)" ]; then awk -F, -v list="$(SOLVE_CLIENTS)" 'BEGIN{split(list,a,","); for(i in a) wanted[a[i]]=1} ($$4 in wanted)'; else cat; fi; } \
-			| { if [ "$(SOLVE_LIMIT)" -gt 0 ]; then head -n "$(SOLVE_LIMIT)"; else cat; fi; } ) | while IFS=, read -r profile name instance_path n K m T solver_seed instance_seed layout_id capacity_formula; do \
+			| { if [ "$(SOLVE_LIMIT)" -gt 0 ]; then head -n "$(SOLVE_LIMIT)"; else cat; fi; } ) | while IFS=, read -r profile name instance_path n K m solver_seed instance_seed layout_id capacity_formula; do \
 			sol_file="$$sol_dir/$${name}_cuda_$(SOLVE_CUDA_VARIANT)_solution.txt"; \
 			time_file=$$(mktemp); \
-			out=$$(/usr/bin/time -f "%e" -o "$$time_file" env ACO_SOLVER_TIMEOUT_SECONDS="$(SOLVE_SEQ_RUNTIME_EFFECTIVE)" ACO_SOLVER_STAGNATION_ITERS="$(SOLVE_SEQ_STAGNATION_ITERS)" ./aco_vrp_cuda.out "$$instance_path" "$$K" "$$m" "$$T" "$$solver_seed" 2>&1); \
+			out=$$(/usr/bin/time -f "%e" -o "$$time_file" env ACO_SOLVER_TIMEOUT_SECONDS="$(SOLVE_SEQ_RUNTIME_EFFECTIVE)" ACO_SOLVER_STAGNATION_EPOCHS="$(SOLVE_SEQ_STAGNATION_EPOCHS)" ACO_SOLVER_MIN_REL_IMPROVEMENT="$(SOLVE_SEQ_MIN_REL_IMPROVEMENT)" ./aco_vrp_cuda.out "$$instance_path" "$$K" "$$m" "$$solver_seed" 2>&1); \
 			rc=$$?; \
 			elapsed=$$(cat "$$time_file" 2>/dev/null); \
 			rm -f "$$time_file"; \
@@ -423,10 +433,10 @@ solve_cuda: solve_prepare cuda
 		printf '%s\n' "$$out" > "$$sol_file"; \
 		if [ $$rc -eq 0 ]; then \
 			cost=$$(printf '%s\n' "$$out" | sed -n -e 's/^best cost: //p' -e 's/^Final Best Cost: //p' | tail -n1); \
-			echo "$$name,$$profile,$$instance_path,$$n,$$K,$$m,$$T,$$solver_seed,$$instance_seed,$$layout_id,ok,$$elapsed,$$cost," >> "$$csv"; \
+			echo "$$name,$$profile,$$instance_path,$$n,$$K,$$m,$$solver_seed,$$instance_seed,$$layout_id,ok,$$elapsed,$$cost," >> "$$csv"; \
 		else \
 			err=$$(printf '%s' "$$out" | tr '\n' ' ' | tr ',' ';'); \
-			echo "$$name,$$profile,$$instance_path,$$n,$$K,$$m,$$T,$$solver_seed,$$instance_seed,$$layout_id,error,$$elapsed,,$$err" >> "$$csv"; \
+			echo "$$name,$$profile,$$instance_path,$$n,$$K,$$m,$$solver_seed,$$instance_seed,$$layout_id,error,$$elapsed,,$$err" >> "$$csv"; \
 		fi; \
 		echo "[cuda] $$name done"; \
 	done; \
@@ -435,13 +445,13 @@ solve_cuda: solve_prepare cuda
 solve_mpi: solve_prepare openmp_mpi
 	@csv="$(SOLVE_CSV_DIR)/manifest_openmp_mpi_per_instance_results.csv"; \
 	sol_dir="$(SOLVE_SOLUTIONS_DIR)/mpi"; \
-	echo "name,profile,instance_path,n,K,m,T,solver_seed,instance_seed,layout_id,status,elapsed_s,best_cost,error" > "$$csv"; \
+	echo "name,profile,instance_path,n,K,m,solver_seed,instance_seed,layout_id,status,elapsed_s,best_cost,error" > "$$csv"; \
 	( tail -n +2 "$(SOLVE_MANIFEST_MPI)" \
 		| { if [ -n "$(SOLVE_CLIENTS)" ]; then awk -F, -v list="$(SOLVE_CLIENTS)" 'BEGIN{split(list,a,","); for(i in a) wanted[a[i]]=1} ($$4 in wanted)'; else cat; fi; } \
-			| { if [ "$(SOLVE_LIMIT)" -gt 0 ]; then head -n "$(SOLVE_LIMIT)"; else cat; fi; } ) | while IFS=, read -r profile name instance_path n K m T solver_seed instance_seed layout_id capacity_formula; do \
+			| { if [ "$(SOLVE_LIMIT)" -gt 0 ]; then head -n "$(SOLVE_LIMIT)"; else cat; fi; } ) | while IFS=, read -r profile name instance_path n K m solver_seed instance_seed layout_id capacity_formula; do \
 			sol_file="$$sol_dir/$${name}_mpi_solution.txt"; \
 			time_file=$$(mktemp); \
-			out=$$(/usr/bin/time -f "%e" -o "$$time_file" env ACO_SOLVER_TIMEOUT_SECONDS="$(SOLVE_MPI_RUNTIME_S)" ACO_SOLVER_STAGNATION_ITERS="$(SOLVE_MPI_STAGNATION_ITERS)" OMP_NUM_THREADS="$(SOLVE_MPI_OMP_THREADS)" mpirun -np "$(SOLVE_MPI_RANKS)" ./aco_vrp_openmp_mpi.out "$$instance_path" "$$K" "$$m" "$$T" "$$solver_seed" </dev/null 2>&1); \
+			out=$$(/usr/bin/time -f "%e" -o "$$time_file" env ACO_SOLVER_TIMEOUT_SECONDS="$(SOLVE_MPI_RUNTIME_S)" ACO_SOLVER_STAGNATION_EPOCHS="$(SOLVE_MPI_STAGNATION_EPOCHS)" ACO_SOLVER_MIN_REL_IMPROVEMENT="$(SOLVE_MPI_MIN_REL_IMPROVEMENT)" OMP_NUM_THREADS="$(SOLVE_MPI_OMP_THREADS)" mpirun -np "$(SOLVE_MPI_RANKS)" ./aco_vrp_openmp_mpi.out "$$instance_path" "$$K" "$$m" "$$solver_seed" </dev/null 2>&1); \
 			rc=$$?; \
 			elapsed=$$(cat "$$time_file" 2>/dev/null); \
 			rm -f "$$time_file"; \
@@ -449,10 +459,10 @@ solve_mpi: solve_prepare openmp_mpi
 			printf '%s\n' "$$out" > "$$sol_file"; \
 		if [ $$rc -eq 0 ]; then \
 			cost=$$(printf '%s\n' "$$out" | sed -n 's/^best cost: //p' | tail -n1); \
-			echo "$$name,$$profile,$$instance_path,$$n,$$K,$$m,$$T,$$solver_seed,$$instance_seed,$$layout_id,ok,$$elapsed,$$cost," >> "$$csv"; \
+			echo "$$name,$$profile,$$instance_path,$$n,$$K,$$m,$$solver_seed,$$instance_seed,$$layout_id,ok,$$elapsed,$$cost," >> "$$csv"; \
 		else \
 			err=$$(printf '%s' "$$out" | tr '\n' ' ' | tr ',' ';'); \
-			echo "$$name,$$profile,$$instance_path,$$n,$$K,$$m,$$T,$$solver_seed,$$instance_seed,$$layout_id,error,$$elapsed,,$$err" >> "$$csv"; \
+			echo "$$name,$$profile,$$instance_path,$$n,$$K,$$m,$$solver_seed,$$instance_seed,$$layout_id,error,$$elapsed,,$$err" >> "$$csv"; \
 		fi; \
 		echo "[mpi] $$name done"; \
 	done; \

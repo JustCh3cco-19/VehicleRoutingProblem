@@ -171,23 +171,36 @@ static double wall_time_seconds(void) {
 }
 
 static void load_timer_directives(double *max_runtime_sec,
-                                  int *max_stagnation_iters,
-                                  double *improve_eps) {
+                                  int *max_stagnation_epochs,
+                                  double *min_rel_improvement) {
   const char *s_timeout = getenv("ACO_SOLVER_TIMEOUT_SECONDS");
-  const char *s_stagnation = getenv("ACO_SOLVER_STAGNATION_ITERS");
-  const char *s_eps = getenv("ACO_SOLVER_IMPROVE_EPS");
+  const char *s_stagnation = getenv("ACO_SOLVER_STAGNATION_EPOCHS");
+  const char *s_rel = getenv("ACO_SOLVER_MIN_REL_IMPROVEMENT");
 
   *max_runtime_sec = (s_timeout && *s_timeout) ? atof(s_timeout) : 0.0;
-  *max_stagnation_iters =
+  *max_stagnation_epochs =
       (s_stagnation && *s_stagnation) ? atoi(s_stagnation) : 0;
-  *improve_eps = (s_eps && *s_eps) ? atof(s_eps) : ACO_EPS;
+  *min_rel_improvement = (s_rel && *s_rel) ? atof(s_rel) : 1e-3;
 
-  if (*max_stagnation_iters < 0) {
-    *max_stagnation_iters = 0;
+  if (*max_stagnation_epochs < 0) {
+    *max_stagnation_epochs = 0;
   }
-  if (*improve_eps <= 0.0) {
-    *improve_eps = ACO_EPS;
+  if (*min_rel_improvement <= 0.0) {
+    *min_rel_improvement = 1e-3;
   }
+}
+
+static int is_significant_improvement(double prev_best, double new_best,
+                                      double min_rel_improvement) {
+  if (prev_best >= DBL_MAX || new_best >= DBL_MAX) {
+    return (new_best < prev_best);
+  }
+  if (new_best >= prev_best - ACO_EPS) {
+    return 0;
+  }
+  double abs_gain = prev_best - new_best;
+  double rel_gain = abs_gain / fmax(prev_best, ACO_EPS);
+  return rel_gain + ACO_EPS >= min_rel_improvement;
 }
 
 /*
@@ -773,18 +786,18 @@ static int mpi_sync_tau_epoch(double **tau, int n, int mpi_size,
  * internal hybrid solver routine with timer directives already resolved.
  */
 static void aco_vrp_run_with_timer(int n, int K, int vehicle_capacity_customers,
-                                   int m, int T, double **c, double alpha,
+                                   int m, double **c, double alpha,
                                    double beta, double rho, double tau0,
                                    double Q, unsigned int seed,
                                    Solution *best_solution, double *best_cost,
                                    double max_runtime_sec,
-                                   int max_stagnation_iters,
-                                   double improve_eps) {
+                                   int max_stagnation_epochs,
+                                   double min_rel_improvement) {
   int mpi_rank = 0;
   int mpi_size = 1;
   bool mpi_enabled = false;
-  if (improve_eps <= 0.0) {
-    improve_eps = ACO_EPS;
+  if (min_rel_improvement <= 0.0) {
+    min_rel_improvement = 1e-3;
   }
 
 #ifdef USE_MPI
@@ -873,7 +886,8 @@ static void aco_vrp_run_with_timer(int n, int K, int vehicle_capacity_customers,
 #endif
 
   int stagnation_iters = 0;
-  int stagnation_trigger = T / 4;
+  int stagnation_trigger =
+      (max_stagnation_epochs > 0) ? (max_stagnation_epochs / 2) : 32;
   if (stagnation_trigger < 4) {
     stagnation_trigger = 4;
   }
@@ -883,9 +897,9 @@ static void aco_vrp_run_with_timer(int n, int K, int vehicle_capacity_customers,
   double tau_max = tau0;
   double tau_min = tau0 * 0.05;
   double start_wall = wall_time_seconds();
-  int no_improve_iters = 0;
+  int no_improve_epochs = 0;
 
-  for (int iter = 0; iter < T; ++iter) {
+  for (int iter = 0;; ++iter) {
     int stop_now = 0;
     if (max_runtime_sec > 0.0) {
       double now_wall = wall_time_seconds();
@@ -1073,11 +1087,12 @@ static void aco_vrp_run_with_timer(int n, int K, int vehicle_capacity_customers,
     }
 
     int improved_global = 0;
-    if (iter_best_cost < (*best_cost - improve_eps)) {
+    if (is_significant_improvement(*best_cost, iter_best_cost,
+                                   min_rel_improvement)) {
       *best_cost = iter_best_cost;
       solution_copy(best_solution, iter_best);
       stagnation_iters = 0;
-      no_improve_iters = 0;
+      no_improve_epochs = 0;
       improved_global = 1;
 
       if (*best_cost > ACO_EPS) {
@@ -1086,7 +1101,7 @@ static void aco_vrp_run_with_timer(int n, int K, int vehicle_capacity_customers,
       }
     } else {
       ++stagnation_iters;
-      ++no_improve_iters;
+      ++no_improve_epochs;
     }
 
     if (iter_best_cost < DBL_MAX) {
@@ -1178,8 +1193,8 @@ static void aco_vrp_run_with_timer(int n, int K, int vehicle_capacity_customers,
         (iter_end_wall - start_wall) >= max_runtime_sec) {
       stop_now = 1;
     }
-    if (!improved_global && max_stagnation_iters > 0 &&
-        no_improve_iters >= max_stagnation_iters) {
+    if (!improved_global && max_stagnation_epochs > 0 &&
+        no_improve_epochs >= max_stagnation_epochs) {
       stop_now = 1;
     }
 #ifdef USE_MPI
@@ -1204,24 +1219,26 @@ static void aco_vrp_run_with_timer(int n, int K, int vehicle_capacity_customers,
 #endif
 }
 
-void aco_vrp(int n, int K, int m, int T, double **c, double alpha,
+void aco_vrp(int n, int K, int m, double **c, double alpha,
              double beta, double rho, double tau0, double Q,
              unsigned int seed, Solution *best_solution, double *best_cost) {
   int vehicle_capacity_customers = (K > 0) ? ((n + K - 1) / K) : n;
-  aco_vrp_with_capacity(n, K, vehicle_capacity_customers, m, T, c, alpha,
+  aco_vrp_with_capacity(n, K, vehicle_capacity_customers, m, c, alpha,
                         beta, rho, tau0, Q, seed, best_solution, best_cost);
 }
 
 void aco_vrp_with_capacity(int n, int K, int vehicle_capacity_customers, int m,
-                           int T, double **c, double alpha, double beta,
+                           double **c, double alpha, double beta,
                            double rho, double tau0, double Q,
                            unsigned int seed, Solution *best_solution,
                            double *best_cost) {
   double max_runtime_sec = 0.0;
-  int max_stagnation_iters = 0;
-  double improve_eps = ACO_EPS;
-  load_timer_directives(&max_runtime_sec, &max_stagnation_iters, &improve_eps);
-  aco_vrp_run_with_timer(n, K, vehicle_capacity_customers, m, T, c, alpha,
+  int max_stagnation_epochs = 0;
+  double min_rel_improvement = 1e-3;
+  load_timer_directives(&max_runtime_sec, &max_stagnation_epochs,
+                        &min_rel_improvement);
+  aco_vrp_run_with_timer(n, K, vehicle_capacity_customers, m, c, alpha,
                          beta, rho, tau0, Q, seed, best_solution, best_cost,
-                         max_runtime_sec, max_stagnation_iters, improve_eps);
+                         max_runtime_sec, max_stagnation_epochs,
+                         min_rel_improvement);
 }

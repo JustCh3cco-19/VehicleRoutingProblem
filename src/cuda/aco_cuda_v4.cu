@@ -31,23 +31,36 @@ static double wall_time_seconds(void) {
 }
 
 static void load_timer_directives(double *max_runtime_sec,
-                                  int *max_stagnation_iters,
-                                  double *improve_eps) {
+                                  int *max_stagnation_epochs,
+                                  double *min_rel_improvement) {
   const char *s_timeout = getenv("ACO_SOLVER_TIMEOUT_SECONDS");
-  const char *s_stagnation = getenv("ACO_SOLVER_STAGNATION_ITERS");
-  const char *s_eps = getenv("ACO_SOLVER_IMPROVE_EPS");
+  const char *s_stagnation = getenv("ACO_SOLVER_STAGNATION_EPOCHS");
+  const char *s_rel = getenv("ACO_SOLVER_MIN_REL_IMPROVEMENT");
 
   *max_runtime_sec = (s_timeout && *s_timeout) ? atof(s_timeout) : 0.0;
-  *max_stagnation_iters =
+  *max_stagnation_epochs =
       (s_stagnation && *s_stagnation) ? atoi(s_stagnation) : 0;
-  *improve_eps = (s_eps && *s_eps) ? atof(s_eps) : ACO_EPS;
+  *min_rel_improvement = (s_rel && *s_rel) ? atof(s_rel) : 1e-3;
 
-  if (*max_stagnation_iters < 0) {
-    *max_stagnation_iters = 0;
+  if (*max_stagnation_epochs < 0) {
+    *max_stagnation_epochs = 0;
   }
-  if (*improve_eps <= 0.0) {
-    *improve_eps = ACO_EPS;
+  if (*min_rel_improvement <= 0.0) {
+    *min_rel_improvement = 1e-3;
   }
+}
+
+static int is_significant_improvement(double prev_best, double new_best,
+                                      double min_rel_improvement) {
+  if (prev_best >= DBL_MAX || new_best >= DBL_MAX) {
+    return (new_best < prev_best);
+  }
+  if (new_best >= prev_best - ACO_EPS) {
+    return 0;
+  }
+  double abs_gain = prev_best - new_best;
+  double rel_gain = abs_gain / fmax(prev_best, ACO_EPS);
+  return rel_gain + ACO_EPS >= min_rel_improvement;
 }
 
 static int choose_candidate_count(int n) {
@@ -339,16 +352,16 @@ static void write_telemetry_row(FILE *f, int iter,
   fflush(f);
 }
 
-int aco_vrp_cuda(int n, int K, int m, int T, double **c, double alpha,
+int aco_vrp_cuda(int n, int K, int m, double **c, double alpha,
                  double beta, double rho, double tau0, double Q,
                  unsigned int seed, Solution *best_solution,
                  double *best_cost) {
   CudaV4Params params;
   double max_runtime_sec = 0.0;
-  int max_stagnation_iters = 0;
-  double improve_eps = ACO_EPS;
+  int max_stagnation_epochs = 0;
+  double min_rel_improvement = 1e-3;
   double start_wall;
-  int no_improve_iters = 0;
+  int no_improve_epochs = 0;
   int stagnation_iters = 0;
   int total_m;
   int cand_k;
@@ -388,7 +401,8 @@ int aco_vrp_cuda(int n, int K, int m, int T, double **c, double alpha,
   int status = 1;
   int have_global_best = 0;
 
-  load_timer_directives(&max_runtime_sec, &max_stagnation_iters, &improve_eps);
+  load_timer_directives(&max_runtime_sec, &max_stagnation_epochs,
+                        &min_rel_improvement);
 
   total_m = (m > 0) ? m : choose_auto_total_ants();
   cand_k = choose_candidate_count(n);
@@ -400,7 +414,8 @@ int aco_vrp_cuda(int n, int K, int m, int T, double **c, double alpha,
   route_stride = cap + 2;
   side = n + 1;
   matrix_elems = (size_t)side * (size_t)side;
-  stagnation_trigger = T / 4;
+  stagnation_trigger =
+      (max_stagnation_epochs > 0) ? (max_stagnation_epochs / 2) : 32;
   if (stagnation_trigger < 4) {
     stagnation_trigger = 4;
   }
@@ -496,7 +511,7 @@ int aco_vrp_cuda(int n, int K, int m, int T, double **c, double alpha,
   *best_cost = DBL_MAX;
   start_wall = wall_time_seconds();
 
-  for (iter = 0; iter < T; ++iter) {
+  for (iter = 0;; ++iter) {
     int iter_best_idx = -1;
     float iter_best_cost_f = FLT_MAX;
     int improved_global = 0;
@@ -536,15 +551,15 @@ int aco_vrp_cuda(int n, int K, int m, int T, double **c, double alpha,
     if (!select_iter_best_host(h_ant_summary, total_m, &iter_best_idx,
                                &iter_best_cost_f)) {
       ++stagnation_iters;
-      ++no_improve_iters;
+      ++no_improve_epochs;
       if (stagnation_iters >= stagnation_trigger) {
         launch_recenter_tau_v4(d_tau, n, params.tau0);
         CHECK_CUDA(cudaGetLastError());
         CHECK_CUDA(cudaDeviceSynchronize());
         stagnation_iters = 0;
       }
-      if (max_stagnation_iters > 0 &&
-          no_improve_iters >= max_stagnation_iters) {
+      if (max_stagnation_epochs > 0 &&
+          no_improve_epochs >= max_stagnation_epochs) {
         break;
       }
       if (telemetry_csv) {
@@ -582,7 +597,8 @@ int aco_vrp_cuda(int n, int K, int m, int T, double **c, double alpha,
       goto cleanup;
     }
 
-    if ((double)iter_best_cost_f < (*best_cost - improve_eps)) {
+    if (is_significant_improvement(*best_cost, (double)iter_best_cost_f,
+                                   min_rel_improvement)) {
       *best_cost = (double)iter_best_cost_f;
       solution_copy(best_solution, iter_best_solution);
       {
@@ -600,7 +616,7 @@ int aco_vrp_cuda(int n, int K, int m, int T, double **c, double alpha,
       CHECK_CUDA(cudaMemcpy(d_global_route_lengths, h_global_route_lengths,
                             (size_t)K * sizeof(int), cudaMemcpyHostToDevice));
       have_global_best = 1;
-      no_improve_iters = 0;
+      no_improve_epochs = 0;
       stagnation_iters = 0;
       improved_global = 1;
       if (*best_cost > ACO_EPS) {
@@ -608,7 +624,7 @@ int aco_vrp_cuda(int n, int K, int m, int T, double **c, double alpha,
         params.tau_min = params.tau_max * 0.05f;
       }
     } else {
-      ++no_improve_iters;
+      ++no_improve_epochs;
       ++stagnation_iters;
     }
 
@@ -657,8 +673,8 @@ int aco_vrp_cuda(int n, int K, int m, int T, double **c, double alpha,
         (wall_time_seconds() - start_wall) >= max_runtime_sec) {
       break;
     }
-    if (!improved_global && max_stagnation_iters > 0 &&
-        no_improve_iters >= max_stagnation_iters) {
+    if (!improved_global && max_stagnation_epochs > 0 &&
+        no_improve_epochs >= max_stagnation_epochs) {
       break;
     }
   }
