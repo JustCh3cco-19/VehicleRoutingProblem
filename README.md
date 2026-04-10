@@ -222,6 +222,8 @@ tools/batch/submit_solve.sh --target solve_all \
 
 ## Comandi rapidi
 
+### Locale
+
 Build:
 
 ```bash
@@ -259,3 +261,51 @@ Pulizia:
 ```bash
 make clean
 ```
+
+PyVRP in locale:
+
+```bash
+make solve_pyvrp
+```
+
+```bash
+make solve_pyvrp SOLVE_CLIENTS=500,1000 SOLVE_PYVRP_RUNTIME_S=30
+```
+
+### Cluster (Slurm)
+
+Submit PyVRP:
+
+```bash
+tools/batch/submit_solve.sh --target solve_pyvrp \
+  --qos students_limit \
+  --make-args "SOLVE_CLIENTS=500,1000 SOLVE_PYVRP_RUNTIME_S=30"
+```
+
+Submit sequenziale:
+
+```bash
+tools/batch/submit_solve.sh --target solve_seq \
+  --qos students_limit \
+  --make-args "SOLVE_CLIENTS=500,1000 SOLVE_SEQ_REPEATS=3 SOLVE_SEQ_RUNTIME_S=30"
+```
+
+Submit MPI:
+
+```bash
+tools/batch/submit_solve.sh --target solve_mpi \
+  --qos students_limit --cpus 32 \
+  --make-args "SOLVE_CLIENTS=4000,8000 SOLVE_MPI_RANKS=4 SOLVE_MPI_OMP_THREADS=8 SOLVE_MPI_RUNTIME_S=30"
+```
+
+Submit CUDA:
+
+```bash
+tools/batch/submit_solve.sh --target solve_cuda \
+  --partition gpu --gres gpu:1 --qos students_limit \
+  --make-args "SOLVE_CLIENTS=500,1000 SOLVE_CUDA_REPEATS=3 SOLVE_CUDA_VARIANT=v4 CUDA_ARCH=sm_75"
+```
+
+Log job cluster:
+- `results/slurm/*.out`
+- `results/slurm/*.err`

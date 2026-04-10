@@ -26,7 +26,9 @@ mkdir -p results/slurm
 if [[ -f "/home/guest/init-hpc.sh" ]]; then
   # Cluster environment bootstrap (MPI/CUDA/OpenMP toolchains and modules).
   # shellcheck disable=SC1091
+  set +u
   source /home/guest/init-hpc.sh
+  set -u
 fi
 
 if [[ -n "${MODULE_LOADS}" ]]; then
