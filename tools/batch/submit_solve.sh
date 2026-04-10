@@ -10,6 +10,8 @@ Opzioni:
                           Esempi: solve_seq, solve_mpi, solve_cuda, solve_pyvrp, solve_all, solve_memory_growth_non_cuda
   --make-args "ARGS"      Argomenti extra passati a make (default: "")
   --time HH:MM:SS         Override tempo job (default: 00:30:00, QoS students_limit)
+  --nodes N               Override numero nodi
+  --ntasks N              Override numero task Slurm (MPI ranks allocabili)
   --cpus N                Override cpus-per-task
   --mem SIZE              Override memoria (es. 32G)
   --partition NAME        Override partizione
@@ -38,6 +40,9 @@ module_loads=""
 dry_run=0
 
 sbatch_args=()
+has_nodes=0
+has_ntasks=0
+has_cpus=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -57,8 +62,19 @@ while [[ $# -gt 0 ]]; do
       sbatch_args+=(--time "${2:-}")
       shift 2
       ;;
+    --nodes)
+      sbatch_args+=(--nodes "${2:-}")
+      has_nodes=1
+      shift 2
+      ;;
+    --ntasks)
+      sbatch_args+=(--ntasks "${2:-}")
+      has_ntasks=1
+      shift 2
+      ;;
     --cpus)
       sbatch_args+=(--cpus-per-task "${2:-}")
+      has_cpus=1
       shift 2
       ;;
     --mem)
@@ -96,6 +112,28 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+# Target-aware defaults when not explicitly overridden:
+# - solve_mpi: spread on 4 nodes with 4 MPI ranks total, 8 OMP threads each
+# - others (including solve_seq): single node/task
+if [[ "${target}" == "solve_mpi" ]]; then
+  if [[ "${has_nodes}" -eq 0 ]]; then
+    sbatch_args+=(--nodes 4)
+  fi
+  if [[ "${has_ntasks}" -eq 0 ]]; then
+    sbatch_args+=(--ntasks 4)
+  fi
+  if [[ "${has_cpus}" -eq 0 ]]; then
+    sbatch_args+=(--cpus-per-task 8)
+  fi
+else
+  if [[ "${has_nodes}" -eq 0 ]]; then
+    sbatch_args+=(--nodes 1)
+  fi
+  if [[ "${has_ntasks}" -eq 0 ]]; then
+    sbatch_args+=(--ntasks 1)
+  fi
+fi
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 root_dir="$(cd "${script_dir}/../.." && pwd)"

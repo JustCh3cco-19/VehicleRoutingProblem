@@ -198,7 +198,9 @@ Script disponibili:
 Note cluster:
 - il job inizializza automaticamente l'ambiente con `source /home/guest/init-hpc.sh` (se presente)
 - QoS di default nel job: `students_limit` (override con `--qos`)
-- CPU di default nel job: `--cpus-per-task=32` (override con `--cpus`)
+- default submit per target:
+  - `solve_seq` (e altri non-MPI): `--nodes=1 --ntasks=1 --cpus-per-task=32`
+  - `solve_mpi`: `--nodes=4 --ntasks=4 --cpus-per-task=8`
 - per CUDA sul tuo cluster usa `CUDA_ARCH=sm_75` nei `--make-args`
 
 Esempi:
