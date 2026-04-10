@@ -326,7 +326,7 @@ generate_problems:
 		else m_seq=3; T_seq=3; m_mpi=4; T_mpi=6; fi; \
 		name="n$${n}_k$${K}_s$${seed}"; \
 		inst_path="$(GEN_INST_DIR)/$${name}.vrp"; \
-		cap_formula="n-K+3"; \
+		cap_formula="ceil(n/K)"; \
 		$(PYTHON_BIN) scripts/generate_vrp_problem.py --name "$$name" --clients "$$n" --vehicles "$$K" --grid "$(GEN_GRID)" --seed "$$seed" --output "$$inst_path" || exit $$?; \
 		echo "generated,$$name,$$inst_path,$$n,$$K,$$m_seq,$$T_seq,$(GEN_SOLVER_SEED),$$seed,grid$(GEN_GRID),$$cap_formula" >> "$$manifest_seq"; \
 		echo "generated_mpi,$$name,$$inst_path,$$n,$$K,$$m_mpi,$$T_mpi,$(GEN_SOLVER_SEED),$$seed,grid$(GEN_GRID),$$cap_formula" >> "$$manifest_mpi"; \

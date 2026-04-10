@@ -68,6 +68,7 @@ int main(int argc, char **argv) {
     int ok = 1;
     unsigned int seed = 1234u;
     int n = 0;
+    VrpInstanceMeta instance_meta = {0};
     double **c = NULL;
     double alpha = 1.0;
     double beta = 2.0;
@@ -96,7 +97,13 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    if (vrp_load_tsplib_euc2d_matrix(path, &n, &c) != 0) {
+    if (vrp_load_tsplib_euc2d_matrix_ex(path, &n, &c, &instance_meta) != 0) {
+        return 1;
+    }
+    if (instance_meta.vehicles > 0 && instance_meta.vehicles != K) {
+        fprintf(stderr, "instance VEHICLES mismatch: CLI K=%d, file VEHICLES=%d\n",
+                K, instance_meta.vehicles);
+        matrix_free(c);
         return 1;
     }
 

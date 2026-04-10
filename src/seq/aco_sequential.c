@@ -986,6 +986,9 @@ static void build_ant_solution(SeqWorkspace *ws, const SeqShared *shared, int K,
       int next =
           select_next_customer(shared, current, ws->visited, c, &ws->rng_state);
       if (next <= 0 || visited_is_set(ws->visited, next)) {
+        next = find_nearest_unvisited(shared, current, ws->visited, c);
+      }
+      if (next <= 0 || visited_is_set(ws->visited, next)) {
         break;
       }
 
@@ -1000,38 +1003,26 @@ static void build_ant_solution(SeqWorkspace *ws, const SeqShared *shared, int K,
   }
 
   if (remaining > 0) {
-    Route *last = &ws->sol->routes[K - 1];
-    if (last->len > 0 && last->nodes[last->len - 1] == 0) {
-      --last->len;
-    }
-
-    while (remaining > 0 && ws->route_loads[K - 1] < route_customer_cap) {
-      int current = (last->len > 0) ? last->nodes[last->len - 1] : 0;
-      int next = find_nearest_unvisited(shared, current, ws->visited, c);
-      if (next <= 0) {
-        break;
+    for (int vehicle = K - 1; vehicle >= 0 && remaining > 0; --vehicle) {
+      Route *r = &ws->sol->routes[vehicle];
+      if (r->len > 0 && r->nodes[r->len - 1] == 0) {
+        --r->len;
       }
-      route_append(last, next);
-      visited_set(ws->visited, next);
-      ++ws->route_loads[K - 1];
-      --remaining;
-    }
 
-    if (remaining > 0) {
-      for (int node = 1; node <= shared->n; ++node) {
-        if (visited_is_set(ws->visited, node)) {
-          continue;
-        }
-        route_append(last, node);
-        visited_set(ws->visited, node);
-        --remaining;
-        if (remaining == 0) {
+      while (remaining > 0 && ws->route_loads[vehicle] < route_customer_cap) {
+        int current = (r->len > 0) ? r->nodes[r->len - 1] : 0;
+        int next = find_nearest_unvisited(shared, current, ws->visited, c);
+        if (next <= 0 || visited_is_set(ws->visited, next)) {
           break;
         }
+        route_append(r, next);
+        visited_set(ws->visited, next);
+        ++ws->route_loads[vehicle];
+        --remaining;
       }
-    }
 
-    route_append(last, 0);
+      route_append(r, 0);
+    }
   }
 }
 
@@ -1040,9 +1031,10 @@ static void build_ant_solution(SeqWorkspace *ws, const SeqShared *shared, int K,
  * ------------------
  * internal sequential solver routine with timer directives already resolved.
  */
-static void aco_vrp_run_with_timer(int n, int K, int m, int T, double **c,
-                                   double alpha, double beta, double rho,
-                                   double tau0, double Q, unsigned int seed,
+static void aco_vrp_run_with_timer(int n, int K, int vehicle_capacity_customers,
+                                   int m, int T, double **c, double alpha,
+                                   double beta, double rho, double tau0,
+                                   double Q, unsigned int seed,
                                    Solution *best_solution, double *best_cost,
                                    double max_runtime_sec,
                                    int max_stagnation_iters,
@@ -1090,7 +1082,6 @@ static void aco_vrp_run_with_timer(int n, int K, int m, int T, double **c,
   solution_reset(best_solution);
   *best_cost = DBL_MAX;
 
-  int vehicle_capacity_customers = (K > 0) ? (n - K + 3) : n;
   if (vehicle_capacity_customers < 1) {
     vehicle_capacity_customers = 1;
   }
@@ -1270,11 +1261,21 @@ static void aco_vrp_run_with_timer(int n, int K, int m, int T, double **c,
 void aco_vrp(int n, int K, int m, int T, double **c, double alpha,
              double beta, double rho, double tau0, double Q,
              unsigned int seed, Solution *best_solution, double *best_cost) {
+  int vehicle_capacity_customers = (K > 0) ? ((n + K - 1) / K) : n;
+  aco_vrp_with_capacity(n, K, vehicle_capacity_customers, m, T, c, alpha,
+                        beta, rho, tau0, Q, seed, best_solution, best_cost);
+}
+
+void aco_vrp_with_capacity(int n, int K, int vehicle_capacity_customers, int m,
+                           int T, double **c, double alpha, double beta,
+                           double rho, double tau0, double Q,
+                           unsigned int seed, Solution *best_solution,
+                           double *best_cost) {
   double max_runtime_sec = 0.0;
   int max_stagnation_iters = 0;
   double improve_eps = ACO_EPS;
   load_timer_directives(&max_runtime_sec, &max_stagnation_iters, &improve_eps);
-  aco_vrp_run_with_timer(n, K, m, T, c, alpha, beta, rho, tau0, Q, seed,
-                         best_solution, best_cost, max_runtime_sec,
-                         max_stagnation_iters, improve_eps);
+  aco_vrp_run_with_timer(n, K, vehicle_capacity_customers, m, T, c, alpha,
+                         beta, rho, tau0, Q, seed, best_solution, best_cost,
+                         max_runtime_sec, max_stagnation_iters, improve_eps);
 }

@@ -186,7 +186,7 @@ __device__ static float cuda_v4_score_depot_move(int current, const float *costs
 __device__ static int cuda_v4_select_next_move_warp(
     int current, int close_allowed, const float *costs, const float *tau,
     const int *candidate_idx, const float *eta_beta, const uint64_t *visited,
-    unsigned int *rng_state, CudaV4Params params, int *move_type_out) {
+    unsigned int *rng_state, CudaV4Params params, int *move_kind_out) {
   int lane = threadIdx.x & (CUDA_V4_WARP_SIZE - 1);
   float customer_total = 0.0f;
   int used_fallback = 0;
@@ -202,23 +202,22 @@ __device__ static int cuda_v4_select_next_move_warp(
   depot_score = __shfl_sync(0xFFFFFFFFu, depot_score, 0);
   customer_total = __shfl_sync(0xFFFFFFFFu, customer_total, 0);
   customer = __shfl_sync(0xFFFFFFFFu, customer, 0);
-  used_fallback = __shfl_sync(0xFFFFFFFFu, used_fallback, 0);
 
   if (customer_total <= 0.0f && depot_score <= 0.0f) {
-    if (move_type_out) {
-      *move_type_out = -1;
+    if (move_kind_out) {
+      *move_kind_out = -1;
     }
     return -1;
   }
   if (customer_total <= 0.0f) {
-    if (move_type_out) {
-      *move_type_out = 0;
+    if (move_kind_out) {
+      *move_kind_out = 2;
     }
     return 0;
   }
   if (depot_score <= 0.0f) {
-    if (move_type_out) {
-      *move_type_out = used_fallback ? 2 : 1;
+    if (move_kind_out) {
+      *move_kind_out = used_fallback ? 1 : 0;
     }
     return customer;
   }
@@ -228,13 +227,13 @@ __device__ static int cuda_v4_select_next_move_warp(
   }
   threshold = __shfl_sync(0xFFFFFFFFu, threshold, 0);
   if (threshold < customer_total) {
-    if (move_type_out) {
-      *move_type_out = used_fallback ? 2 : 1;
+    if (move_kind_out) {
+      *move_kind_out = used_fallback ? 1 : 0;
     }
     return customer;
   }
-  if (move_type_out) {
-    *move_type_out = 0;
+  if (move_kind_out) {
+    *move_kind_out = 2;
   }
   return 0;
 }
@@ -317,7 +316,6 @@ __global__ void kernel_reset_ant_state_v4(int *routes, int *route_lengths,
                                           uint64_t *visited,
                                           unsigned int *rng_states,
                                           CudaV4AntSummary *ant_summary,
-                                          CudaV4IterStats *iter_stats,
                                           CudaV4Params params,
                                           unsigned int seed) {
   int ant = blockIdx.x * blockDim.x + threadIdx.x;
@@ -344,14 +342,6 @@ __global__ void kernel_reset_ant_state_v4(int *routes, int *route_lengths,
   ant_summary[ant].feasible = 0;
   ant_summary[ant].unvisited_count = params.n;
   ant_summary[ant].cost = 0.0f;
-
-  if (iter_stats && ant == 0) {
-    iter_stats->candidate_moves = 0ull;
-    iter_stats->fallback_moves = 0ull;
-    iter_stats->depot_close_moves = 0ull;
-    iter_stats->nonempty_routes = 0ull;
-    iter_stats->customers_assigned = 0ull;
-  }
 }
 
 __global__ void kernel_construct_solutions_v4(
@@ -399,8 +389,8 @@ __global__ void kernel_construct_solutions_v4(
       int route_load_b = __shfl_sync(0xFFFFFFFFu, route_load, 0);
       int remaining_b = __shfl_sync(0xFFFFFFFFu, remaining, 0);
       int close_allowed_b;
+      int move_kind = -1;
       int move;
-      int move_type = -1;
 
       if (remaining_b <= 0 || route_load_b >= params.cap) {
         break;
@@ -410,17 +400,25 @@ __global__ void kernel_construct_solutions_v4(
       move = cuda_v4_select_next_move_warp(current_b, close_allowed_b, costs,
                                            tau, candidate_idx, eta_beta,
                                            visited_row, &rng_state, params,
-                                           &move_type);
+                                           &move_kind);
       move = __shfl_sync(0xFFFFFFFFu, move, 0);
-      move_type = __shfl_sync(0xFFFFFFFFu, move_type, 0);
+      move_kind = __shfl_sync(0xFFFFFFFFu, move_kind, 0);
       if (move <= 0) {
         if (lane == 0 && move == 0 && iter_stats) {
-          atomicAdd(&iter_stats->depot_close_moves, 1ull);
+          atomicAdd(&iter_stats->depot_close_moves, 1ULL);
         }
         break;
       }
 
       if (lane == 0) {
+        if (iter_stats) {
+          atomicAdd(&iter_stats->customer_moves, 1ULL);
+          if (move_kind == 0) {
+            atomicAdd(&iter_stats->candidate_moves, 1ULL);
+          } else if (move_kind == 1) {
+            atomicAdd(&iter_stats->fallback_moves, 1ULL);
+          }
+        }
         routes[route_base + route_len] = move;
         ++route_len;
         ++route_load;
@@ -428,28 +426,20 @@ __global__ void kernel_construct_solutions_v4(
         total_cost += costs[current * side + move];
         current = move;
         --remaining;
-        if (iter_stats) {
-          if (move_type == 2) {
-            atomicAdd(&iter_stats->fallback_moves, 1ull);
-          } else {
-            atomicAdd(&iter_stats->candidate_moves, 1ull);
-          }
-          atomicAdd(&iter_stats->customers_assigned, 1ull);
-        }
       }
       __syncwarp();
     }
 
     if (lane == 0) {
+      if (route_load > 0 && iter_stats) {
+        atomicAdd(&iter_stats->nonempty_routes, 1ULL);
+      }
       routes[route_base + route_len] = 0;
       ++route_len;
       total_cost += costs[current * side + 0];
       route_lengths[ant * params.K + vehicle] = route_len;
       route_loads[ant * params.K + vehicle] = route_load;
       curr_nodes[ant * params.K + vehicle] = 0;
-      if (iter_stats && route_load > 0) {
-        atomicAdd(&iter_stats->nonempty_routes, 1ull);
-      }
     }
     __syncwarp();
   }
@@ -567,13 +557,12 @@ void launch_reset_ant_state_v4(int *routes, int *route_lengths,
                                int *route_loads, int *curr_nodes,
                                uint64_t *visited, unsigned int *rng_states,
                                CudaV4AntSummary *ant_summary,
-                               CudaV4IterStats *iter_stats,
                                CudaV4Params params, unsigned int seed) {
   int blocks =
       (params.m + CUDA_V4_THREADS_PER_BLOCK - 1) / CUDA_V4_THREADS_PER_BLOCK;
   kernel_reset_ant_state_v4<<<blocks, CUDA_V4_THREADS_PER_BLOCK>>>(
       routes, route_lengths, route_loads, curr_nodes, visited, rng_states,
-      ant_summary, iter_stats, params, seed);
+      ant_summary, params, seed);
 }
 
 void launch_construct_solutions_v4(const float *costs, const float *tau,

@@ -21,11 +21,11 @@ def generate_instance(name, num_clients, num_vehicles, grid_size=100, seed=None)
     client_coords = np.random.randint(0, grid_size, size=(num_clients, 2))
     all_coords = np.vstack([depot_coord, client_coords])
     
-    # Unit demands (1 per client) to match node-count capacity
+    # Unit-demand CVRP: one unit per customer, depot demand 0.
     demands = np.ones(num_clients, dtype=int)
     all_demands = np.concatenate(([0], demands))
-    
-    capacity = num_clients - num_vehicles + 3
+
+    capacity = (num_clients + num_vehicles - 1) // num_vehicles
     if capacity < 1:
         capacity = 1
     

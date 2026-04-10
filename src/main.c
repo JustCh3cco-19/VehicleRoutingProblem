@@ -116,6 +116,7 @@ int main(int argc, char **argv) {
   unsigned int seed = 1234u;
   int use_instance_file = 0;
   const char *instance_path = NULL;
+  VrpInstanceMeta instance_meta = {0};
 
 #ifdef USE_MPI
   int mpi_rank = 0;
@@ -204,7 +205,8 @@ int main(int argc, char **argv) {
 
   double **c = NULL;
   if (use_instance_file) {
-    if (vrp_load_tsplib_euc2d_matrix(instance_path, &n, &c) != 0) {
+    if (vrp_load_tsplib_euc2d_matrix_ex(instance_path, &n, &c, &instance_meta) !=
+        0) {
       if (
 #ifdef USE_MPI
           mpi_rank == 0 &&
@@ -234,7 +236,22 @@ int main(int argc, char **argv) {
   }
 
   double best_cost = 0.0;
-  aco_vrp(n, K, m, T, c, alpha, beta, rho, tau0, Q, seed, best, &best_cost);
+  if (use_instance_file) {
+    if (instance_meta.vehicles > 0 && instance_meta.vehicles != K) {
+      fprintf(stderr,
+              "instance VEHICLES mismatch: CLI K=%d, file VEHICLES=%d\n", K,
+              instance_meta.vehicles);
+      status = 1;
+      solution_free(best);
+      matrix_free(c);
+      goto cleanup_mpi;
+    }
+    aco_vrp_with_capacity(n, K, instance_meta.capacity, m, T, c, alpha, beta,
+                          rho, tau0, Q, seed, best, &best_cost);
+  } else {
+    aco_vrp(n, K, m, T, c, alpha, beta, rho, tau0, Q, seed, best,
+            &best_cost);
+  }
 
 #ifdef USE_MPI
   if (mpi_rank == 0) {

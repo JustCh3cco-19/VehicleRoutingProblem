@@ -37,8 +37,8 @@ typedef struct {
   unsigned long long candidate_moves;
   unsigned long long fallback_moves;
   unsigned long long depot_close_moves;
+  unsigned long long customer_moves;
   unsigned long long nonempty_routes;
-  unsigned long long customers_assigned;
 } CudaV4IterStats;
 
 __global__ void kernel_build_candidate_lists_v4(const float *costs,
@@ -53,7 +53,6 @@ __global__ void kernel_reset_ant_state_v4(int *routes, int *route_lengths,
                                           uint64_t *visited,
                                           unsigned int *rng_states,
                                           CudaV4AntSummary *ant_summary,
-                                          CudaV4IterStats *iter_stats,
                                           CudaV4Params params,
                                           unsigned int seed);
 
@@ -84,7 +83,6 @@ void launch_reset_ant_state_v4(int *routes, int *route_lengths,
                                int *route_loads, int *curr_nodes,
                                uint64_t *visited, unsigned int *rng_states,
                                CudaV4AntSummary *ant_summary,
-                               CudaV4IterStats *iter_stats,
                                CudaV4Params params, unsigned int seed);
 void launch_construct_solutions_v4(const float *costs, const float *tau,
                                    const int *candidate_idx,

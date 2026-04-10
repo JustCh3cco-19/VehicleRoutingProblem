@@ -10,7 +10,9 @@ static double euc_2d(double x1, double y1, double x2, double y2) {
     return sqrt(pow(x1 - x2, 2) + pow(y1 - y2, 2));
 }
 
-int vrp_load_tsplib_euc2d_matrix(const char *path, int *n_out, double ***c_out) {
+int vrp_load_tsplib_euc2d_matrix_ex(const char *path, int *n_out,
+                                    double ***c_out,
+                                    VrpInstanceMeta *meta_out) {
     FILE *f = fopen(path, "r");
     if (!f) {
         perror("fopen");
@@ -147,21 +149,13 @@ int vrp_load_tsplib_euc2d_matrix(const char *path, int *n_out, double ***c_out) 
         }
     }
 
-    {
-        int expected_capacity = n - K + 3;
-        if (expected_capacity < 1) {
-            expected_capacity = 1;
-        }
-        if (capacity != expected_capacity) {
-            fprintf(stderr,
-                    "Invalid CAPACITY in %s: got %d, expected %d (n-K+3)\n",
-                    path, capacity, expected_capacity);
-            free(coords_x);
-            free(coords_y);
-            free(demands);
-            fclose(f);
-            return 1;
-        }
+    if (capacity <= 0) {
+        fprintf(stderr, "CAPACITY must be positive in %s\n", path);
+        free(coords_x);
+        free(coords_y);
+        free(demands);
+        fclose(f);
+        return 1;
     }
 
     double **c = matrix_alloc(n);
@@ -186,5 +180,13 @@ int vrp_load_tsplib_euc2d_matrix(const char *path, int *n_out, double ***c_out) 
 
     *n_out = n;
     *c_out = c;
+    if (meta_out) {
+        meta_out->vehicles = K;
+        meta_out->capacity = capacity;
+    }
     return 0;
+}
+
+int vrp_load_tsplib_euc2d_matrix(const char *path, int *n_out, double ***c_out) {
+    return vrp_load_tsplib_euc2d_matrix_ex(path, n_out, c_out, NULL);
 }

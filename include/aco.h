@@ -71,6 +71,11 @@ typedef struct {
 void aco_vrp(int n, int K, int m, int T, double **c, double alpha,
              double beta, double rho, double tau0, double Q,
              unsigned int seed, Solution *best_solution, double *best_cost);
+void aco_vrp_with_capacity(int n, int K, int vehicle_capacity_customers, int m,
+                           int T, double **c, double alpha, double beta,
+                           double rho, double tau0, double Q,
+                           unsigned int seed, Solution *best_solution,
+                           double *best_cost);
 
 double aco_rand01_state(unsigned int *state);
 unsigned int aco_make_ant_seed(unsigned int base_seed, int iter, int ant_index);
