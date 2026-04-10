@@ -6,7 +6,6 @@ solve_prepare:
 	@mkdir -p $(SOLVE_SOLUTIONS_DIR)/cuda
 	@mkdir -p $(SOLVE_SOLUTIONS_DIR)/cuda_$(SOLVE_CUDA_VARIANT)
 	@mkdir -p $(SOLVE_SOLUTIONS_DIR)/mpi
-	@mkdir -p $(SCALING_DIR)
 	@test -f "$(SOLVE_MANIFEST)" || (echo "missing manifest: $(SOLVE_MANIFEST)" && exit 1)
 	@test -f "$(SOLVE_MANIFEST_MPI)" || (echo "missing manifest: $(SOLVE_MANIFEST_MPI)" && exit 1)
 
@@ -21,7 +20,16 @@ solve_pyvrp: solve_prepare
 	PYTHON_BIN="$(PYTHON_BIN)" \
 	bash tools/bash/solve_pyvrp.sh
 
-solve_seq: solve_prepare all
+solve_seq: solve_prepare
+	@rows=$$(tail -n +2 "$(SOLVE_MANIFEST)" \
+		| { if [ -n "$(SOLVE_CLIENTS)" ]; then awk -F, -v list="$(SOLVE_CLIENTS)" 'BEGIN{split(list,a,","); for(i in a) wanted[a[i]]=1} ($$4 in wanted)'; else cat; fi; } \
+		| { if [ "$(SOLVE_LIMIT)" -gt 0 ]; then head -n "$(SOLVE_LIMIT)"; else cat; fi; } \
+		| wc -l); \
+	if [ "$$rows" -gt 0 ]; then \
+		$(MAKE) all; \
+	else \
+		echo "[seq] no matching rows in manifest -> skipping build"; \
+	fi
 	@SOLVE_CSV_DIR="$(SOLVE_CSV_DIR)" \
 	SOLVE_SOLUTIONS_DIR="$(SOLVE_SOLUTIONS_DIR)" \
 	SOLVE_MANIFEST="$(SOLVE_MANIFEST)" \
@@ -34,7 +42,16 @@ solve_seq: solve_prepare all
 	SOLVE_SEQ_MIN_REL_IMPROVEMENT="$(SOLVE_SEQ_MIN_REL_IMPROVEMENT)" \
 	bash tools/bash/solve_seq.sh
 
-solve_cuda: solve_prepare cuda
+solve_cuda: solve_prepare
+	@rows=$$(tail -n +2 "$(SOLVE_MANIFEST)" \
+		| { if [ -n "$(SOLVE_CLIENTS)" ]; then awk -F, -v list="$(SOLVE_CLIENTS)" 'BEGIN{split(list,a,","); for(i in a) wanted[a[i]]=1} ($$4 in wanted)'; else cat; fi; } \
+		| { if [ "$(SOLVE_LIMIT)" -gt 0 ]; then head -n "$(SOLVE_LIMIT)"; else cat; fi; } \
+		| wc -l); \
+	if [ "$$rows" -gt 0 ]; then \
+		$(MAKE) cuda; \
+	else \
+		echo "[cuda] no matching rows in manifest -> skipping build"; \
+	fi
 	@SOLVE_CSV_DIR="$(SOLVE_CSV_DIR)" \
 	SOLVE_SOLUTIONS_DIR="$(SOLVE_SOLUTIONS_DIR)" \
 	SOLVE_MANIFEST="$(SOLVE_MANIFEST)" \
@@ -47,7 +64,16 @@ solve_cuda: solve_prepare cuda
 	SOLVE_SEQ_MIN_REL_IMPROVEMENT="$(SOLVE_SEQ_MIN_REL_IMPROVEMENT)" \
 	bash tools/bash/solve_cuda.sh
 
-solve_mpi: solve_prepare openmp_mpi
+solve_mpi: solve_prepare
+	@rows=$$(tail -n +2 "$(SOLVE_MANIFEST_MPI)" \
+		| { if [ -n "$(SOLVE_CLIENTS)" ]; then awk -F, -v list="$(SOLVE_CLIENTS)" 'BEGIN{split(list,a,","); for(i in a) wanted[a[i]]=1} ($$4 in wanted)'; else cat; fi; } \
+		| { if [ "$(SOLVE_LIMIT)" -gt 0 ]; then head -n "$(SOLVE_LIMIT)"; else cat; fi; } \
+		| wc -l); \
+	if [ "$$rows" -gt 0 ]; then \
+		$(MAKE) openmp_mpi; \
+	else \
+		echo "[mpi] no matching rows in manifest -> skipping build"; \
+	fi
 	@SOLVE_CSV_DIR="$(SOLVE_CSV_DIR)" \
 	SOLVE_SOLUTIONS_DIR="$(SOLVE_SOLUTIONS_DIR)" \
 	SOLVE_MANIFEST_MPI="$(SOLVE_MANIFEST_MPI)" \

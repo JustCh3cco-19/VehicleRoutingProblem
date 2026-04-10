@@ -17,8 +17,6 @@ COVERAGE_FLAGS=-g --coverage
 COVERAGE_LIBS=--coverage
 EXTRA_FLAGS=
 RESULTS_ROOT?=results
-TEST_MODE?=background
-TEST_LOGS_DIR?=$(RESULTS_ROOT)/detached
 PYTHON_BIN?=$(if $(wildcard .venv/bin/python),.venv/bin/python,python3)
 
 # Targets
@@ -41,22 +39,6 @@ INSTANCE_PARSER_OBJ=$(COMMON_DIR)/instance_parser.o
 
 OBJ=src/main.o $(SEQ_OBJ) $(ACO_SHARED_OBJ) $(SOLUTION_OBJ) $(MATRIX_OBJ) $(INSTANCE_PARSER_OBJ)
 
-SEQUENTIAL_TESTS_SRC=tests/sequential_tests.c
-SEQUENTIAL_TESTS_OBJ=tests/sequential_tests.o
-SEQUENTIAL_TESTS_BIN=tests/sequential_tests.out
-
-C_COMPARE_CASE_SRC=tests/c_compare_case.c
-C_COMPARE_CASE_BIN=tests/c_compare_case.out
-C_COMPARE_CASE_MPI_SRC=tests/c_compare_case_mpi.c
-C_COMPARE_CASE_MPI_BIN=tests/c_compare_case_mpi.out
-
-OPENMP_MPI_TESTS_SRC=tests/openmp_mpi_tests.c
-OPENMP_MPI_TESTS_BIN=tests/openmp_mpi_tests.out
-OPENMP_MPI_TESTS_BUILD_SRC=$(OPENMP_MPI_TESTS_SRC) $(PAR_SRC) $(ACO_SHARED_SRC) $(SOLUTION_SRC) $(MATRIX_SRC)
-OPENMP_MPI_TESTS_HEAVY_SRC=tests/openmp_mpi_tests_heavy.c
-OPENMP_MPI_TESTS_HEAVY_BIN=tests/openmp_mpi_tests_heavy.out
-OPENMP_MPI_TESTS_HEAVY_BUILD_SRC=$(OPENMP_MPI_TESTS_HEAVY_SRC) $(PAR_SRC) $(ACO_SHARED_SRC) $(SOLUTION_SRC) $(MATRIX_SRC)
-
 OPENMP_MPI_BIN=aco_vrp_openmp_mpi.out
 OPENMP_MPI_SRC=src/main.c $(PAR_SRC) $(ACO_SHARED_SRC) $(SOLUTION_SRC) $(MATRIX_SRC) $(INSTANCE_PARSER_SRC)
 CUDA_BIN=aco_vrp_cuda.out
@@ -70,13 +52,6 @@ CUDA_COMMON_OBJ=$(SOLUTION_OBJ) $(MATRIX_OBJ)
 CUDA_OBJ=$(CUDA_MAIN_OBJ) $(CUDA_ACO_OBJ) $(CUDA_KERNELS_OBJ) $(CUDA_COMMON_OBJ) $(INSTANCE_PARSER_OBJ)
 MPI_NP=2
 MPI_OMP_THREADS=2
-MPI_TEST_ARGS?=
-SCALING_DIR?=$(RESULTS_ROOT)/scaling
-CHECKPOINT_MODE?=fresh
-LIGHT_CHECKPOINT_PATH?=$(SCALING_DIR)/openmp_mpi_tests_light.checkpoint
-HEAVY_CHECKPOINT_PATH?=$(SCALING_DIR)/openmp_mpi_tests_heavy.checkpoint
-LIGHT_CP_FLAGS=--checkpoint $(LIGHT_CHECKPOINT_PATH) $(if $(filter resume,$(CHECKPOINT_MODE)),--resume,$(if $(filter reset,$(CHECKPOINT_MODE)),--reset-checkpoint,))
-HEAVY_CP_FLAGS=--checkpoint $(HEAVY_CHECKPOINT_PATH) $(if $(filter resume,$(CHECKPOINT_MODE)),--resume,$(if $(filter reset,$(CHECKPOINT_MODE)),--reset-checkpoint,))
 
 SOLVE_OUT_DIR?=$(RESULTS_ROOT)/solve_manifest
 SOLVE_CSV_DIR?=$(SOLVE_OUT_DIR)/csv
@@ -116,28 +91,3 @@ GEN_MAX_VEHICLES?=512
 
 COVERAGE_FILES=src/*.gcno src/*.gcda src/seq/*.gcno src/seq/*.gcda src/openmp-mpi/*.gcno src/openmp-mpi/*.gcda src/common/*.gcno src/common/*.gcda tests/*.gcno tests/*.gcda
 LEGACY_BINARIES=aco_vrp_seq aco_vrp_hybrid aco_vrp_openmp_mpi tests/test tests/test_mpi tests/test_final tests/test_final.out tests/test_final_mpi.out tests/c_scaling_tests tests/c_scaling_tests.out
-
-define RUN_TEST_CMD
-@if [ "$(TEST_MODE)" = "background" ]; then \
-	log_dir="$(TEST_LOGS_DIR)"; \
-	mkdir -p "$$log_dir"; \
-	ts=$$(date +%Y%m%d_%H%M%S); \
-	job="$(1)"; \
-	log_file="$$log_dir/$${job}_$${ts}.log"; \
-	pid_file="$$log_dir/$${job}_$${ts}.pid"; \
-	cmd_file="$$log_dir/$${job}_$${ts}.cmd"; \
-	run_cmd="cd '$(CURDIR)' && $(2)"; \
-	printf '%s\n' "$$run_cmd" >"$$cmd_file"; \
-	nohup bash -lc "$$run_cmd" >"$$log_file" 2>&1 </dev/null & \
-	pid=$$!; \
-	printf '%s\n' "$$pid" >"$$pid_file"; \
-	echo "[DETACHED] job=$$job"; \
-	echo "[DETACHED] pid=$$pid"; \
-	echo "[DETACHED] log=$$log_file"; \
-	echo "[DETACHED] pid_file=$$pid_file"; \
-	echo "[DETACHED] cmd_file=$$cmd_file"; \
-	echo "[DETACHED] tail -f $$log_file"; \
-else \
-	bash -lc "$(2)"; \
-fi
-endef

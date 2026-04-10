@@ -10,11 +10,12 @@ seq_m="${SOLVE_SEQ_M:-0}"
 repeats="${SOLVE_SEQ_REPEATS:-1}"
 runtime_s="${SOLVE_SEQ_RUNTIME_EFFECTIVE:-0}"
 stag_iters="${SOLVE_SEQ_STAGNATION_EPOCHS:-0}"
-improve_eps="${SOLVE_SEQ_MIN_REL_IMPROVEMENT:-0.001}"
+improve_rel_pct="${SOLVE_SEQ_MIN_REL_IMPROVEMENT:-0.001}"
 
 if [ "$repeats" -lt 1 ]; then
   repeats=1
 fi
+improve_rel="$(awk "BEGIN { printf \"%.12g\", (${improve_rel_pct}) / 100.0 }")"
 
 echo "name,profile,instance_path,n,K,m,solver_seed,instance_seed,layout_id,run_id,status,elapsed_s,max_rss_kb,best_cost,error" > "$csv"
 
@@ -34,8 +35,8 @@ tail -n +2 "$manifest" \
 
         out=$(/usr/bin/time -f "%e,%M" -o "$stats_file" env \
           ACO_SOLVER_TIMEOUT_SECONDS="$runtime_s" \
-          ACO_SOLVER_STAGNATION_ITERS="$stag_iters" \
-          ACO_SOLVER_IMPROVE_EPS="$improve_eps" \
+          ACO_SOLVER_STAGNATION_EPOCHS="$stag_iters" \
+          ACO_SOLVER_MIN_REL_IMPROVEMENT="$improve_rel" \
           ./aco_vrp_seq.out "$instance_path" "$K" "$m_run" "$seed_run" 2>&1)
         rc=$?
 

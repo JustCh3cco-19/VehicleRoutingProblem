@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+#SBATCH --job-name=vrp_solve
+#SBATCH --output=results/slurm/%x_%j.out
+#SBATCH --error=results/slurm/%x_%j.err
+#SBATCH --time=04:00:00
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=8
+#SBATCH --mem=16G
+
+set -euo pipefail
+
+ROOT_DIR="${ROOT_DIR:-$SLURM_SUBMIT_DIR}"
+TARGET="${TARGET:-solve_all}"
+MAKE_ARGS="${MAKE_ARGS:-}"
+MODULE_LOADS="${MODULE_LOADS:-}"
+
+if [[ -z "${ROOT_DIR}" ]]; then
+  echo "[ERROR] ROOT_DIR non impostata e SLURM_SUBMIT_DIR vuota."
+  exit 1
+fi
+
+cd "${ROOT_DIR}"
+mkdir -p results/slurm
+
+if [[ -n "${MODULE_LOADS}" ]]; then
+  # Esempio: MODULE_LOADS="gcc/13.2 openmpi/4.1 cuda/12.2"
+  for mod in ${MODULE_LOADS}; do
+    module load "${mod}"
+  done
+fi
+
+echo "[INFO] job_id=${SLURM_JOB_ID:-n/a}"
+echo "[INFO] target=${TARGET}"
+echo "[INFO] make_args=${MAKE_ARGS}"
+echo "[INFO] cwd=$(pwd)"
+
+make "${TARGET}" ${MAKE_ARGS}
+

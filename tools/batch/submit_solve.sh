@@ -1,0 +1,125 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<'EOF'
+usage: tools/batch/submit_solve.sh [options]
+
+Opzioni:
+  --target NAME           Target make da eseguire (default: solve_all)
+                          Esempi: solve_seq, solve_mpi, solve_cuda, solve_pyvrp, solve_all, solve_memory_growth_non_cuda
+  --make-args "ARGS"      Argomenti extra passati a make (default: "")
+  --time HH:MM:SS         Override tempo job (default sbatch script)
+  --cpus N                Override cpus-per-task
+  --mem SIZE              Override memoria (es. 32G)
+  --partition NAME        Override partizione
+  --account NAME          Override account
+  --gres SPEC             Override risorse GRES (es. gpu:1)
+  --module-loads "LIST"   Moduli da caricare nel job (es. "gcc/13.2 openmpi/4.1")
+  --dry-run               Stampa comando sbatch senza inviarlo
+  -h, --help              Mostra help
+
+Esempi:
+  tools/batch/submit_solve.sh --target solve_seq \
+    --make-args "SOLVE_CLIENTS=500,1000 SOLVE_SEQ_REPEATS=3 SOLVE_SEQ_RUNTIME_S=60"
+
+  tools/batch/submit_solve.sh --target solve_mpi --cpus 32 --mem 64G \
+    --make-args "SOLVE_CLIENTS=4000,8000 SOLVE_MPI_RANKS=4 SOLVE_MPI_OMP_THREADS=8 SOLVE_MPI_REPEATS=3"
+
+  tools/batch/submit_solve.sh --target solve_cuda --partition gpu --gres gpu:1 \
+    --make-args "SOLVE_CLIENTS=500,1000 SOLVE_CUDA_REPEATS=3 SOLVE_CUDA_VARIANT=v4"
+EOF
+}
+
+target="solve_all"
+make_args=""
+module_loads=""
+dry_run=0
+
+sbatch_args=()
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --target)
+      target="${2:-}"
+      shift 2
+      ;;
+    --make-args)
+      make_args="${2:-}"
+      shift 2
+      ;;
+    --module-loads)
+      module_loads="${2:-}"
+      shift 2
+      ;;
+    --time)
+      sbatch_args+=(--time "${2:-}")
+      shift 2
+      ;;
+    --cpus)
+      sbatch_args+=(--cpus-per-task "${2:-}")
+      shift 2
+      ;;
+    --mem)
+      sbatch_args+=(--mem "${2:-}")
+      shift 2
+      ;;
+    --partition)
+      sbatch_args+=(--partition "${2:-}")
+      shift 2
+      ;;
+    --account)
+      sbatch_args+=(--account "${2:-}")
+      shift 2
+      ;;
+    --gres)
+      sbatch_args+=(--gres "${2:-}")
+      shift 2
+      ;;
+    --dry-run)
+      dry_run=1
+      shift
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "[ERROR] opzione non riconosciuta: $1"
+      usage
+      exit 2
+      ;;
+  esac
+done
+
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+root_dir="$(cd "${script_dir}/../.." && pwd)"
+job_script="${script_dir}/run_solve.sbatch"
+
+if [[ ! -f "${job_script}" ]]; then
+  echo "[ERROR] file non trovato: ${job_script}"
+  exit 1
+fi
+
+export_vars="ALL,ROOT_DIR=${root_dir},TARGET=${target},MAKE_ARGS=${make_args},MODULE_LOADS=${module_loads}"
+
+cmd=(sbatch "${sbatch_args[@]}" --export "${export_vars}" "${job_script}")
+
+echo "[SUBMIT] ROOT_DIR=${root_dir}"
+echo "[SUBMIT] TARGET=${target}"
+echo "[SUBMIT] MAKE_ARGS=${make_args}"
+if [[ -n "${module_loads}" ]]; then
+  echo "[SUBMIT] MODULE_LOADS=${module_loads}"
+fi
+if [[ ${#sbatch_args[@]} -gt 0 ]]; then
+  echo "[SUBMIT] SBATCH overrides: ${sbatch_args[*]}"
+fi
+
+if [[ "${dry_run}" -eq 1 ]]; then
+  printf '[DRY-RUN] %q ' "${cmd[@]}"
+  printf '\n'
+  exit 0
+fi
+
+"${cmd[@]}"
+

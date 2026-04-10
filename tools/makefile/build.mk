@@ -41,8 +41,7 @@ $(CUDA_BIN): $(CUDA_OBJ)
 	$(NVCC) $(CUDA_ARCH_FLAG) $^ -o $@
 
 clean:
-	rm -f $(BIN) $(OBJ) $(SEQUENTIAL_TESTS_BIN) $(SEQUENTIAL_TESTS_OBJ) $(OPENMP_MPI_BIN) $(CUDA_BIN) $(LEGACY_BINARIES) \
-		$(OPENMP_MPI_TESTS_BIN) $(OPENMP_MPI_TESTS_HEAVY_BIN) \
+	rm -f $(BIN) $(OBJ) $(OPENMP_MPI_BIN) $(CUDA_BIN) $(LEGACY_BINARIES) \
 		src/*.o src/seq/*.o src/openmp-mpi/*.o src/common/*.o src/cuda/*.o \
 		src/cuda/*.ptx src/cuda/*.cubin src/cuda/*.fatbin \
 		tests/*.o tests/*.out \

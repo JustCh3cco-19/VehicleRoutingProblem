@@ -28,9 +28,6 @@ Codice solver:
 Header:
 - `include/`
 
-Test C:
-- `tests/`
-
 Script analisi/benchmark storici:
 - `scripts/` (solo benchmark/plot/profiling, non più utility make principali)
 
@@ -38,7 +35,7 @@ Tooling operativo centralizzato:
 - `tools/makefile/` -> moduli `.mk` inclusi dal `Makefile`
 - `tools/bash/` -> script bash operativi (`solve_*`, `run_and_validate.sh`)
 - `tools/python/` -> utility Python operative (`generate_vrp_problem.py`, `solve_pyvrp_runner.py`, `validate_pyvrp.py`)
-- `tools/batch/` -> script HPC/Slurm (`submit_openmp_mpi_tests.sh`, `run_openmp_mpi_tests.sbatch`)
+- `tools/batch/` -> submit/job script Slurm per eseguire i target `solve_*` su cluster
 
 Entry-point build:
 - `Makefile` (root) include i moduli da `tools/makefile/*.mk`
@@ -49,7 +46,6 @@ Il `Makefile` root include:
 - `tools/makefile/vars.mk`
 - `tools/makefile/help.mk`
 - `tools/makefile/build.mk`
-- `tools/makefile/tests.mk`
 - `tools/makefile/generate.mk`
 - `tools/makefile/solve.mk`
 - `tools/makefile/phony.mk`
@@ -108,7 +104,8 @@ make solve_all
 ```
 
 Prepare/validazione path:
-- `solve_prepare` crea cartelle output e verifica `SOLVE_MANIFEST` / `SOLVE_MANIFEST_MPI`
+- `solve_prepare` crea cartelle output `solve_*` e verifica `SOLVE_MANIFEST` / `SOLVE_MANIFEST_MPI`
+- non crea directory `scaling`
 
 ### Ripetizioni per istanza
 Supportate direttamente:
@@ -135,10 +132,10 @@ Per `seq` e `mpi` viene registrato `max_rss_kb` (via `/usr/bin/time`).
 - `SOLVE_SEQ_RUNTIME` (alias)
 - `SOLVE_SEQ_M`
 - `SOLVE_SEQ_STAGNATION_EPOCHS`
-- `SOLVE_SEQ_MIN_REL_IMPROVEMENT`
+- `SOLVE_SEQ_MIN_REL_IMPROVEMENT` (percentuale; es. `0.1` = `0.1%`)
 - `SOLVE_MPI_RUNTIME_S`
 - `SOLVE_MPI_STAGNATION_EPOCHS`
-- `SOLVE_MPI_MIN_REL_IMPROVEMENT`
+- `SOLVE_MPI_MIN_REL_IMPROVEMENT` (percentuale; es. `0.1` = `0.1%`)
 - `SOLVE_MPI_RANKS`
 - `SOLVE_MPI_OMP_THREADS`
 - `SOLVE_CUDA_VARIANT`
@@ -146,6 +143,7 @@ Per `seq` e `mpi` viene registrato `max_rss_kb` (via `/usr/bin/time`).
 Nota mapping env nel solver C:
 - i target passano `SOLVE_*_STAGNATION_EPOCHS` come `ACO_SOLVER_STAGNATION_ITERS`
 - i target passano `SOLVE_*_MIN_REL_IMPROVEMENT` come `ACO_SOLVER_IMPROVE_EPS`
+- per `seq` e `mpi`, il valore da Makefile viene convertito da percentuale a frazione (`val/100`)
 
 ### Comando composito crescita memoria non-CUDA
 
@@ -173,33 +171,6 @@ Route:
 - `results/solve_manifest/solutions/cuda_<variant>/*.txt`
 - `results/solve_manifest/solutions/mpi/*.txt`
 
-## Test/scaling legacy
-
-Target disponibili:
-- `make sequential_tests`
-- `make openmp_mpi_tests`
-- `make openmp_mpi_tests_heavy`
-- resume/reset checkpoint: `openmp_mpi_tests_*_resume/reset`
-
-Output tipici:
-- `results/scaling/scaling_progressive_c.csv`
-- `results/scaling/scaling_progressive_openmp_mpi_light.csv`
-- `results/scaling/scaling_progressive_openmp_mpi_heavy.csv`
-- checkpoint in `results/scaling/`
-- detached logs in `results/detached/`
-
-## Tool batch (HPC)
-
-Script Slurm centralizzati:
-- `tools/batch/submit_openmp_mpi_tests.sh`
-- `tools/batch/run_openmp_mpi_tests.sbatch`
-
-Esempio:
-
-```bash
-tools/batch/submit_openmp_mpi_tests.sh --test heavy --checkpoint-mode resume
-```
-
 ## Tool bash utili
 
 - `tools/bash/run_and_validate.sh`
@@ -213,6 +184,36 @@ tools/batch/submit_openmp_mpi_tests.sh --test heavy --checkpoint-mode resume
 - `tools/python/generate_vrp_problem.py`
 - `tools/python/solve_pyvrp_runner.py`
 - `tools/python/validate_pyvrp.py`
+
+## Esecuzione su cluster (Slurm)
+
+Script disponibili:
+- `tools/batch/submit_solve.sh`
+- `tools/batch/run_solve.sbatch`
+
+Esempi:
+
+```bash
+tools/batch/submit_solve.sh --target solve_seq \
+  --make-args "SOLVE_CLIENTS=500,1000 SOLVE_SEQ_REPEATS=3 SOLVE_SEQ_RUNTIME_S=60"
+```
+
+```bash
+tools/batch/submit_solve.sh --target solve_mpi --cpus 32 --mem 64G \
+  --make-args "SOLVE_CLIENTS=4000,8000 SOLVE_MPI_RANKS=4 SOLVE_MPI_OMP_THREADS=8 SOLVE_MPI_REPEATS=3"
+```
+
+```bash
+tools/batch/submit_solve.sh --target solve_cuda --partition gpu --gres gpu:1 \
+  --make-args "SOLVE_CLIENTS=500,1000 SOLVE_CUDA_REPEATS=3 SOLVE_CUDA_VARIANT=v4"
+```
+
+Caricamento moduli cluster (opzionale):
+
+```bash
+tools/batch/submit_solve.sh --target solve_all \
+  --module-loads "gcc/13.2 openmpi/4.1 cuda/12.2"
+```
 
 ## Comandi rapidi
 
@@ -253,4 +254,3 @@ Pulizia:
 ```bash
 make clean
 ```
-
