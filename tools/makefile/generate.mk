@@ -2,8 +2,10 @@ generate_problems:
 	@mkdir -p "$(GEN_INST_DIR)"
 	@manifest_seq="$(GEN_INST_DIR)/manifest.csv"; \
 	manifest_mpi="$(GEN_INST_DIR)/manifest_openmp_mpi.csv"; \
-	echo "profile,name,instance_path,n,K,m,solver_seed,instance_seed,layout_id,capacity_formula" > "$$manifest_seq"; \
-	echo "profile,name,instance_path,n,K,m,solver_seed,instance_seed,layout_id,capacity_formula" > "$$manifest_mpi"; \
+	rm -f "$(GEN_INST_DIR)"/n*_k*_s*.vrp "$$manifest_seq" "$$manifest_mpi"; \
+	header="profile,name,instance_path,n,K,m,solver_seed,instance_seed,layout_id,capacity_formula"; \
+	echo "$$header" > "$$manifest_seq"; \
+	echo "$$header" > "$$manifest_mpi"; \
 	target_cppv="$(GEN_TARGET_CUSTOMERS_PER_VEHICLE)"; \
 	min_vehicles="$(GEN_MIN_VEHICLES)"; \
 	max_vehicles="$(GEN_MAX_VEHICLES)"; \
@@ -28,6 +30,14 @@ generate_problems:
 		echo "generated_mpi,$$name,$$inst_path,$$n,$$K,$$m_mpi,$(GEN_SOLVER_SEED),$$seed,grid$(GEN_GRID),$$cap_formula" >> "$$manifest_mpi"; \
 		echo "[gen] $$name"; \
 	done; \
+	tmp_seq="$$(mktemp)"; \
+	tmp_mpi="$$(mktemp)"; \
+	head -n 1 "$$manifest_seq" > "$$tmp_seq"; \
+	tail -n +2 "$$manifest_seq" | sort -u -t, -k4,4n -k8,8n >> "$$tmp_seq"; \
+	mv "$$tmp_seq" "$$manifest_seq"; \
+	head -n 1 "$$manifest_mpi" > "$$tmp_mpi"; \
+	tail -n +2 "$$manifest_mpi" | sort -u -t, -k4,4n -k8,8n >> "$$tmp_mpi"; \
+	mv "$$tmp_mpi" "$$manifest_mpi"; \
 	echo "wrote $$manifest_seq"; \
 	echo "wrote $$manifest_mpi"
 

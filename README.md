@@ -66,6 +66,10 @@ Output:
 - `instances/test_aligned/manifest.csv`
 - `instances/test_aligned/manifest_openmp_mpi.csv`
 
+Nota:
+- `generate_problems` ripulisce prima i `.vrp`/manifest esistenti nella `GEN_INST_DIR`, poi rigenera tutto da zero.
+- i manifest generati vengono ordinati automaticamente per `n` crescente (poi `instance_seed`).
+
 Profilo grande predefinito:
 
 ```bash
