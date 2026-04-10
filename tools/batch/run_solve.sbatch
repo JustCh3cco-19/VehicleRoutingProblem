@@ -12,8 +12,17 @@ set -euo pipefail
 
 ROOT_DIR="${ROOT_DIR:-$SLURM_SUBMIT_DIR}"
 TARGET="${TARGET:-solve_all}"
-MAKE_ARGS="${MAKE_ARGS:-}"
-MODULE_LOADS="${MODULE_LOADS:-}"
+MAKE_ARGS_B64="${MAKE_ARGS_B64:-}"
+MODULE_LOADS_B64="${MODULE_LOADS_B64:-}"
+MAKE_ARGS=""
+MODULE_LOADS=""
+
+if [[ -n "${MAKE_ARGS_B64}" ]]; then
+  MAKE_ARGS="$(printf '%s' "${MAKE_ARGS_B64}" | base64 -d)"
+fi
+if [[ -n "${MODULE_LOADS_B64}" ]]; then
+  MODULE_LOADS="$(printf '%s' "${MODULE_LOADS_B64}" | base64 -d)"
+fi
 
 if [[ -z "${ROOT_DIR}" ]]; then
   echo "[ERROR] ROOT_DIR non impostata e SLURM_SUBMIT_DIR vuota."

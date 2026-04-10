@@ -106,7 +106,14 @@ if [[ ! -f "${job_script}" ]]; then
   exit 1
 fi
 
-export_vars="ALL,ROOT_DIR=${root_dir},TARGET=${target},MAKE_ARGS=${make_args},MODULE_LOADS=${module_loads}"
+if command -v base64 >/dev/null 2>&1; then
+  make_args_b64="$(printf '%s' "${make_args}" | base64 | tr -d '\n')"
+else
+  echo "[ERROR] comando 'base64' non disponibile: impossibile serializzare --make-args in modo sicuro."
+  exit 1
+fi
+module_loads_b64="$(printf '%s' "${module_loads}" | base64 | tr -d '\n')"
+export_vars="ALL,ROOT_DIR=${root_dir},TARGET=${target},MAKE_ARGS_B64=${make_args_b64},MODULE_LOADS_B64=${module_loads_b64}"
 
 cmd=(sbatch "${sbatch_args[@]}" --export "${export_vars}" "${job_script}")
 
