@@ -218,10 +218,11 @@ static int validate_cuda_solution(const Solution *sol, int n, int K, int cap,
   return 1;
 }
 
-int aco_vrp_cuda(int n, int K, int m, double **c, double alpha,
-                 double beta, double rho, double tau0, double Q,
-                 unsigned int seed, Solution *best_solution,
-                 double *best_cost) {
+int aco_vrp_cuda_with_capacity(int n, int K, int vehicle_capacity_customers,
+                               int m, double **c, double alpha, double beta,
+                               double rho, double tau0, double Q,
+                               unsigned int seed, Solution *best_solution,
+                               double *best_cost) {
   CudaV1Params params;
   double max_runtime_sec = 0.0;
   int max_stagnation_epochs = 0;
@@ -259,7 +260,7 @@ int aco_vrp_cuda(int n, int K, int m, double **c, double alpha,
 
   total_m = (m > 0) ? m : choose_auto_total_ants();
   cand_k = choose_candidate_count(n);
-  cap = n - K + 3;
+  cap = vehicle_capacity_customers;
   if (cap < 1) {
     cap = 1;
   }
@@ -484,4 +485,13 @@ cleanup:
     cudaFree(d_ant_summary);
   }
   return status;
+}
+
+int aco_vrp_cuda(int n, int K, int m, double **c, double alpha, double beta,
+                 double rho, double tau0, double Q, unsigned int seed,
+                 Solution *best_solution, double *best_cost) {
+  int vehicle_capacity_customers = (K > 0) ? ((n + K - 1) / K) : n;
+  return aco_vrp_cuda_with_capacity(
+      n, K, vehicle_capacity_customers, m, c, alpha, beta, rho, tau0, Q,
+      seed, best_solution, best_cost);
 }

@@ -12,7 +12,8 @@ except ImportError:
     print("Error: pyvrp is not installed. Please run in the created .venv.")
     sys.exit(1)
 
-def generate_instance(name, num_clients, num_vehicles, grid_size=100, seed=None):
+def generate_instance(name, num_clients, num_vehicles, grid_size=100, seed=None,
+                      capacity_slack_percent=20):
     if seed is not None:
         np.random.seed(seed)
     
@@ -25,7 +26,9 @@ def generate_instance(name, num_clients, num_vehicles, grid_size=100, seed=None)
     demands = np.ones(num_clients, dtype=int)
     all_demands = np.concatenate(([0], demands))
 
-    capacity = (num_clients + num_vehicles - 1) // num_vehicles
+    numerator = (100 + capacity_slack_percent) * num_clients
+    denominator = 100 * num_vehicles
+    capacity = (numerator + denominator - 1) // denominator
     if capacity < 1:
         capacity = 1
     
@@ -82,10 +85,14 @@ def main():
     parser.add_argument("--output", default="problem.vrp", help="Output .vrp file path")
     parser.add_argument("--solve", action="store_true", help="Also generate a reference solution (.txt)")
     parser.add_argument("--runtime", type=float, default=2.0, help="Max solve time for reference solution")
+    parser.add_argument("--capacity-slack-percent", type=int, default=20,
+                        help="Capacity slack percentage over n / K (default: 20)")
 
     args = parser.parse_args()
 
-    instance = generate_instance(args.name, args.clients, args.vehicles, args.grid, args.seed)
+    instance = generate_instance(args.name, args.clients, args.vehicles,
+                                 args.grid, args.seed,
+                                 args.capacity_slack_percent)
 
     # Save instance
     vrplib.write_instance(args.output, instance)

@@ -844,7 +844,11 @@ static void aco_vrp_run_with_timer(int n, int K, int vehicle_capacity_customers,
 void aco_vrp(int n, int K, int m, double **c, double alpha,
              double beta, double rho, double tau0, double Q,
              unsigned int seed, Solution *best_solution, double *best_cost) {
-  int vehicle_capacity_customers = (K > 0) ? ((n + K - 1) / K) : n;
+  int vehicle_capacity_customers =
+      (K > 0) ? (int)(((long long)120 * (long long)n +
+                       (long long)100 * (long long)K - 1) /
+                      ((long long)100 * (long long)K))
+              : n;
   aco_vrp_with_capacity(n, K, vehicle_capacity_customers, m, c, alpha,
                         beta, rho, tau0, Q, seed, best_solution, best_cost);
 }

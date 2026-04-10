@@ -9,10 +9,11 @@ extern "C" {
 #include <stdlib.h>
 #include <errno.h>
 
-int aco_vrp_cuda(int n, int K, int m, double **c, double alpha,
-                 double beta, double rho, double tau0, double Q,
-                 unsigned int seed, Solution *best_solution,
-                 double *best_cost);
+int aco_vrp_cuda_with_capacity(int n, int K, int vehicle_capacity_customers,
+                               int m, double **c, double alpha, double beta,
+                               double rho, double tau0, double Q,
+                               unsigned int seed, Solution *best_solution,
+                               double *best_cost);
 
 static int parse_int_arg(const char *s, int *out) {
     char *end = NULL;
@@ -112,7 +113,9 @@ int main(int argc, char **argv) {
         return 1;
     }
     
-    if (aco_vrp_cuda(n, K, m, c, alpha, beta, rho, tau0, Q, seed, best, &best_cost) != 0) {
+    if (aco_vrp_cuda_with_capacity(n, K, instance_meta.capacity, m, c, alpha,
+                                   beta, rho, tau0, Q, seed, best,
+                                   &best_cost) != 0) {
         fprintf(stderr, "CUDA solver failed\n");
         solution_free(best);
         matrix_free(c);

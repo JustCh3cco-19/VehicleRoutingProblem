@@ -9,6 +9,7 @@ generate_problems:
 	target_cppv="$(GEN_TARGET_CUSTOMERS_PER_VEHICLE)"; \
 	min_vehicles="$(GEN_MIN_VEHICLES)"; \
 	max_vehicles="$(GEN_MAX_VEHICLES)"; \
+	slack_percent="$(GEN_CAPACITY_SLACK_PERCENT)"; \
 	idx=0; \
 	for n in $$(echo "$(GEN_CLIENTS)" | tr ',' ' '); do \
 		idx=$$((idx + 1)); \
@@ -24,8 +25,8 @@ generate_problems:
 		else m_seq=3; m_mpi=4; fi; \
 		name="n$${n}_k$${K}_s$${seed}"; \
 		inst_path="$(GEN_INST_DIR)/$${name}.vrp"; \
-		cap_formula="ceil(n/K)"; \
-		$(PYTHON_BIN) tools/python/generate_vrp_problem.py --name "$$name" --clients "$$n" --vehicles "$$K" --grid "$(GEN_GRID)" --seed "$$seed" --output "$$inst_path" || exit $$?; \
+		cap_formula="ceil((1+$$slack_percent/100)*n/K)"; \
+		$(PYTHON_BIN) tools/python/generate_vrp_problem.py --name "$$name" --clients "$$n" --vehicles "$$K" --grid "$(GEN_GRID)" --seed "$$seed" --capacity-slack-percent "$$slack_percent" --output "$$inst_path" || exit $$?; \
 		echo "generated,$$name,$$inst_path,$$n,$$K,$$m_seq,$(GEN_SOLVER_SEED),$$seed,grid$(GEN_GRID),$$cap_formula" >> "$$manifest_seq"; \
 		echo "generated_mpi,$$name,$$inst_path,$$n,$$K,$$m_mpi,$(GEN_SOLVER_SEED),$$seed,grid$(GEN_GRID),$$cap_formula" >> "$$manifest_mpi"; \
 		echo "[gen] $$name"; \

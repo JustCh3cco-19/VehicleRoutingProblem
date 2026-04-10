@@ -88,6 +88,7 @@ GEN_SOLVER_SEED?=1234
 GEN_TARGET_CUSTOMERS_PER_VEHICLE?=1024
 GEN_MIN_VEHICLES?=8
 GEN_MAX_VEHICLES?=512
+GEN_CAPACITY_SLACK_PERCENT?=20
 
 COVERAGE_FILES=src/*.gcno src/*.gcda src/seq/*.gcno src/seq/*.gcda src/openmp-mpi/*.gcno src/openmp-mpi/*.gcda src/common/*.gcno src/common/*.gcda tests/*.gcno tests/*.gcda
 LEGACY_BINARIES=aco_vrp_seq aco_vrp_hybrid aco_vrp_openmp_mpi tests/test tests/test_mpi tests/test_final tests/test_final.out tests/test_final_mpi.out tests/c_scaling_tests tests/c_scaling_tests.out
