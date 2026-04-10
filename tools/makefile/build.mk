@@ -29,7 +29,7 @@ $(OPENMP_MPI_BIN): $(OPENMP_MPI_SRC) include/aco.h include/matrix.h include/solu
 cuda: $(CUDA_BIN)
 
 $(CUDA_MAIN_OBJ): $(CUDA_MAIN_SRC) include/aco.h include/instance_parser.h include/matrix.h include/solution.h
-	$(NVCC) $(NVCC_FLAGS) $(CUDA_ARCH_FLAG) -c $< -o $@
+	$(NVCC) $(NVCC_FLAGS) $(CUDA_ARCH_FLAG) -DCUDA_VARIANT_$(CUDA_VARIANT) -c $< -o $@
 
 $(CUDA_ACO_OBJ): $(CUDA_ACO_SRC) include/aco.h include/aco_cuda_$(CUDA_VARIANT)_kernels.h include/matrix.h include/solution.h
 	$(NVCC) $(NVCC_FLAGS) $(CUDA_ARCH_FLAG) -c $< -o $@

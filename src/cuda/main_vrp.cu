@@ -15,6 +15,12 @@ int aco_vrp_cuda_with_capacity(int n, int K, int vehicle_capacity_customers,
                                unsigned int seed, Solution *best_solution,
                                double *best_cost);
 
+int aco_vrp_cuda_with_capacity_v6(int n, int K, int vehicle_capacity_customers,
+                                  int m, float *coords_x, float *coords_y,
+                                  double alpha, double beta, double rho,
+                                  double tau0, double Q, unsigned int seed,
+                                  Solution *best_solution, double *best_cost);
+
 static int parse_int_arg(const char *s, int *out) {
     char *end = NULL;
     long v;
@@ -96,23 +102,53 @@ int main(int argc, char **argv) {
         return 1;
     }
 
+#ifdef CUDA_VARIANT_v6
+    float *coords_x = NULL;
+    float *coords_y = NULL;
+    if (vrp_load_tsplib_euc2d_coords(path, &n, &coords_x, &coords_y, &instance_meta) != 0) {
+        return 1;
+    }
+#else
     if (vrp_load_tsplib_euc2d_matrix_ex(path, &n, &c, &instance_meta) != 0) {
         return 1;
     }
+#endif
+
     if (instance_meta.vehicles > 0 && instance_meta.vehicles != K) {
         fprintf(stderr, "instance VEHICLES mismatch: CLI K=%d, file VEHICLES=%d\n",
                 K, instance_meta.vehicles);
+#ifndef CUDA_VARIANT_v6
         matrix_free(c);
+#else
+        free(coords_x);
+        free(coords_y);
+#endif
         return 1;
     }
 
     best = solution_create(K, n);
     if (!best) {
         fprintf(stderr, "failed to allocate solution\n");
+#ifndef CUDA_VARIANT_v6
         matrix_free(c);
+#else
+        free(coords_x);
+        free(coords_y);
+#endif
         return 1;
     }
     
+#ifdef CUDA_VARIANT_v6
+    if (aco_vrp_cuda_with_capacity_v6(n, K, instance_meta.capacity, m, coords_x, coords_y, alpha,
+                                      beta, rho, tau0, Q, seed, best,
+                                      &best_cost) != 0) {
+        fprintf(stderr, "CUDA solver failed\n");
+        solution_free(best);
+        free(coords_x);
+        free(coords_y);
+        return 1;
+    }
+#else
     if (aco_vrp_cuda_with_capacity(n, K, instance_meta.capacity, m, c, alpha,
                                    beta, rho, tau0, Q, seed, best,
                                    &best_cost) != 0) {
@@ -121,12 +157,18 @@ int main(int argc, char **argv) {
         matrix_free(c);
         return 1;
     }
+#endif
 
     print_solution_routes(best, K);
     printf("Cost: %.3f\n", best_cost);
     printf("best cost: %.3f\n", best_cost);
 
     solution_free(best);
+#ifdef CUDA_VARIANT_v6
+    free(coords_x);
+    free(coords_y);
+#else
     matrix_free(c);
+#endif
     return 0;
 }

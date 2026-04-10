@@ -13,5 +13,8 @@ int vrp_load_tsplib_euc2d_matrix(const char *path, int *n_out, double ***c_out);
 int vrp_load_tsplib_euc2d_matrix_ex(const char *path, int *n_out,
                                     double ***c_out,
                                     VrpInstanceMeta *meta_out);
+int vrp_load_tsplib_euc2d_coords(const char *path, int *n_out,
+                                 float **coords_x_out, float **coords_y_out,
+                                 VrpInstanceMeta *meta_out);
 
 #endif
