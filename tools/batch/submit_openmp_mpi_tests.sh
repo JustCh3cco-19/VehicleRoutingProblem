@@ -1,15 +1,17 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-cd "$(dirname "$0")/.."
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+repo_root="$(cd "${script_dir}/../../.." && pwd)"
+cd "${repo_root}"
 mkdir -p results/slurm
 
 usage() {
   cat <<'EOF'
-usage: scripts/submit_openmp_mpi_tests.sh [--test light|heavy] [--customers N] [--checkpoint-mode fresh|resume|reset] [--exec-args "ARGS"] [--checkpoint-path PATH]
+usage: tools/batch/submit_openmp_mpi_tests.sh [--test light|heavy] [--customers N] [--checkpoint-mode fresh|resume|reset] [--exec-args "ARGS"] [--checkpoint-path PATH]
 
 Backward-compatible positional form:
-  scripts/submit_openmp_mpi_tests.sh [exec_args] [test_profile] [checkpoint_mode] [checkpoint_path] [customers]
+  tools/batch/submit_openmp_mpi_tests.sh [exec_args] [test_profile] [checkpoint_mode] [checkpoint_path] [customers]
 EOF
 }
 
@@ -145,11 +147,11 @@ if [ -n "${exec_args}" ]; then
   [ -n "${checkpoint_path}" ] && echo "[SUBMIT] CHECKPOINT_PATH=${checkpoint_path}"
   [ -n "${customers}" ] && echo "[SUBMIT] CUSTOMERS=${customers}"
   echo "[SUBMIT] EXEC_ARGS=${exec_args}"
-  sbatch --export="${export_args},EXEC_ARGS=${exec_args}" scripts/run_openmp_mpi_tests.sbatch
+  sbatch --export="${export_args},EXEC_ARGS=${exec_args}" tools/batch/run_openmp_mpi_tests.sbatch
 else
   echo "[SUBMIT] TEST_PROFILE=${test_profile}"
   echo "[SUBMIT] CHECKPOINT_MODE=${checkpoint_mode}"
   [ -n "${checkpoint_path}" ] && echo "[SUBMIT] CHECKPOINT_PATH=${checkpoint_path}"
   [ -n "${customers}" ] && echo "[SUBMIT] CUSTOMERS=${customers}"
-  sbatch --export="${export_args}" scripts/run_openmp_mpi_tests.sbatch
+  sbatch --export="${export_args}" tools/batch/run_openmp_mpi_tests.sbatch
 fi

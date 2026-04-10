@@ -11,7 +11,7 @@ SOLUTION="solution.txt"
 
 # 1. Generate problem and reference solution
 echo "--- Generating problem and reference solution ---"
-python3 scripts/generate_vrp_problem.py --nodes $NODES --vehicles $VEHICLES --output $INSTANCE --seed 42 --solve --runtime 5.0
+python3 tools/python/generate_vrp_problem.py --nodes $NODES --vehicles $VEHICLES --output $INSTANCE --seed 42 --solve --runtime 5.0
 REF_SOLUTION="problem_solution.txt"
 
 # 2. Build solver
@@ -35,6 +35,6 @@ sed -i '/Route/,$!d' $SOLUTION
 
 # 6. Validate with pyvrp and compare with reference
 echo "--- Validating and Comparing ---"
-python3 scripts/validate_pyvrp.py $INSTANCE $SOLUTION --round-func none --reference $REF_SOLUTION
+python3 tools/python/validate_pyvrp.py $INSTANCE $SOLUTION --round-func none --reference $REF_SOLUTION
 
 echo "--- SUCCESS ---"

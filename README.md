@@ -3,140 +3,101 @@
 Repository per risolvere istanze VRP con ACO usando 4 backend:
 - `pyvrp` (Python, riferimento)
 - `seq` (C sequenziale)
-- `openmp-mpi` (C + MPI/OpenMP)
+- `openmp-mpi` (C + OpenMP/MPI)
 - `cuda` (CUDA)
 
-Questa guida è operativa: copia/incolla i comandi e ottieni CSV + route.
+Questa guida descrive lo stato attuale della repo, inclusa la nuova organizzazione completa di `tools/`.
 
-## Requisiti minimi
+## Requisiti
 - `make`, `gcc`
-- `mpicc`, `mpirun` (solo MPI)
-- `nvcc` (solo CUDA)
+- `mpicc`, `mpirun` (solo backend MPI)
+- `nvcc` (solo backend CUDA)
 - `python3`
-- ambiente Python con `pyvrp` (se presente `VRP/bin/python`, il Makefile lo usa automaticamente)
+- ambiente Python con `pyvrp`
 
-## 1) Generare i problemi (dal Makefile)
-Default:
+Nota: se esiste `VRP/bin/python`, i flussi `solve_pyvrp` lo usano automaticamente.
+
+## Struttura repo (stato corrente)
+
+Codice solver:
+- `src/seq/`
+- `src/openmp-mpi/`
+- `src/cuda/`
+- `src/common/`
+
+Header:
+- `include/`
+
+Test C:
+- `tests/`
+
+Script analisi/benchmark storici:
+- `scripts/` (solo benchmark/plot/profiling, non più utility make principali)
+
+Tooling operativo centralizzato:
+- `tools/makefile/` -> moduli `.mk` inclusi dal `Makefile`
+- `tools/bash/` -> script bash operativi (`solve_*`, `run_and_validate.sh`)
+- `tools/python/` -> utility Python operative (`generate_vrp_problem.py`, `solve_pyvrp_runner.py`, `validate_pyvrp.py`)
+- `tools/batch/` -> script HPC/Slurm (`submit_openmp_mpi_tests.sh`, `run_openmp_mpi_tests.sbatch`)
+
+Entry-point build:
+- `Makefile` (root) include i moduli da `tools/makefile/*.mk`
+
+## Makefile: organizzazione modulare
+
+Il `Makefile` root include:
+- `tools/makefile/vars.mk`
+- `tools/makefile/help.mk`
+- `tools/makefile/build.mk`
+- `tools/makefile/tests.mk`
+- `tools/makefile/generate.mk`
+- `tools/makefile/solve.mk`
+- `tools/makefile/phony.mk`
+
+Default goal:
+- `.DEFAULT_GOAL := all`
+
+## Generazione istanze
+
+Comando base:
 
 ```bash
 make generate_problems
 ```
 
-Questo comando crea:
+Output:
 - `instances/test_aligned/*.vrp`
 - `instances/test_aligned/manifest.csv`
 - `instances/test_aligned/manifest_openmp_mpi.csv`
 
-Esempi utili:
+Profilo grande predefinito:
 
 ```bash
-# taglie custom
-make generate_problems GEN_CLIENTS=500,1000,4000,8000
-
-# capacità "illimitata" (usa --unlimited del generatore)
-make generate_problems GEN_CAPACITY_MODE=unlimited
-
-# output in una directory diversa
-make generate_problems GEN_INST_DIR=instances/my_batch GEN_SEED_BASE=25000
+make generate_problems_big
 ```
 
-Pulizia file generati:
+Pulizia:
 
 ```bash
 make generate_clean
 ```
 
-Variabili generazione:
-- `GEN_INST_DIR=instances/test_aligned`
-- `GEN_CLIENTS=500,1000,2000,4000,8000,16000`
-- `GEN_SEED_BASE=19000`
-- `GEN_GRID=100`
-- `GEN_SOLVER_SEED=1234`
-- `GEN_CAPACITY_MODE=formula|unlimited`
+Variabili principali:
+- `GEN_INST_DIR`
+- `GEN_CLIENTS`
+- `GEN_SEED_BASE`
+- `GEN_GRID`
+- `GEN_SOLVER_SEED`
+- `GEN_TARGET_CUSTOMERS_PER_VEHICLE`
+- `GEN_MIN_VEHICLES`
+- `GEN_MAX_VEHICLES`
 
-Colonne principali del manifest:
-- `n` = numero clienti
-- `K` = numero veicoli
-- `m` = formiche
-- `T` = iterazioni
-- `solver_seed` = seed solver
+Implementazione usata da make:
+- `tools/python/generate_vrp_problem.py`
 
-## 2) Risolvere tutto (quick start)
-Esegui tutti i backend in una volta:
+## Solve da manifest
 
-```bash
-make solve_all
-```
-
-Questo comando:
-1. legge i manifest
-2. lancia `pyvrp`, `seq`, `cuda`, `mpi`
-3. salva CSV risultati
-4. salva le route complete per ogni istanza/backend
-
-## 3) Eseguire solo una parte (filtro per clienti)
-Esempi:
-
-```bash
-# solo istanze con n=500 e n=1000
-make solve_all SOLVE_CLIENTS=500,1000
-
-# solo n=4000, con runtime pyvrp più alto
-make solve_pyvrp SOLVE_CLIENTS=4000 SOLVE_PYVRP_RUNTIME_S=30
-
-# seq con budget 20s + stop per stagnazione in epoche (80 iterazioni senza miglioramento)
-make solve_seq SOLVE_CLIENTS=500,1000 SOLVE_SEQ_RUNTIME_S=20 SOLVE_SEQ_T=500 SOLVE_SEQ_STAGNATION_ITERS=80
-
-# mpi con budget 20s + stop per stagnazione in epoche
-make solve_mpi SOLVE_CLIENTS=4000,8000 SOLVE_MPI_RUNTIME_S=20 SOLVE_MPI_STAGNATION_ITERS=80
-
-# cuda
-make solve_cuda SOLVE_CLIENTS=500,1000
-
-# prime 3 istanze dopo il filtro
-make solve_seq SOLVE_CLIENTS=500,1000,2000 SOLVE_LIMIT=3
-```
-
-## Dove finiscono i risultati
-Output base:
-- `RESULTS_ROOT` (default `results`)
-- `SOLVE_OUT_DIR` (default `results/solve_manifest`)
-- `SOLVE_CSV_DIR` (default `results/solve_manifest/csv`)
-- `SOLVE_SOLUTIONS_DIR` (default `results/solve_manifest/solutions`)
-
-CSV:
-- `$(SOLVE_CSV_DIR)/manifest_pyvrp_per_instance_results.csv`
-- `$(SOLVE_CSV_DIR)/manifest_seq_per_instance_results.csv`
-- `$(SOLVE_CSV_DIR)/manifest_cuda_per_instance_results.csv`
-- `$(SOLVE_CSV_DIR)/manifest_openmp_mpi_per_instance_results.csv`
-
-Route complete:
-- `$(SOLVE_SOLUTIONS_DIR)/pyvrp/*.txt`
-- `$(SOLVE_SOLUTIONS_DIR)/seq/*.txt`
-- `$(SOLVE_SOLUTIONS_DIR)/cuda/*.txt`
-- `$(SOLVE_SOLUTIONS_DIR)/mpi/*.txt`
-
-Note:
-- nel CSV PyVRP c’è anche `max_rss_kb` (picco memoria RSS in KB per istanza)
-- se MPI fallisce per ambiente (PMIx/OpenMPI), vedrai `status=error` nel CSV MPI
-
-## Target principali Makefile
-Generazione istanze:
-
-```bash
-make generate_problems
-make generate_clean
-```
-
-Build:
-
-```bash
-make all          # seq
-make openmp_mpi   # mpi+openmp
-make cuda         # cuda
-```
-
-Solve da manifest:
+Target:
 
 ```bash
 make solve_pyvrp
@@ -146,67 +107,150 @@ make solve_mpi
 make solve_all
 ```
 
-Aiuto completo:
+Prepare/validazione path:
+- `solve_prepare` crea cartelle output e verifica `SOLVE_MANIFEST` / `SOLVE_MANIFEST_MPI`
+
+### Ripetizioni per istanza
+Supportate direttamente:
+- `SOLVE_SEQ_REPEATS`
+- `SOLVE_MPI_REPEATS`
+- `SOLVE_CUDA_REPEATS`
+
+Ogni run scrive `run_id` nel CSV e route file separato (`*_runN_solution.txt`).
+
+### Memoria non-CUDA
+Per `seq` e `mpi` viene registrato `max_rss_kb` (via `/usr/bin/time`).
+
+### Variabili solve principali
+- `SOLVE_OUT_DIR`
+- `SOLVE_CSV_DIR`
+- `SOLVE_SOLUTIONS_DIR`
+- `SOLVE_MANIFEST`
+- `SOLVE_MANIFEST_MPI`
+- `SOLVE_CLIENTS`
+- `SOLVE_LIMIT`
+- `SOLVE_PYVRP_RUNTIME_S`
+- `SOLVE_PYVRP_SEED`
+- `SOLVE_SEQ_RUNTIME_S`
+- `SOLVE_SEQ_RUNTIME` (alias)
+- `SOLVE_SEQ_M`
+- `SOLVE_SEQ_STAGNATION_EPOCHS`
+- `SOLVE_SEQ_MIN_REL_IMPROVEMENT`
+- `SOLVE_MPI_RUNTIME_S`
+- `SOLVE_MPI_STAGNATION_EPOCHS`
+- `SOLVE_MPI_MIN_REL_IMPROVEMENT`
+- `SOLVE_MPI_RANKS`
+- `SOLVE_MPI_OMP_THREADS`
+- `SOLVE_CUDA_VARIANT`
+
+Nota mapping env nel solver C:
+- i target passano `SOLVE_*_STAGNATION_EPOCHS` come `ACO_SOLVER_STAGNATION_ITERS`
+- i target passano `SOLVE_*_MIN_REL_IMPROVEMENT` come `ACO_SOLVER_IMPROVE_EPS`
+
+### Comando composito crescita memoria non-CUDA
+
+```bash
+make solve_memory_growth_non_cuda
+```
+
+Usa un profilo clienti grande (default `4000..32000`) e ripetizioni con `SOLVE_MEMORY_GROWTH_REPEATS`.
+
+## Output risultati
+
+Base:
+- `RESULTS_ROOT` (default `results`)
+- `SOLVE_OUT_DIR` (default `results/solve_manifest`)
+
+CSV principali:
+- `results/solve_manifest/csv/manifest_pyvrp_per_instance_results.csv`
+- `results/solve_manifest/csv/manifest_seq_per_instance_results.csv`
+- `results/solve_manifest/csv/manifest_cuda_<variant>_per_instance_results.csv`
+- `results/solve_manifest/csv/manifest_openmp_mpi_per_instance_results.csv`
+
+Route:
+- `results/solve_manifest/solutions/pyvrp/*.txt`
+- `results/solve_manifest/solutions/seq/*.txt`
+- `results/solve_manifest/solutions/cuda_<variant>/*.txt`
+- `results/solve_manifest/solutions/mpi/*.txt`
+
+## Test/scaling legacy
+
+Target disponibili:
+- `make sequential_tests`
+- `make openmp_mpi_tests`
+- `make openmp_mpi_tests_heavy`
+- resume/reset checkpoint: `openmp_mpi_tests_*_resume/reset`
+
+Output tipici:
+- `results/scaling/scaling_progressive_c.csv`
+- `results/scaling/scaling_progressive_openmp_mpi_light.csv`
+- `results/scaling/scaling_progressive_openmp_mpi_heavy.csv`
+- checkpoint in `results/scaling/`
+- detached logs in `results/detached/`
+
+## Tool batch (HPC)
+
+Script Slurm centralizzati:
+- `tools/batch/submit_openmp_mpi_tests.sh`
+- `tools/batch/run_openmp_mpi_tests.sbatch`
+
+Esempio:
+
+```bash
+tools/batch/submit_openmp_mpi_tests.sh --test heavy --checkpoint-mode resume
+```
+
+## Tool bash utili
+
+- `tools/bash/run_and_validate.sh`
+- `tools/bash/solve_pyvrp.sh`
+- `tools/bash/solve_seq.sh`
+- `tools/bash/solve_cuda.sh`
+- `tools/bash/solve_mpi.sh`
+
+## Tool python utili
+
+- `tools/python/generate_vrp_problem.py`
+- `tools/python/solve_pyvrp_runner.py`
+- `tools/python/validate_pyvrp.py`
+
+## Comandi rapidi
+
+Build:
+
+```bash
+make all
+make openmp_mpi
+make cuda
+```
+
+Solve all (filtro clienti):
+
+```bash
+make solve_all SOLVE_CLIENTS=500,1000
+```
+
+Solve seq con ripetizioni:
+
+```bash
+make solve_seq SOLVE_CLIENTS=4000 SOLVE_SEQ_REPEATS=3
+```
+
+Solve mpi con parametri runtime:
+
+```bash
+make solve_mpi SOLVE_CLIENTS=8000 SOLVE_MPI_RANKS=4 SOLVE_MPI_OMP_THREADS=8 SOLVE_MPI_RUNTIME_S=20
+```
+
+Help completo:
 
 ```bash
 make help
 ```
 
-## Variabili utili (solve_*)
-- `SOLVE_OUT_DIR=...` cartella output
-- `SOLVE_CSV_DIR=...` cartella CSV
-- `SOLVE_SOLUTIONS_DIR=...` cartella route
-- `SOLVE_MANIFEST=...` manifest per `solve_pyvrp/solve_seq/solve_cuda`
-- `SOLVE_MANIFEST_MPI=...` manifest per `solve_mpi`
-- `SOLVE_CLIENTS=500,1000,...` filtro per `n`
-- `SOLVE_LIMIT=N` limita il numero di righe (0 = tutte)
-- `SOLVE_PYVRP_RUNTIME_S=10`
-- `SOLVE_SEQ_RUNTIME_S=0` (0 = disattivo)
-- `SOLVE_SEQ_RUNTIME=60` (alias compatibile)
-- `SOLVE_SEQ_STAGNATION_ITERS=0` (0 = off, stop per epoche senza miglioramento)
-- `SOLVE_SEQ_M=0` (override `m` solo per `solve_seq`)
-- `SOLVE_SEQ_T=0` (override `T` solo per `solve_seq`)
-- `SOLVE_MPI_RUNTIME_S=0` (0 = disattivo)
-- `SOLVE_MPI_STAGNATION_ITERS=0` (0 = off, stop per epoche senza miglioramento)
-- `SOLVE_PYVRP_SEED=1234`
-- `SOLVE_MPI_RANKS=2`
-- `SOLVE_MPI_OMP_THREADS=2`
-- `SOLVE_CUDA_IMPROVEMENT=0.001`
+Pulizia:
 
-Esempio completo:
-
-```bash
-make solve_all \
-  SOLVE_OUT_DIR=results/run_01 \
-  SOLVE_MANIFEST=instances/test_aligned/manifest.csv \
-  SOLVE_MANIFEST_MPI=instances/test_aligned/manifest_openmp_mpi.csv \
-  SOLVE_CLIENTS=500,1000,2000 \
-  SOLVE_PYVRP_RUNTIME_S=20 \
-  SOLVE_MPI_RANKS=4 \
-  SOLVE_MPI_OMP_THREADS=8
-```
-
-## Modalità test legacy (scaling)
-Restano disponibili i target storici:
-- `make sequential_tests`
-- `make openmp_mpi_tests`
-- `make openmp_mpi_tests_heavy`
-
-Output legacy scaling:
-- `$(RESULTS_ROOT)/scaling/scaling_progressive_c.csv`
-- `$(RESULTS_ROOT)/scaling/scaling_progressive_openmp_mpi_light.csv`
-- `$(RESULTS_ROOT)/scaling/scaling_progressive_openmp_mpi_heavy.csv`
-- checkpoint MPI in `$(RESULTS_ROOT)/scaling/`
-- log detached in `$(RESULTS_ROOT)/detached/`
-
-Con supporto detached:
-- `TEST_MODE=background` (default)
-- `TEST_MODE=foreground`
-- `TEST_LOGS_DIR=...`
-
-## Pulizia
 ```bash
 make clean
 ```
 
-Rimuove binari, oggetti, coverage e artefatti CUDA intermedi (`.ptx`, `.cubin`, `.fatbin`).
