@@ -191,6 +191,11 @@ Script disponibili:
 - `tools/batch/submit_solve.sh`
 - `tools/batch/run_solve.sbatch`
 
+Note cluster:
+- il job inizializza automaticamente l'ambiente con `source /home/guest/init-hpc.sh` (se presente)
+- QoS di default nel job: `students_limit` (override con `--qos`)
+- per CUDA sul tuo cluster usa `CUDA_ARCH=sm_75` nei `--make-args`
+
 Esempi:
 
 ```bash
@@ -205,7 +210,7 @@ tools/batch/submit_solve.sh --target solve_mpi --cpus 32 --mem 64G \
 
 ```bash
 tools/batch/submit_solve.sh --target solve_cuda --partition gpu --gres gpu:1 \
-  --make-args "SOLVE_CLIENTS=500,1000 SOLVE_CUDA_REPEATS=3 SOLVE_CUDA_VARIANT=v4"
+  --make-args "SOLVE_CLIENTS=500,1000 SOLVE_CUDA_REPEATS=3 SOLVE_CUDA_VARIANT=v4 CUDA_ARCH=sm_75"
 ```
 
 Caricamento moduli cluster (opzionale):

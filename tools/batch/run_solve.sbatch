@@ -2,10 +2,11 @@
 #SBATCH --job-name=vrp_solve
 #SBATCH --output=results/slurm/%x_%j.out
 #SBATCH --error=results/slurm/%x_%j.err
-#SBATCH --time=04:00:00
+#SBATCH --time=00:30:00
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=16G
+#SBATCH --qos=students_limit
 
 set -euo pipefail
 
@@ -22,6 +23,12 @@ fi
 cd "${ROOT_DIR}"
 mkdir -p results/slurm
 
+if [[ -f "/home/guest/init-hpc.sh" ]]; then
+  # Cluster environment bootstrap (MPI/CUDA/OpenMP toolchains and modules).
+  # shellcheck disable=SC1091
+  source /home/guest/init-hpc.sh
+fi
+
 if [[ -n "${MODULE_LOADS}" ]]; then
   # Esempio: MODULE_LOADS="gcc/13.2 openmpi/4.1 cuda/12.2"
   for mod in ${MODULE_LOADS}; do
@@ -35,4 +42,3 @@ echo "[INFO] make_args=${MAKE_ARGS}"
 echo "[INFO] cwd=$(pwd)"
 
 make "${TARGET}" ${MAKE_ARGS}
-

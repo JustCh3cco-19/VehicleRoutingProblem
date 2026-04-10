@@ -9,11 +9,12 @@ Opzioni:
   --target NAME           Target make da eseguire (default: solve_all)
                           Esempi: solve_seq, solve_mpi, solve_cuda, solve_pyvrp, solve_all, solve_memory_growth_non_cuda
   --make-args "ARGS"      Argomenti extra passati a make (default: "")
-  --time HH:MM:SS         Override tempo job (default sbatch script)
+  --time HH:MM:SS         Override tempo job (default: 00:30:00, QoS students_limit)
   --cpus N                Override cpus-per-task
   --mem SIZE              Override memoria (es. 32G)
   --partition NAME        Override partizione
   --account NAME          Override account
+  --qos NAME              Override qos (default nel job: students_limit)
   --gres SPEC             Override risorse GRES (es. gpu:1)
   --module-loads "LIST"   Moduli da caricare nel job (es. "gcc/13.2 openmpi/4.1")
   --dry-run               Stampa comando sbatch senza inviarlo
@@ -27,7 +28,7 @@ Esempi:
     --make-args "SOLVE_CLIENTS=4000,8000 SOLVE_MPI_RANKS=4 SOLVE_MPI_OMP_THREADS=8 SOLVE_MPI_REPEATS=3"
 
   tools/batch/submit_solve.sh --target solve_cuda --partition gpu --gres gpu:1 \
-    --make-args "SOLVE_CLIENTS=500,1000 SOLVE_CUDA_REPEATS=3 SOLVE_CUDA_VARIANT=v4"
+    --make-args "SOLVE_CLIENTS=500,1000 SOLVE_CUDA_REPEATS=3 SOLVE_CUDA_VARIANT=v4 CUDA_ARCH=sm_75"
 EOF
 }
 
@@ -70,6 +71,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --account)
       sbatch_args+=(--account "${2:-}")
+      shift 2
+      ;;
+    --qos)
+      sbatch_args+=(--qos "${2:-}")
       shift 2
       ;;
     --gres)
@@ -122,4 +127,3 @@ if [[ "${dry_run}" -eq 1 ]]; then
 fi
 
 "${cmd[@]}"
-
