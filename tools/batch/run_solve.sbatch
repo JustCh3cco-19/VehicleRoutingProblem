@@ -4,7 +4,7 @@
 #SBATCH --error=results/slurm/%x_%j.err
 #SBATCH --time=00:30:00
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=8
+#SBATCH --cpus-per-task=32
 #SBATCH --mem=16G
 #SBATCH --qos=students_limit
 
