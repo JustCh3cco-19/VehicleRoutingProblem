@@ -63,7 +63,7 @@ def run_cuda(n, k, instance_path, m=1024, max_t=20000, conv=1000, eps=0.01):
     return cost, end - start, iters
 
 def run_pyvrp(instance_path, max_runtime=10.0):
-    instance = read(instance_path, round_func="round")
+    instance = read(instance_path, round_func="none")
     model = Model.from_data(instance)
     start = time.time()
     # PyVRP often reaches optimality very fast for small n

@@ -47,10 +47,10 @@ def save_reference_solution(instance_path, output_path, runtime=2.0):
     print(f"Solving instance for {runtime}s to create a reference solution...")
     
     instance = vrplib.read_instance(instance_path)
-    # PyVRP works best if we load from file to ensure distance rounding matches
+    # Load from file to ensure exactly the same distance interpretation.
     import pyvrp
     from pyvrp import read, Model
-    pyvrp_instance = read(instance_path, round_func="round")
+    pyvrp_instance = read(instance_path, round_func="none")
     
     model = Model.from_data(pyvrp_instance)
     

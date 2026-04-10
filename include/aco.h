@@ -35,9 +35,6 @@ typedef struct {
   int *candidate_idx;
   float *eta_beta;
   float *score;
-  int *ls_pos;
-  int *ls_node_route;
-  int *ls_node_pos;
 } AcoRankShared;
 
 typedef struct {
@@ -56,9 +53,6 @@ typedef struct {
   int *candidate_idx;
   float *eta_beta;
   float *score;
-  int *ls_pos;
-  int *ls_node_route;
-  int *ls_node_pos;
 } SeqShared;
 
 typedef struct {

@@ -400,7 +400,7 @@ static void fill_cost_matrix(double **c, const Point *pts, int n) {
         double yj = round(pts[j].y);
         double dx = xi - xj;
         double dy = yi - yj;
-        c[i][j] = round(sqrt(dx * dx + dy * dy));
+        c[i][j] = sqrt(dx * dx + dy * dy);
       }
     }
   }

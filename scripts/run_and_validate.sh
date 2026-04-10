@@ -35,6 +35,6 @@ sed -i '/Route/,$!d' $SOLUTION
 
 # 6. Validate with pyvrp and compare with reference
 echo "--- Validating and Comparing ---"
-python3 scripts/validate_pyvrp.py $INSTANCE $SOLUTION --round-func round --reference $REF_SOLUTION
+python3 scripts/validate_pyvrp.py $INSTANCE $SOLUTION --round-func none --reference $REF_SOLUTION
 
 echo "--- SUCCESS ---"

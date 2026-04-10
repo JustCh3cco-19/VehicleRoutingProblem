@@ -5,7 +5,6 @@ extern "C" {
 }
 
 #include "aco_cuda_v3_kernels.h"
-#include "local_search.h"
 
 #include <cuda_runtime.h>
 #include <float.h>
@@ -245,8 +244,6 @@ int aco_vrp_cuda(int n, int K, int m, int T, double **c, double alpha,
   int *h_route_lengths = NULL;
   int *h_global_routes = NULL;
   int *h_global_route_lengths = NULL;
-  int *h_iter_routes = NULL;
-  int *h_iter_route_lengths = NULL;
   float *d_costs = NULL;
   float *d_tau = NULL;
   int *d_candidate_idx = NULL;
@@ -257,8 +254,6 @@ int aco_vrp_cuda(int n, int K, int m, int T, double **c, double alpha,
   int *d_curr_nodes = NULL;
   int *d_global_routes = NULL;
   int *d_global_route_lengths = NULL;
-  int *d_iter_routes = NULL;
-  int *d_iter_route_lengths = NULL;
   uint64_t *d_visited = NULL;
   unsigned int *d_rng_states = NULL;
   CudaV3AntSummary *d_ant_summary = NULL;
@@ -266,10 +261,8 @@ int aco_vrp_cuda(int n, int K, int m, int T, double **c, double alpha,
   int iter;
   int status = 1;
   int have_global_best = 0;
-  SeqShared ls_shared;
 
   load_timer_directives(&max_runtime_sec, &max_stagnation_iters, &improve_eps);
-  memset(&ls_shared, 0, sizeof(ls_shared));
 
   total_m = (m > 0) ? m : choose_auto_total_ants();
   cand_k = choose_candidate_count(n);
@@ -313,19 +306,11 @@ int aco_vrp_cuda(int n, int K, int m, int T, double **c, double alpha,
   h_global_routes =
       (int *)malloc((size_t)K * (size_t)route_stride * sizeof(int));
   h_global_route_lengths = (int *)malloc((size_t)K * sizeof(int));
-  h_iter_routes = (int *)malloc((size_t)K * (size_t)route_stride * sizeof(int));
-  h_iter_route_lengths = (int *)malloc((size_t)K * sizeof(int));
   iter_best_solution = solution_create(K, n);
 
   if (!h_costs || !h_ant_summary || !h_routes || !h_route_lengths ||
-      !h_global_routes || !h_global_route_lengths || !h_iter_routes ||
-      !h_iter_route_lengths || !iter_best_solution) {
+      !h_global_routes || !h_global_route_lengths || !iter_best_solution) {
     fprintf(stderr, "cuda v3: host allocation failure\n");
-    goto cleanup;
-  }
-
-  if (!local_search_shared_init(&ls_shared, n, c, beta)) {
-    fprintf(stderr, "cuda v3: local search shared allocation failure\n");
     goto cleanup;
   }
 
@@ -352,11 +337,6 @@ int aco_vrp_cuda(int n, int K, int m, int T, double **c, double alpha,
                  (size_t)K * (size_t)route_stride * sizeof(int)) !=
           cudaSuccess ||
       cudaMalloc((void **)&d_global_route_lengths,
-                 (size_t)K * sizeof(int)) != cudaSuccess ||
-      cudaMalloc((void **)&d_iter_routes,
-                 (size_t)K * (size_t)route_stride * sizeof(int)) !=
-          cudaSuccess ||
-      cudaMalloc((void **)&d_iter_route_lengths,
                  (size_t)K * sizeof(int)) != cudaSuccess ||
       cudaMalloc((void **)&d_visited,
                  (size_t)total_m * (size_t)visited_words * sizeof(uint64_t)) !=
@@ -449,30 +429,11 @@ int aco_vrp_cuda(int n, int K, int m, int T, double **c, double alpha,
       goto cleanup;
     }
 
-    local_search_refine_solution_common(iter_best_solution, K, cap, c,
-                                        &ls_shared);
-    iter_best_cost_f = (float)solution_cost(iter_best_solution, c);
-    if (!validate_cuda_solution(iter_best_solution, n, K, cap, errbuf,
-                                sizeof(errbuf))) {
-      fprintf(stderr, "cuda v3: invalid refined iter best solution: %s\n",
-              errbuf);
-      goto cleanup;
-    }
-    copy_solution_to_route_arrays(iter_best_solution, K, route_stride,
-                                  h_iter_routes, h_iter_route_lengths);
-    CHECK_CUDA(cudaMemcpy(d_iter_routes, h_iter_routes,
-                          (size_t)K * (size_t)route_stride * sizeof(int),
-                          cudaMemcpyHostToDevice));
-    CHECK_CUDA(cudaMemcpy(d_iter_route_lengths, h_iter_route_lengths,
-                          (size_t)K * sizeof(int), cudaMemcpyHostToDevice));
-
     if ((double)iter_best_cost_f < (*best_cost - improve_eps)) {
       *best_cost = (double)iter_best_cost_f;
       solution_copy(best_solution, iter_best_solution);
-      memcpy(h_global_routes, h_iter_routes,
-             (size_t)K * (size_t)route_stride * sizeof(int));
-      memcpy(h_global_route_lengths, h_iter_route_lengths,
-             (size_t)K * sizeof(int));
+      copy_solution_to_route_arrays(iter_best_solution, K, route_stride,
+                                    h_global_routes, h_global_route_lengths);
       CHECK_CUDA(cudaMemcpy(d_global_routes, h_global_routes,
                             (size_t)K * (size_t)route_stride * sizeof(int),
                             cudaMemcpyHostToDevice));
@@ -494,8 +455,11 @@ int aco_vrp_cuda(int n, int K, int m, int T, double **c, double alpha,
     launch_evaporate_tau_v3(d_tau, n, (float)rho);
     CHECK_CUDA(cudaGetLastError());
 
-    launch_deposit_solution_v3(d_tau, d_iter_routes, d_iter_route_lengths, K,
-                               route_stride, n,
+    launch_deposit_solution_v3(
+        d_tau,
+        d_routes + ((size_t)iter_best_idx * (size_t)K * (size_t)route_stride),
+        d_route_lengths + ((size_t)iter_best_idx * (size_t)K), K, route_stride,
+        n,
                                (float)((iter_deposit_weight * Q) /
                                        (double)iter_best_cost_f));
     CHECK_CUDA(cudaGetLastError());
@@ -539,9 +503,6 @@ cleanup:
   free(h_route_lengths);
   free(h_global_routes);
   free(h_global_route_lengths);
-  free(h_iter_routes);
-  free(h_iter_route_lengths);
-  local_search_shared_free(&ls_shared);
   if (d_costs) {
     cudaFree(d_costs);
   }
@@ -571,12 +532,6 @@ cleanup:
   }
   if (d_global_route_lengths) {
     cudaFree(d_global_route_lengths);
-  }
-  if (d_iter_routes) {
-    cudaFree(d_iter_routes);
-  }
-  if (d_iter_route_lengths) {
-    cudaFree(d_iter_route_lengths);
   }
   if (d_visited) {
     cudaFree(d_visited);

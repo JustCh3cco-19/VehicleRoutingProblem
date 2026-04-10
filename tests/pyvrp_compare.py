@@ -353,7 +353,7 @@ def run_pyvrp_solver(
 ) -> tuple[float, float]:
     import pyvrp
 
-    instance = pyvrp.read(str(vrp_path), round_func="round")
+    instance = pyvrp.read(str(vrp_path), round_func="none")
     kwargs = {"seed": seed}
     sig = inspect.signature(pyvrp.solve)
     if "stop" in sig.parameters:

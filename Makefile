@@ -33,16 +33,13 @@ ACO_SHARED_SRC=$(COMMON_DIR)/aco_shared.c
 SOLUTION_SRC=$(COMMON_DIR)/solution.c
 MATRIX_SRC=$(COMMON_DIR)/matrix.c
 INSTANCE_PARSER_SRC=$(COMMON_DIR)/instance_parser.c
-LOCAL_SEARCH_SRC=$(COMMON_DIR)/local_search.c
-
 SEQ_OBJ=$(SEQ_DIR)/aco_sequential.o
 ACO_SHARED_OBJ=$(COMMON_DIR)/aco_shared.o
 SOLUTION_OBJ=$(COMMON_DIR)/solution.o
 MATRIX_OBJ=$(COMMON_DIR)/matrix.o
 INSTANCE_PARSER_OBJ=$(COMMON_DIR)/instance_parser.o
-LOCAL_SEARCH_OBJ=$(COMMON_DIR)/local_search.o
 
-OBJ=src/main.o $(SEQ_OBJ) $(ACO_SHARED_OBJ) $(SOLUTION_OBJ) $(MATRIX_OBJ) $(INSTANCE_PARSER_OBJ) $(LOCAL_SEARCH_OBJ)
+OBJ=src/main.o $(SEQ_OBJ) $(ACO_SHARED_OBJ) $(SOLUTION_OBJ) $(MATRIX_OBJ) $(INSTANCE_PARSER_OBJ)
 
 SEQUENTIAL_TESTS_SRC=tests/sequential_tests.c
 SEQUENTIAL_TESTS_OBJ=tests/sequential_tests.o
@@ -69,7 +66,7 @@ CUDA_KERNELS_SRC=src/cuda/aco_cuda_$(CUDA_VARIANT)_kernels.cu
 CUDA_MAIN_OBJ=src/cuda/main_vrp.o
 CUDA_ACO_OBJ=src/cuda/aco_cuda_$(CUDA_VARIANT).o
 CUDA_KERNELS_OBJ=src/cuda/aco_cuda_$(CUDA_VARIANT)_kernels.o
-CUDA_COMMON_OBJ=$(SOLUTION_OBJ) $(MATRIX_OBJ) $(LOCAL_SEARCH_OBJ)
+CUDA_COMMON_OBJ=$(SOLUTION_OBJ) $(MATRIX_OBJ)
 CUDA_OBJ=$(CUDA_MAIN_OBJ) $(CUDA_ACO_OBJ) $(CUDA_KERNELS_OBJ) $(CUDA_COMMON_OBJ) $(INSTANCE_PARSER_OBJ)
 MPI_NP=2
 MPI_OMP_THREADS=2
@@ -238,9 +235,6 @@ $(MATRIX_OBJ): $(MATRIX_SRC) include/matrix.h
 $(INSTANCE_PARSER_OBJ): $(INSTANCE_PARSER_SRC) include/instance_parser.h include/matrix.h
 	$(CC) $(EXTRA_FLAGS) $(FLAGS) $(FORCE_OPT) $(PERF_FLAGS) -c $< -o $@
 
-$(LOCAL_SEARCH_OBJ): $(LOCAL_SEARCH_SRC) include/local_search.h include/aco.h include/solution.h
-	$(CC) $(EXTRA_FLAGS) $(FLAGS) $(FORCE_OPT) $(PERF_FLAGS) -c $< -o $@
-
 $(BIN): $(OBJ)
 	$(CC) $(EXTRA_FLAGS) $(FLAGS) $(FORCE_OPT) $(PERF_FLAGS) $^ $(LIBS) -o $@
 
@@ -266,7 +260,7 @@ cuda: $(CUDA_BIN)
 $(CUDA_MAIN_OBJ): $(CUDA_MAIN_SRC) include/aco.h include/instance_parser.h include/matrix.h include/solution.h
 	$(NVCC) $(NVCC_FLAGS) $(CUDA_ARCH_FLAG) -c $< -o $@
 
-$(CUDA_ACO_OBJ): $(CUDA_ACO_SRC) include/aco.h include/aco_cuda_$(CUDA_VARIANT)_kernels.h include/matrix.h include/solution.h include/local_search.h
+$(CUDA_ACO_OBJ): $(CUDA_ACO_SRC) include/aco.h include/aco_cuda_$(CUDA_VARIANT)_kernels.h include/matrix.h include/solution.h
 	$(NVCC) $(NVCC_FLAGS) $(CUDA_ARCH_FLAG) -c $< -o $@
 
 $(CUDA_KERNELS_OBJ): $(CUDA_KERNELS_SRC) include/aco_cuda_$(CUDA_VARIANT)_kernels.h
@@ -364,7 +358,7 @@ solve_pyvrp: solve_prepare
 		sol_file="$$sol_dir/$${name}_pyvrp_solution.txt"; \
 		rss_file=$$(mktemp); \
 		start_ns=$$(date +%s%N); \
-		out=$$(/usr/bin/time -f "%M" -o "$$rss_file" $$py -c "from pyvrp import Model, read, stop; import sys; p=sys.argv[1]; rt=float(sys.argv[2]); sd=int(sys.argv[3]); sol=sys.argv[4]; inst=read(p, round_func='round'); model=Model.from_data(inst); res=model.solve(stop.MaxRuntime(rt), seed=sd); best=res.best; f=open(sol,'w',encoding='utf-8'); [f.write(f'Route {i+1}: ' + ' '.join(map(str, r.visits())) + '\\n') for i,r in enumerate(best.routes())]; f.write(f'Cost: {best.distance():.6f}\\n'); f.close(); print(f'best_cost={best.distance():.6f}' if best.is_feasible() else 'best_cost=')" "$$instance_path" "$(SOLVE_PYVRP_RUNTIME_S)" "$(SOLVE_PYVRP_SEED)" "$$sol_file" 2>&1); \
+		out=$$(/usr/bin/time -f "%M" -o "$$rss_file" $$py -c "from pyvrp import Model, read, stop; import sys; p=sys.argv[1]; rt=float(sys.argv[2]); sd=int(sys.argv[3]); sol=sys.argv[4]; inst=read(p, round_func='none'); model=Model.from_data(inst); res=model.solve(stop.MaxRuntime(rt), seed=sd); best=res.best; f=open(sol,'w',encoding='utf-8'); [f.write(f'Route {i+1}: ' + ' '.join(map(str, r.visits())) + '\\n') for i,r in enumerate(best.routes())]; f.write(f'Cost: {best.distance():.6f}\\n'); f.close(); print(f'best_cost={best.distance():.6f}' if best.is_feasible() else 'best_cost=')" "$$instance_path" "$(SOLVE_PYVRP_RUNTIME_S)" "$(SOLVE_PYVRP_SEED)" "$$sol_file" 2>&1); \
 		rc=$$?; \
 		end_ns=$$(date +%s%N); \
 		elapsed=$$(awk "BEGIN {printf \"%.6f\", ($$end_ns-$$start_ns)/1000000000}"); \

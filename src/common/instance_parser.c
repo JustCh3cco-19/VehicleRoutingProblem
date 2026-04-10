@@ -169,7 +169,7 @@ int vrp_load_tsplib_euc2d_matrix_ex(const char *path, int *n_out,
 
     for (int i = 0; i <= n; ++i) {
         for (int j = 0; j <= n; ++j) {
-            c[i][j] = round(euc_2d(coords_x[i], coords_y[i], coords_x[j], coords_y[j]));
+            c[i][j] = euc_2d(coords_x[i], coords_y[i], coords_x[j], coords_y[j]);
         }
     }
 
