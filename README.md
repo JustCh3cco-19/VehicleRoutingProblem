@@ -280,6 +280,69 @@ make solve_pyvrp
 make solve_pyvrp SOLVE_CLIENTS=500,1000 SOLVE_PYVRP_RUNTIME_S=30
 ```
 
+### Locale vs Cluster (comandi pronti)
+
+Locale, con progressione `seq -> mpi -> cuda`:
+
+```bash
+make solve_seq SOLVE_CLIENTS=4000,8000,16000,32000,64000 SOLVE_SEQ_REPEATS=3 SOLVE_SEQ_RUNTIME_S=300 && \
+make solve_mpi SOLVE_CLIENTS=4000,8000,16000,32000,64000 SOLVE_MPI_REPEATS=3 SOLVE_MPI_RUNTIME_S=300 SOLVE_MPI_RANKS=4 SOLVE_MPI_OMP_THREADS=4 && \
+make solve_cuda SOLVE_CLIENTS=4000,8000,16000,32000,64000 SOLVE_CUDA_REPEATS=3 SOLVE_SEQ_RUNTIME_S=300
+```
+
+Locale, solo sequenziale su tutte le taglie:
+
+```bash
+make solve_seq SOLVE_SEQ_REPEATS=3 SOLVE_SEQ_RUNTIME_S=300
+```
+
+Locale, verifica risorse CPU disponibili (per scegliere `SOLVE_MPI_RANKS` e `SOLVE_MPI_OMP_THREADS`):
+
+```bash
+nproc
+lscpu | egrep 'CPU\(s\)|Core\(s\) per socket|Socket\(s\)|Thread\(s\) per core'
+```
+
+Locale, impostazione automatica `MPI_RANKS`/`OMP_THREADS` da CPU locali:
+
+```bash
+cores=$(lscpu -p=Core | grep -v '^#' | sort -u | wc -l); \
+threads=$(( $(nproc) / cores )); \
+make solve_mpi SOLVE_CLIENTS=4000,8000,16000,32000,64000 SOLVE_MPI_RANKS=$cores SOLVE_MPI_OMP_THREADS=$threads
+```
+
+Cluster (Slurm), sequenziale:
+
+```bash
+tools/batch/submit_solve.sh --target solve_seq \
+  --make-args "SOLVE_SEQ_REPEATS=3 SOLVE_SEQ_RUNTIME_S=300"
+```
+
+Cluster (Slurm), MPI:
+
+```bash
+tools/batch/submit_solve.sh --target solve_mpi \
+  --make-args "SOLVE_MPI_REPEATS=3 SOLVE_MPI_RUNTIME_S=300 SOLVE_MPI_RANKS=4 SOLVE_MPI_OMP_THREADS=8"
+```
+
+Cluster (Slurm), CUDA:
+
+```bash
+tools/batch/submit_solve.sh --target solve_cuda --partition gpu --gres gpu:1 \
+  --make-args "SOLVE_CUDA_REPEATS=3 SOLVE_SEQ_RUNTIME_S=300 SOLVE_CUDA_VARIANT=v6 CUDA_ARCH=sm_75"
+```
+
+Cluster, esecuzione in coda `seq -> mpi -> cuda`:
+
+```bash
+tools/batch/submit_solve.sh --target solve_seq \
+  --make-args "SOLVE_SEQ_REPEATS=3 SOLVE_SEQ_RUNTIME_S=300" && \
+tools/batch/submit_solve.sh --target solve_mpi \
+  --make-args "SOLVE_MPI_REPEATS=3 SOLVE_MPI_RUNTIME_S=300 SOLVE_MPI_RANKS=4 SOLVE_MPI_OMP_THREADS=8" && \
+tools/batch/submit_solve.sh --target solve_cuda --partition gpu --gres gpu:1 \
+  --make-args "SOLVE_CUDA_REPEATS=3 SOLVE_SEQ_RUNTIME_S=300 SOLVE_CUDA_VARIANT=v6 CUDA_ARCH=sm_75"
+```
+
 ### Cluster (Slurm)
 
 Submit PyVRP:
