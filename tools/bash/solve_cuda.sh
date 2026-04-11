@@ -12,6 +12,17 @@ runtime_s="${SOLVE_SEQ_RUNTIME_EFFECTIVE:-0}"
 stag_iters="${SOLVE_SEQ_STAGNATION_EPOCHS:-0}"
 improve_eps="${SOLVE_SEQ_MIN_REL_IMPROVEMENT:-0.001}"
 
+# Prefer CUDA-specific controls when provided; keep seq vars as compatibility fallback.
+if [ -n "${SOLVE_CUDA_RUNTIME_S:-}" ]; then
+  runtime_s="${SOLVE_CUDA_RUNTIME_S}"
+fi
+if [ -n "${SOLVE_CUDA_STAGNATION_EPOCHS:-}" ]; then
+  stag_iters="${SOLVE_CUDA_STAGNATION_EPOCHS}"
+fi
+if [ -n "${SOLVE_CUDA_MIN_REL_IMPROVEMENT:-}" ]; then
+  improve_eps="${SOLVE_CUDA_MIN_REL_IMPROVEMENT}"
+fi
+
 if [ "$repeats" -lt 1 ]; then
   repeats=1
 fi
