@@ -15,8 +15,29 @@ if [ -x "VRP/bin/python" ]; then
 fi
 
 header="name,profile,instance_path,n,K,m,solver_seed,instance_seed,layout_id,status,elapsed_s,max_rss_gb,best_cost,error"
+
+# Prepare output CSV in advance, keeping existing rows for n values that are
+# not part of the current execution. New rows are then appended live.
 tmp_csv="$(mktemp)"
 echo "$header" > "$tmp_csv"
+
+if [ -f "$csv" ] && [ -s "$csv" ]; then
+  selected_n_tmp="$(mktemp)"
+  tail -n +2 "$manifest" \
+    | { if [ -n "$clients" ]; then awk -F, -v list="$clients" 'BEGIN{split(list,a,","); for(i in a) wanted[a[i]]=1} ($4 in wanted)'; else cat; fi; } \
+    | { if [ "$limit" -gt 0 ]; then head -n "$limit"; else cat; fi; } \
+    | awk -F, 'NF > 0 && $4 != "" { print $4 }' | sort -u > "$selected_n_tmp"
+
+  if [ -s "$selected_n_tmp" ]; then
+    awk -F, 'NR==FNR { drop[$1]=1; next } FNR==1 { next } !($4 in drop) { print $0 }' "$selected_n_tmp" "$csv" >> "$tmp_csv"
+  else
+    tail -n +2 "$csv" >> "$tmp_csv"
+  fi
+
+  rm -f "$selected_n_tmp"
+fi
+
+mv "$tmp_csv" "$csv"
 
 tail -n +2 "$manifest" \
   | { if [ -n "$clients" ]; then awk -F, -v list="$clients" 'BEGIN{split(list,a,","); for(i in a) wanted[a[i]]=1} ($4 in wanted)'; else cat; fi; } \
@@ -41,14 +62,12 @@ tail -n +2 "$manifest" \
       if [ "$rc" -eq 0 ]; then
         cost="$(printf '%s\n' "$out" | sed -n 's/^best_cost=//p' | tail -n1)"
         [ -n "$cost" ] || cost=""
-        echo "$name,$profile,$instance_path,$n,$K,$m,$solver_seed,$instance_seed,$layout_id,ok,$elapsed,$rss_gb,$cost," >> "$tmp_csv"
+        echo "$name,$profile,$instance_path,$n,$K,$m,$solver_seed,$instance_seed,$layout_id,ok,$elapsed,$rss_gb,$cost," >> "$csv"
       else
         err="$(printf '%s' "$out" | tr '\n' ' ' | tr ',' ';')"
-        echo "$name,$profile,$instance_path,$n,$K,$m,$solver_seed,$instance_seed,$layout_id,error,$elapsed,$rss_gb,,$err" >> "$tmp_csv"
+        echo "$name,$profile,$instance_path,$n,$K,$m,$solver_seed,$instance_seed,$layout_id,error,$elapsed,$rss_gb,,$err" >> "$csv"
       fi
       echo "[pyvrp] $name done"
     done
 
-bash tools/bash/merge_results_csv_by_n.sh "$csv" "$tmp_csv"
-rm -f "$tmp_csv"
 echo "wrote $csv"

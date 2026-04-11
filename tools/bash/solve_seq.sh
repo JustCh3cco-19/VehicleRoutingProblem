@@ -18,8 +18,41 @@ fi
 improve_rel="$(awk "BEGIN { printf \"%.12g\", (${improve_rel_pct}) / 100.0 }")"
 
 header="name,profile,instance_path,n,K,m,solver_seed,instance_seed,layout_id,run_id,status,elapsed_s,max_rss_gb,best_cost,error"
+
+# Prepare output CSV in advance, keeping existing rows for n values that are
+# not part of the current execution. New rows are then appended live.
 tmp_csv="$(mktemp)"
 echo "$header" > "$tmp_csv"
+
+if [ -f "$csv" ] && [ -s "$csv" ]; then
+  selected_n_tmp="$(mktemp)"
+  tail -n +2 "$manifest" \
+    | { if [ -n "$clients" ]; then awk -F, -v list="$clients" 'BEGIN{split(list,a,","); for(i in a) wanted[a[i]]=1} ($4 in wanted)'; else cat; fi; } \
+    | { if [ "$limit" -gt 0 ]; then head -n "$limit"; else cat; fi; } \
+    | awk -F, 'NF > 0 && $4 != "" { print $4 }' | sort -u > "$selected_n_tmp"
+
+  if [ -s "$selected_n_tmp" ]; then
+    awk -F, 'NR==FNR { drop[$1]=1; next } FNR==1 { next } !($4 in drop) { print $0 }' "$selected_n_tmp" "$csv" >> "$tmp_csv"
+  else
+    tail -n +2 "$csv" >> "$tmp_csv"
+  fi
+
+  rm -f "$selected_n_tmp"
+fi
+
+mv "$tmp_csv" "$csv"
+
+selected_instances="$(tail -n +2 "$manifest" \
+  | { if [ -n "$clients" ]; then awk -F, -v list="$clients" 'BEGIN{split(list,a,","); for(i in a) wanted[a[i]]=1} ($4 in wanted)'; else cat; fi; } \
+  | { if [ "$limit" -gt 0 ]; then head -n "$limit"; else cat; fi; } \
+  | wc -l)"
+if [ -z "$selected_instances" ]; then
+  selected_instances=0
+fi
+total_runs=$((selected_instances * repeats))
+done_runs=0
+run_duration_sum="0.0"
+run_duration_count=0
 
 tail -n +2 "$manifest" \
   | { if [ -n "$clients" ]; then awk -F, -v list="$clients" 'BEGIN{split(list,a,","); for(i in a) wanted[a[i]]=1} ($4 in wanted)'; else cat; fi; } \
@@ -32,6 +65,16 @@ tail -n +2 "$manifest" \
 
       for run_id in $(seq 1 "$repeats"); do
         seed_run=$((solver_seed + run_id - 1))
+        done_runs=$((done_runs + 1))
+        if [ "$run_duration_count" -gt 0 ]; then
+          eta_run_s="$(awk "BEGIN {printf \"%.2f\", (${run_duration_sum}) / ${run_duration_count}}")"
+        elif [ "$runtime_s" != "0" ]; then
+          eta_run_s="$runtime_s"
+        else
+          eta_run_s="n/a"
+        fi
+        echo "[seq] ${name} run=${run_id} (${done_runs}/${total_runs}) eta_run_s=${eta_run_s}"
+
         sol_file="${sol_dir}/${name}_seq_run${run_id}_solution.txt"
         stats_file="$(mktemp)"
 
@@ -47,6 +90,10 @@ tail -n +2 "$manifest" \
         rss_kb="$(printf '%s' "$stats_line" | cut -d, -f2)"
         rm -f "$stats_file"
         [ -n "$elapsed" ] || elapsed=""
+        if printf '%s' "$elapsed" | grep -Eq '^[0-9]+([.][0-9]+)?$'; then
+          run_duration_sum="$(awk "BEGIN {printf \"%.6f\", (${run_duration_sum}) + (${elapsed})}")"
+          run_duration_count=$((run_duration_count + 1))
+        fi
         rss_gb=""
         if [ -n "$rss_kb" ]; then
           rss_gb="$(awk "BEGIN {printf \"%.6f\", (${rss_kb})/1048576.0}")"
@@ -55,15 +102,13 @@ tail -n +2 "$manifest" \
         printf '%s\n' "$out" > "$sol_file"
         if [ "$rc" -eq 0 ]; then
           cost="$(printf '%s\n' "$out" | sed -n 's/^best cost: //p' | tail -n1)"
-          echo "$name,$profile,$instance_path,$n,$K,$m_run,$seed_run,$instance_seed,$layout_id,$run_id,ok,$elapsed,$rss_gb,$cost," >> "$tmp_csv"
+          echo "$name,$profile,$instance_path,$n,$K,$m_run,$seed_run,$instance_seed,$layout_id,$run_id,ok,$elapsed,$rss_gb,$cost," >> "$csv"
         else
           err="$(printf '%s' "$out" | tr '\n' ' ' | tr ',' ';')"
-          echo "$name,$profile,$instance_path,$n,$K,$m_run,$seed_run,$instance_seed,$layout_id,$run_id,error,$elapsed,$rss_gb,,$err" >> "$tmp_csv"
+          echo "$name,$profile,$instance_path,$n,$K,$m_run,$seed_run,$instance_seed,$layout_id,$run_id,error,$elapsed,$rss_gb,,$err" >> "$csv"
         fi
         echo "[seq] $name run=$run_id done"
       done
     done
 
-bash tools/bash/merge_results_csv_by_n.sh "$csv" "$tmp_csv"
-rm -f "$tmp_csv"
 echo "wrote $csv"
