@@ -66,6 +66,7 @@ Output:
 - `instances/test_aligned/*.vrp`
 - `instances/test_aligned/manifest.csv`
 - `instances/test_aligned/manifest_openmp_mpi.csv`
+- `instances/test_aligned/manifest_cuda.csv`
 
 Nota:
 - `generate_problems` ripulisce prima i `.vrp`/manifest esistenti nella `GEN_INST_DIR`, poi rigenera tutto da zero.
@@ -92,6 +93,7 @@ Variabili principali:
 - `GEN_TARGET_CUSTOMERS_PER_VEHICLE`
 - `GEN_MIN_VEHICLES`
 - `GEN_MAX_VEHICLES`
+- `GEN_CUDA_M` (default `256`, usato nel manifest CUDA)
 
 Implementazione usata da make:
 - `tools/python/generate_vrp_problem.py`
@@ -109,7 +111,7 @@ make solve_all
 ```
 
 Prepare/validazione path:
-- `solve_prepare` crea cartelle output `solve_*` e verifica `SOLVE_MANIFEST` / `SOLVE_MANIFEST_MPI`
+- `solve_prepare` crea cartelle output `solve_*` e verifica `SOLVE_MANIFEST` / `SOLVE_MANIFEST_MPI` / `SOLVE_MANIFEST_CUDA`
 - non crea directory `scaling`
 
 ### Ripetizioni per istanza
@@ -129,6 +131,7 @@ Per `seq` e `mpi` viene registrato `max_rss_kb` (via `/usr/bin/time`).
 - `SOLVE_SOLUTIONS_DIR`
 - `SOLVE_MANIFEST`
 - `SOLVE_MANIFEST_MPI`
+- `SOLVE_MANIFEST_CUDA`
 - `SOLVE_CLIENTS`
 - `SOLVE_LIMIT`
 - `SOLVE_PYVRP_RUNTIME_S`

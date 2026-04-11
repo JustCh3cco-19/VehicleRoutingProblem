@@ -7,5 +7,4 @@ generated,n8000_k8_s19004,instances/test_aligned/n8000_k8_s19004.vrp,8000,8,16,1
 generated,n16000_k16_s19005,instances/test_aligned/n16000_k16_s19005.vrp,16000,16,8,1234,19005,grid100,ceil((1+20/100)*n/K)
 generated,n32000_k32_s19006,instances/test_aligned/n32000_k32_s19006.vrp,32000,32,4,1234,19006,grid100,ceil((1+20/100)*n/K)
 generated,n64000_k63_s19007,instances/test_aligned/n64000_k63_s19007.vrp,64000,63,3,1234,19007,grid100,ceil((1+20/100)*n/K)
-generated,n128000_k125_s19008,instances/test_aligned/n128000_k125_s19008.vrp,128000,125,3,1234,19008,grid100,ceil((1+20/100)*n/K)
-generated,n200000_k196_s19009,instances/test_aligned/n200000_k196_s19009.vrp,200000,196,3,1234,19009,grid100,ceil((1+20/100)*n/K)
+generated,n100000_k98_s19008,instances/test_aligned/n100000_k98_s19008.vrp,100000,98,3,1234,19008,grid100,ceil((1+20/100)*n/K)

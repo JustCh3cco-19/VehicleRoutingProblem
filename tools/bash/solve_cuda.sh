@@ -4,7 +4,7 @@ set -uo pipefail
 variant="${SOLVE_CUDA_VARIANT}"
 csv="${SOLVE_CSV_DIR}/manifest_cuda_${variant}_per_instance_results.csv"
 sol_dir="${SOLVE_SOLUTIONS_DIR}/cuda_${variant}"
-manifest="${SOLVE_MANIFEST}"
+manifest="${SOLVE_MANIFEST_CUDA:-${SOLVE_MANIFEST:-instances/test_aligned/manifest_cuda.csv}}"
 clients="${SOLVE_CLIENTS:-}"
 limit="${SOLVE_LIMIT:-0}"
 repeats="${SOLVE_CUDA_REPEATS:-1}"

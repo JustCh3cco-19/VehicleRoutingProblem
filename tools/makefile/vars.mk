@@ -58,6 +58,7 @@ SOLVE_CSV_DIR?=$(SOLVE_OUT_DIR)/csv
 SOLVE_SOLUTIONS_DIR?=$(SOLVE_OUT_DIR)/solutions
 SOLVE_MANIFEST?=instances/test_aligned/manifest.csv
 SOLVE_MANIFEST_MPI?=instances/test_aligned/manifest_openmp_mpi.csv
+SOLVE_MANIFEST_CUDA?=instances/test_aligned/manifest_cuda.csv
 SOLVE_PYVRP_RUNTIME_S?=10
 SOLVE_SEQ_RUNTIME?=
 SOLVE_SEQ_RUNTIME_S?=0
@@ -113,6 +114,7 @@ GEN_TARGET_CUSTOMERS_PER_VEHICLE?=1024
 GEN_MIN_VEHICLES?=8
 GEN_MAX_VEHICLES?=512
 GEN_CAPACITY_SLACK_PERCENT?=20
+GEN_CUDA_M?=256
 
 COVERAGE_FILES=src/*.gcno src/*.gcda src/seq/*.gcno src/seq/*.gcda src/openmp-mpi/*.gcno src/openmp-mpi/*.gcda src/common/*.gcno src/common/*.gcda tests/*.gcno tests/*.gcda
 LEGACY_BINARIES=aco_vrp_seq aco_vrp_hybrid aco_vrp_openmp_mpi tests/test tests/test_mpi tests/test_final tests/test_final.out tests/test_final_mpi.out tests/c_scaling_tests tests/c_scaling_tests.out

@@ -2,14 +2,17 @@ generate_problems:
 	@mkdir -p "$(GEN_INST_DIR)"
 	@manifest_seq="$(GEN_INST_DIR)/manifest.csv"; \
 	manifest_mpi="$(GEN_INST_DIR)/manifest_openmp_mpi.csv"; \
-	rm -f "$(GEN_INST_DIR)"/n*_k*_s*.vrp "$$manifest_seq" "$$manifest_mpi"; \
+	manifest_cuda="$(GEN_INST_DIR)/manifest_cuda.csv"; \
+	rm -f "$(GEN_INST_DIR)"/n*_k*_s*.vrp "$$manifest_seq" "$$manifest_mpi" "$$manifest_cuda"; \
 	header="profile,name,instance_path,n,K,m,solver_seed,instance_seed,layout_id,capacity_formula"; \
 	echo "$$header" > "$$manifest_seq"; \
 	echo "$$header" > "$$manifest_mpi"; \
+	echo "$$header" > "$$manifest_cuda"; \
 	target_cppv="$(GEN_TARGET_CUSTOMERS_PER_VEHICLE)"; \
 	min_vehicles="$(GEN_MIN_VEHICLES)"; \
 	max_vehicles="$(GEN_MAX_VEHICLES)"; \
 	slack_percent="$(GEN_CAPACITY_SLACK_PERCENT)"; \
+	m_cuda="$(GEN_CUDA_M)"; \
 	idx=0; \
 	for n in $$(echo "$(GEN_CLIENTS)" | tr ',' ' '); do \
 		idx=$$((idx + 1)); \
@@ -29,22 +32,28 @@ generate_problems:
 		$(PYTHON_BIN) tools/python/generate_vrp_problem.py --name "$$name" --clients "$$n" --vehicles "$$K" --grid "$(GEN_GRID)" --seed "$$seed" --capacity-slack-percent "$$slack_percent" --output "$$inst_path" || exit $$?; \
 		echo "generated,$$name,$$inst_path,$$n,$$K,$$m_seq,$(GEN_SOLVER_SEED),$$seed,grid$(GEN_GRID),$$cap_formula" >> "$$manifest_seq"; \
 		echo "generated_mpi,$$name,$$inst_path,$$n,$$K,$$m_mpi,$(GEN_SOLVER_SEED),$$seed,grid$(GEN_GRID),$$cap_formula" >> "$$manifest_mpi"; \
+		echo "generated_cuda,$$name,$$inst_path,$$n,$$K,$$m_cuda,$(GEN_SOLVER_SEED),$$seed,grid$(GEN_GRID),$$cap_formula" >> "$$manifest_cuda"; \
 		echo "[gen] $$name"; \
 	done; \
 	tmp_seq="$$(mktemp)"; \
 	tmp_mpi="$$(mktemp)"; \
+	tmp_cuda="$$(mktemp)"; \
 	head -n 1 "$$manifest_seq" > "$$tmp_seq"; \
 	tail -n +2 "$$manifest_seq" | sort -u -t, -k4,4n -k8,8n >> "$$tmp_seq"; \
 	mv "$$tmp_seq" "$$manifest_seq"; \
 	head -n 1 "$$manifest_mpi" > "$$tmp_mpi"; \
 	tail -n +2 "$$manifest_mpi" | sort -u -t, -k4,4n -k8,8n >> "$$tmp_mpi"; \
 	mv "$$tmp_mpi" "$$manifest_mpi"; \
+	head -n 1 "$$manifest_cuda" > "$$tmp_cuda"; \
+	tail -n +2 "$$manifest_cuda" | sort -u -t, -k4,4n -k8,8n >> "$$tmp_cuda"; \
+	mv "$$tmp_cuda" "$$manifest_cuda"; \
 	echo "wrote $$manifest_seq"; \
-	echo "wrote $$manifest_mpi"
+	echo "wrote $$manifest_mpi"; \
+	echo "wrote $$manifest_cuda"
 
 generate_clean:
 	@rm -f "$(GEN_INST_DIR)"/n*_k*_s*.vrp
-	@rm -f "$(GEN_INST_DIR)/manifest.csv" "$(GEN_INST_DIR)/manifest_openmp_mpi.csv"
+	@rm -f "$(GEN_INST_DIR)/manifest.csv" "$(GEN_INST_DIR)/manifest_openmp_mpi.csv" "$(GEN_INST_DIR)/manifest_cuda.csv" "$(GEN_INST_DIR)/manifest_cuda_m256.csv"
 	@echo "cleaned generated files in $(GEN_INST_DIR)"
 
 generate_problems_big:

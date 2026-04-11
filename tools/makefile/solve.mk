@@ -8,6 +8,7 @@ solve_prepare:
 	@mkdir -p $(SOLVE_SOLUTIONS_DIR)/mpi
 	@test -f "$(SOLVE_MANIFEST)" || (echo "missing manifest: $(SOLVE_MANIFEST)" && exit 1)
 	@test -f "$(SOLVE_MANIFEST_MPI)" || (echo "missing manifest: $(SOLVE_MANIFEST_MPI)" && exit 1)
+	@test -f "$(SOLVE_MANIFEST_CUDA)" || (echo "missing manifest: $(SOLVE_MANIFEST_CUDA)" && exit 1)
 
 solve_pyvrp: solve_prepare
 	@SOLVE_CSV_DIR="$(SOLVE_CSV_DIR)" \
@@ -43,7 +44,7 @@ solve_seq: solve_prepare
 	bash tools/bash/solve_seq.sh
 
 solve_cuda: solve_prepare
-	@rows=$$(tail -n +2 "$(SOLVE_MANIFEST)" \
+	@rows=$$(tail -n +2 "$(SOLVE_MANIFEST_CUDA)" \
 		| { if [ -n "$(SOLVE_CLIENTS)" ]; then awk -F, -v list="$(SOLVE_CLIENTS)" 'BEGIN{split(list,a,","); for(i in a) wanted[a[i]]=1} ($$4 in wanted)'; else cat; fi; } \
 		| { if [ "$(SOLVE_LIMIT)" -gt 0 ]; then head -n "$(SOLVE_LIMIT)"; else cat; fi; } \
 		| wc -l); \
@@ -54,7 +55,8 @@ solve_cuda: solve_prepare
 	fi
 	@SOLVE_CSV_DIR="$(SOLVE_CSV_DIR)" \
 	SOLVE_SOLUTIONS_DIR="$(SOLVE_SOLUTIONS_DIR)" \
-	SOLVE_MANIFEST="$(SOLVE_MANIFEST)" \
+	SOLVE_MANIFEST_CUDA="$(SOLVE_MANIFEST_CUDA)" \
+	SOLVE_MANIFEST="$(SOLVE_MANIFEST_CUDA)" \
 	SOLVE_CLIENTS="$(SOLVE_CLIENTS)" \
 	SOLVE_LIMIT="$(SOLVE_LIMIT)" \
 	SOLVE_CUDA_REPEATS="$(SOLVE_CUDA_REPEATS)" \
