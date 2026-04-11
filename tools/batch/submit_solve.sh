@@ -42,6 +42,7 @@ sbatch_args=()
 has_nodes=0
 has_ntasks=0
 has_cpus=0
+has_gres=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -90,6 +91,7 @@ while [[ $# -gt 0 ]]; do
       ;;
     --gres)
       sbatch_args+=(--gres "${2:-}")
+      has_gres=1
       shift 2
       ;;
     --dry-run)
@@ -109,9 +111,23 @@ while [[ $# -gt 0 ]]; do
 done
 
 # Target-aware defaults when not explicitly overridden:
-# - solve_mpi and exp_*: spread on 4 nodes with 4 MPI ranks total, 32 OMP threads each
+# - solve_mpi and exp_* (except exp_cuda_*): spread on 4 nodes with 4 MPI ranks total, 32 OMP threads each
+# - solve_cuda and exp_cuda_*: single node/task with one GPU
 # - others (including solve_seq): single node/task
-if [[ "${target}" == "solve_mpi" || "${target}" == exp_* ]]; then
+if [[ "${target}" == "solve_cuda" || "${target}" == exp_cuda_* ]]; then
+  if [[ "${has_nodes}" -eq 0 ]]; then
+    sbatch_args+=(--nodes 1)
+  fi
+  if [[ "${has_ntasks}" -eq 0 ]]; then
+    sbatch_args+=(--ntasks 1)
+  fi
+  if [[ "${has_cpus}" -eq 0 ]]; then
+    sbatch_args+=(--cpus-per-task 32)
+  fi
+  if [[ "${has_gres}" -eq 0 ]]; then
+    sbatch_args+=(--gres gpu:1)
+  fi
+elif [[ "${target}" == "solve_mpi" || "${target}" == exp_* ]]; then
   if [[ "${has_nodes}" -eq 0 ]]; then
     sbatch_args+=(--nodes 4)
   fi
