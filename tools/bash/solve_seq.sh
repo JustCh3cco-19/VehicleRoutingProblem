@@ -53,6 +53,8 @@ total_runs=$((selected_instances * repeats))
 done_runs=0
 run_duration_sum="0.0"
 run_duration_count=0
+run_rss_sum_gb="0.0"
+run_rss_count=0
 
 tail -n +2 "$manifest" \
   | { if [ -n "$clients" ]; then awk -F, -v list="$clients" 'BEGIN{split(list,a,","); for(i in a) wanted[a[i]]=1} ($4 in wanted)'; else cat; fi; } \
@@ -73,7 +75,12 @@ tail -n +2 "$manifest" \
         else
           eta_run_s="n/a"
         fi
-        echo "[seq] ${name} run=${run_id} (${done_runs}/${total_runs}) eta_run_s=${eta_run_s}"
+        if [ "$run_rss_count" -gt 0 ]; then
+          eta_mem_gb="$(awk "BEGIN {printf \"%.3f\", (${run_rss_sum_gb}) / ${run_rss_count}}")"
+        else
+          eta_mem_gb="n/a"
+        fi
+        echo "[seq] ${name} run=${run_id} (${done_runs}/${total_runs}) eta_run_s=${eta_run_s} eta_mem_gb=${eta_mem_gb}"
 
         sol_file="${sol_dir}/${name}_seq_run${run_id}_solution.txt"
         stats_file="$(mktemp)"
@@ -97,6 +104,10 @@ tail -n +2 "$manifest" \
         rss_gb=""
         if [ -n "$rss_kb" ]; then
           rss_gb="$(awk "BEGIN {printf \"%.6f\", (${rss_kb})/1048576.0}")"
+          if printf '%s' "$rss_gb" | grep -Eq '^[0-9]+([.][0-9]+)?$'; then
+            run_rss_sum_gb="$(awk "BEGIN {printf \"%.6f\", (${run_rss_sum_gb}) + (${rss_gb})}")"
+            run_rss_count=$((run_rss_count + 1))
+          fi
         fi
 
         printf '%s\n' "$out" > "$sol_file"
