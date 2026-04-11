@@ -238,14 +238,13 @@ __device__ static int select_global_fallback_v6(int current,
                                                 CudaV6Params params,
                                                 float *total_score_out) {
   int lane = threadIdx.x & (CUDA_V6_WARP_SIZE - 1);
-  float local_total = 0.0f;
-  float total;
-  float threshold = 0.0f;
-  float running = 0.0f;
+  float local_sum = 0.0f;
+  int local_selected_node = -1;
   
   int word_chunks = (params.visited_l1_words + CUDA_V6_WARP_SIZE - 1) / CUDA_V6_WARP_SIZE;
   float2 p_curr = d_coords[current];
 
+  // Fase 1: Scansione Locale (Reservoir Sampling)
   for (int chunk = 0; chunk < word_chunks; ++chunk) {
     int word_idx = chunk * CUDA_V6_WARP_SIZE + lane;
     uint64_t free_mask = 0ull;
@@ -271,103 +270,59 @@ __device__ static int select_global_fallback_v6(int current,
         int bit = __ffsll((long long)scan_mask) - 1;
         int node = base_node + bit;
         
-        float d = calc_dist(p_curr, d_coords[node]);
-        float eta = 1.0f / (d + CUDA_V6_EPS);
+        float dx = p_curr.x - d_coords[node].x;
+        float dy = p_curr.y - d_coords[node].y;
+        float dist_sq = dx * dx + dy * dy;
+        
+        // Fast rsqrtf
+        float eta = rsqrtf(dist_sq + CUDA_V6_EPS); 
         
         uint64_t tau_idx = (uint64_t)current * (params.n + 1) + node;
         uint8_t q_tau = d_tau[tau_idx];
         float tau = dequantize_tau(q_tau, params.log_tau_min, params.log_tau_step);
         
-        local_total += powf(tau, params.alpha) * powf(eta, params.beta);
-        scan_mask &= (scan_mask - 1ull);
-      }
-    }
-  }
-
-  total = cuda_v6_warp_sum(local_total);
-  total = __shfl_sync(0xFFFFFFFFu, total, 0);
-  if (total_score_out) *total_score_out = total;
-  if (total <= 0.0f) return -1;
-
-  if (lane == 0) {
-    threshold = cuda_v6_rand01(rng_state) * total;
-  }
-  threshold = __shfl_sync(0xFFFFFFFFu, threshold, 0);
-
-  // Pass 2: find the node
-  for (int chunk = 0; chunk < word_chunks; ++chunk) {
-    int word_idx = chunk * CUDA_V6_WARP_SIZE + lane;
-    uint64_t free_mask = 0ull;
-    float lane_total = 0.0f;
-    
-    if (word_idx < params.visited_l1_words) {
-      int l2_word = word_idx >> 6;
-      int l2_bit = word_idx & 63;
-      if ((visited_l2[l2_word] & (1ull << l2_bit)) == 0) {
-        uint64_t relevant_mask = cuda_v6_relevant_mask_for_word(word_idx, params.n);
-        free_mask = (~visited_l1[word_idx]) & relevant_mask;
-      }
-    }
-
-    unsigned int active_mask = __ballot_sync(0xFFFFFFFFu, free_mask != 0ull);
-    if (active_mask == 0u) continue;
-
-    if (free_mask != 0ull) {
-      int base_node = word_idx << 6;
-      uint64_t scan_mask = free_mask;
-      while (scan_mask != 0ull) {
-        int bit = __ffsll((long long)scan_mask) - 1;
-        int node = base_node + bit;
-        float d = calc_dist(p_curr, d_coords[node]);
-        float eta = 1.0f / (d + CUDA_V6_EPS);
-        uint64_t tau_idx = (uint64_t)current * (params.n + 1) + node;
-        float tau = dequantize_tau(d_tau[tau_idx], params.log_tau_min, params.log_tau_step);
-        lane_total += powf(tau, params.alpha) * powf(eta, params.beta);
-        scan_mask &= (scan_mask - 1ull);
-      }
-    }
-
-    float chunk_sum = cuda_v6_warp_sum(lane_total);
-    chunk_sum = __shfl_sync(0xFFFFFFFFu, chunk_sum, 0);
-
-    if (chunk_sum > 0.0f && threshold < (running + chunk_sum)) {
-      float lane_prefix = cuda_v6_warp_prefix_sum(lane_total, lane);
-      float lane_start = running + lane_prefix - lane_total;
-      float lane_end = running + lane_prefix;
-      int lane_selected_node = -1;
-
-      if (lane_total > 0.0f && threshold < lane_end && threshold >= lane_start) {
-        int base_node = word_idx << 6;
-        uint64_t scan_mask = free_mask;
-        float word_running = lane_start;
-        while (scan_mask != 0ull) {
-          int bit = __ffsll((long long)scan_mask) - 1;
-          int node = base_node + bit;
-          float d = calc_dist(p_curr, d_coords[node]);
-          float eta = 1.0f / (d + CUDA_V6_EPS);
-          uint64_t tau_idx = (uint64_t)current * (params.n + 1) + node;
-          float tau = dequantize_tau(d_tau[tau_idx], params.log_tau_min, params.log_tau_step);
-          float score = powf(tau, params.alpha) * powf(eta, params.beta);
-          word_running += score;
-          if (score > 0.0f && threshold < word_running) {
-            lane_selected_node = node;
-            break;
-          }
-          scan_mask &= (scan_mask - 1ull);
+        float weight = powf(tau, params.alpha) * powf(eta, params.beta);
+        
+        local_sum += weight;
+        
+        // Reservoir sampling
+        float r = cuda_v6_rand01(rng_state);
+        if (local_sum > 0.0f && r <= (weight / local_sum)) {
+            local_selected_node = node;
         }
-      }
 
-      unsigned int lane_selected_mask = __ballot_sync(0xFFFFFFFFu, lane_selected_node > 0);
-      if (lane_selected_mask != 0u) {
-        int chosen_lane = __ffs((int)lane_selected_mask) - 1;
-        return __shfl_sync(0xFFFFFFFFu, lane_selected_node, chosen_lane);
+        scan_mask &= (scan_mask - 1ull);
       }
     }
-    running += chunk_sum;
-    running = __shfl_sync(0xFFFFFFFFu, running, 0);
   }
 
-  return -1;
+  // Fase 2: Warp-Level Merge (Riduzione Stocastica)
+  int current_node = local_selected_node;
+  float current_sum = local_sum;
+
+  for (int offset = 1; offset < CUDA_V6_WARP_SIZE; offset *= 2) {
+      float other_sum = __shfl_down_sync(0xFFFFFFFFu, current_sum, offset);
+      int other_node = __shfl_down_sync(0xFFFFFFFFu, current_node, offset);
+      
+      float combined_sum = current_sum + other_sum;
+      if (combined_sum > 0.0f) {
+          float r = cuda_v6_rand01(rng_state);
+          if (r <= (other_sum / combined_sum)) {
+              current_node = other_node;
+          }
+      }
+      current_sum = combined_sum;
+  }
+
+  // Fase 3: Ritorno del risultato
+  // Il thread 0 ha la somma totale e il nodo scelto globalmente per il warp
+  float total_sum = __shfl_sync(0xFFFFFFFFu, current_sum, 0);
+  if (total_score_out) *total_score_out = total_sum;
+  
+  int global_selected = __shfl_sync(0xFFFFFFFFu, current_node, 0);
+  
+  if (total_sum <= 0.0f) return -1;
+  return global_selected;
 }
 
 __global__ void kernel_construct_solutions_v6(const float2 *d_coords,
@@ -421,7 +376,7 @@ __global__ void kernel_construct_solutions_v6(const float2 *d_coords,
       int move = select_from_candidates_v6(current_b, d_tau, d_candidate_idx, d_eta_beta, l1_row, &rng_state, params, &score_cand);
       
       if (move <= 0) {
-        move = select_global_fallback_v6(current_b, d_coords, d_tau, l1_row, l2_row, &rng_state, params, NULL);
+        move = select_global_fallback_v6(current_b, d_coords, d_tau, l1_row, l2_row, &rng_state, params, &score_cand);
       }
 
       int close_allowed = (remaining_b <= (params.K - vehicle - 1) * params.cap);
