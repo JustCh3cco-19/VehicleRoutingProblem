@@ -151,7 +151,7 @@ int aco_vrp_cuda_with_capacity_v6(int n, int K, int vehicle_capacity_customers,
   params.beta = (float)beta;
   params.rho = (float)rho;
   params.tau0 = (float)tau0;
-  params.Q = (float)Q;
+  params.Q = (float)Q * 100.0f; // Multiplier to force quantization to trigger
   params.tau_min = 0.0001f;
   params.tau_max = 100.0f;
   params.log_tau_min = log_tau_min;
@@ -219,6 +219,14 @@ int aco_vrp_cuda_with_capacity_v6(int n, int K, int vehicle_capacity_customers,
   int *h_routes = (int *)malloc(max_steps * m * sizeof(int));
   int *h_route_lengths = (int *)malloc(m * K * sizeof(int));
 
+  // Global best flat storage for reinforcement
+  int *h_flat_routes = (int *)malloc(K * (n + 1) * sizeof(int));
+  int *h_flat_lengths = (int *)malloc(K * sizeof(int));
+  int *d_flat_routes = NULL;
+  int *d_flat_lengths = NULL;
+  CHECK_CUDA(cudaMalloc(&d_flat_routes, K * (n + 1) * sizeof(int)));
+  CHECK_CUDA(cudaMalloc(&d_flat_lengths, K * sizeof(int)));
+
   double max_runtime_sec = 0.0;
   int max_stagnation_epochs = 0;
   double min_rel_improvement = 1e-3;
@@ -269,6 +277,16 @@ int aco_vrp_cuda_with_capacity_v6(int n, int K, int vehicle_capacity_customers,
         CHECK_CUDA(cudaMemcpy(h_route_lengths, d_route_lengths, m * K * sizeof(int), cudaMemcpyDeviceToHost));
 
         copy_ant_to_solution(h_routes, h_route_lengths, K, m, best_idx, best_solution);
+
+        // Flatten global best for reinforcement
+        for (int v = 0; v < K; v++) {
+          h_flat_lengths[v] = best_solution->routes[v].len;
+          for (int i = 0; i < best_solution->routes[v].len; i++) {
+            h_flat_routes[v * (n + 1) + i] = best_solution->routes[v].nodes[i];
+          }
+        }
+        CHECK_CUDA(cudaMemcpy(d_flat_routes, h_flat_routes, K * (n + 1) * sizeof(int), cudaMemcpyHostToDevice));
+        CHECK_CUDA(cudaMemcpy(d_flat_lengths, h_flat_lengths, K * sizeof(int), cudaMemcpyHostToDevice));
       } else {
         iter_since_best++;
       }
@@ -276,8 +294,14 @@ int aco_vrp_cuda_with_capacity_v6(int n, int K, int vehicle_capacity_customers,
       launch_evaporate_tau_v6(d_tau, n, params.q_evap_delta, params.q_tau_min);
       CHECK_CUDA(cudaDeviceSynchronize());
       
-      float deposit_amount = params.Q / global_best;
-      launch_deposit_solution_v6(d_tau, d_routes, d_route_lengths, deposit_amount, best_idx, params);
+      // Reinforce iteration best (30%)
+      float iter_deposit = (0.3f * params.Q) / best_iter_cost;
+      launch_deposit_solution_v6(d_tau, d_routes, d_route_lengths, iter_deposit, best_idx, params);
+      
+      // Reinforce global best (70%)
+      float global_deposit = (0.7f * params.Q) / (float)global_best;
+      launch_deposit_flat_solution_v6(d_tau, d_flat_routes, d_flat_lengths, global_deposit, params);
+      
       CHECK_CUDA(cudaDeviceSynchronize());
     } else {
       iter_since_best++;
@@ -298,11 +322,15 @@ int aco_vrp_cuda_with_capacity_v6(int n, int K, int vehicle_capacity_customers,
   cudaFree(d_rng_states);
   cudaFree(d_ant_summary);
   cudaFree(d_iter_stats);
+  cudaFree(d_flat_routes);
+  cudaFree(d_flat_lengths);
   
   free(h_coords);
   free(h_ant_summary);
   free(h_routes);
   free(h_route_lengths);
+  free(h_flat_routes);
+  free(h_flat_lengths);
 
   return 0;
 }

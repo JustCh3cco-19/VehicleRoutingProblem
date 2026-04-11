@@ -156,7 +156,7 @@ __global__ void kernel_reset_ant_state_v6(int *d_routes,
   if (ant >= params.m) return;
 
   uint64_t *l1_row = d_visited_l1 + ant * (params.visited_row_stride / 8);
-  uint64_t *l2_row = d_visited_l2 + ant * params.visited_l2_words; 
+  uint64_t *l2_row = d_visited_l2 + ant * params.visited_l2_words;
 
   for (int w = 0; w < params.visited_l1_words; ++w) {
     l1_row[w] = ~cuda_v6_relevant_mask_for_word(w, params.n);
@@ -429,7 +429,6 @@ __global__ void kernel_construct_solutions_v6(const float2 *d_coords,
       if (close_allowed) {
         float d = calc_dist(d_coords[current_b], d_coords[0]);
         float eta = 1.0f / (d + CUDA_V6_EPS);
-        // Note: depot log_tau approx could be handled here
         depot_score = params.depot_close_weight * powf(eta, params.beta);
       }
 
@@ -539,6 +538,39 @@ __global__ void kernel_deposit_solution_v6(uint8_t *d_tau,
   }
 }
 
+__global__ void kernel_deposit_flat_solution_v6(uint8_t *d_tau,
+                                                const int *d_flat_routes,
+                                                const int *d_flat_lengths,
+                                                float deposit_amount,
+                                                CudaV6Params params) {
+  int veh_idx = blockIdx.x * blockDim.x + threadIdx.x;
+  
+  if (veh_idx >= params.K) return;
+
+  int route_len = d_flat_lengths[veh_idx];
+  int prev = 0;
+  
+  // Stride of flat routes is params.n + 1
+  int offset = veh_idx * (params.n + 1);
+  
+  for (int pos = 1; pos < route_len; ++pos) {
+    int curr = d_flat_routes[offset + pos];
+    
+    uint64_t tau_idx = (uint64_t)prev * (params.n + 1) + curr;
+    uint8_t old_q = d_tau[tau_idx];
+    float old_tau = dequantize_tau(old_q, params.log_tau_min, params.log_tau_step);
+    float new_tau = old_tau + deposit_amount;
+    uint8_t new_q = quantize_tau(new_tau, params.log_tau_min, params.log_tau_step, params.q_tau_min, params.q_tau_max);
+    
+    atomicMax_uint8_v6(&d_tau[tau_idx], new_q);
+    
+    uint64_t tau_idx_rev = (uint64_t)curr * (params.n + 1) + prev;
+    atomicMax_uint8_v6(&d_tau[tau_idx_rev], new_q);
+    
+    prev = curr;
+  }
+}
+
 /* -- Launchers -- */
 
 void launch_init_tau_v6(uint8_t *d_tau, int n, uint8_t q_tau0) {
@@ -573,4 +605,9 @@ void launch_construct_solutions_v6(const float2 *d_coords, const uint8_t *d_tau,
 void launch_deposit_solution_v6(uint8_t *d_tau, const int *d_routes, const int *d_route_lengths, float deposit_amount, int best_ant, CudaV6Params params) {
   int blocks = (params.K + CUDA_V6_THREADS_PER_BLOCK - 1) / CUDA_V6_THREADS_PER_BLOCK;
   kernel_deposit_solution_v6<<<blocks, CUDA_V6_THREADS_PER_BLOCK>>>(d_tau, d_routes, d_route_lengths, deposit_amount, best_ant, params);
+}
+
+void launch_deposit_flat_solution_v6(uint8_t *d_tau, const int *d_flat_routes, const int *d_flat_lengths, float deposit_amount, CudaV6Params params) {
+  int blocks = (params.K + CUDA_V6_THREADS_PER_BLOCK - 1) / CUDA_V6_THREADS_PER_BLOCK;
+  kernel_deposit_flat_solution_v6<<<blocks, CUDA_V6_THREADS_PER_BLOCK>>>(d_tau, d_flat_routes, d_flat_lengths, deposit_amount, params);
 }

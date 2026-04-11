@@ -128,6 +128,12 @@ __global__ void kernel_deposit_solution_v6(uint8_t *d_tau,
                                            int best_ant,
                                            CudaV6Params params);
 
+__global__ void kernel_deposit_flat_solution_v6(uint8_t *d_tau,
+                                                const int *d_flat_routes,
+                                                const int *d_flat_lengths,
+                                                float deposit_amount,
+                                                CudaV6Params params);
+
 /* Host Launchers */
 
 void launch_init_tau_v6(uint8_t *d_tau, int n, uint8_t q_tau0);
@@ -136,5 +142,6 @@ void launch_reset_ant_state_v6(int *d_routes, int *d_route_lengths, uint64_t *d_
 void launch_construct_solutions_v6(const float2 *d_coords, const uint8_t *d_tau, const int *d_candidate_idx, const float *d_eta_beta, int *d_routes, int *d_route_lengths, uint64_t *d_visited_l1, uint64_t *d_visited_l2, unsigned int *d_rng_states, CudaV6AntSummary *d_ant_summary, CudaV6IterStats *d_iter_stats, CudaV6Params params);
 void launch_evaporate_tau_v6(uint8_t *d_tau, int n, uint8_t delta, uint8_t q_min);
 void launch_deposit_solution_v6(uint8_t *d_tau, const int *d_routes, const int *d_route_lengths, float deposit_amount, int best_ant, CudaV6Params params);
+void launch_deposit_flat_solution_v6(uint8_t *d_tau, const int *d_flat_routes, const int *d_flat_lengths, float deposit_amount, CudaV6Params params);
 
 #endif
