@@ -7,7 +7,7 @@ usage: tools/batch/submit_solve.sh [options]
 
 Opzioni:
   --target NAME           Target make da eseguire (default: solve_all)
-                          Esempi: solve_seq, solve_mpi, solve_cuda, solve_pyvrp, solve_all, solve_memory_growth_non_cuda
+                          Esempi: solve_seq, solve_mpi, solve_cuda, solve_pyvrp, solve_all, solve_memory_growth_non_cuda, exp_all
   --make-args "ARGS"      Argomenti extra passati a make (default: "")
   --time HH:MM:SS         Override tempo job (default: 00:30:00, QoS students_limit)
   --nodes N               Override numero nodi
@@ -27,7 +27,7 @@ Esempi:
     --make-args "SOLVE_CLIENTS=500,1000 SOLVE_SEQ_REPEATS=3 SOLVE_SEQ_RUNTIME_S=60"
 
   tools/batch/submit_solve.sh --target solve_mpi --cpus 32 --mem 64G \
-    --make-args "SOLVE_CLIENTS=4000,8000 SOLVE_MPI_RANKS=4 SOLVE_MPI_OMP_THREADS=8 SOLVE_MPI_REPEATS=3"
+    --make-args "SOLVE_CLIENTS=4000,8000 SOLVE_MPI_RANKS=4 SOLVE_MPI_OMP_THREADS=32 SOLVE_MPI_LAUNCHER=mpirun SOLVE_MPI_REPEATS=3"
 
   tools/batch/submit_solve.sh --target solve_cuda --partition gpu --gres gpu:1 \
     --make-args "SOLVE_CLIENTS=500,1000 SOLVE_CUDA_REPEATS=3 SOLVE_CUDA_VARIANT=v4 CUDA_ARCH=sm_75"
@@ -114,9 +114,9 @@ while [[ $# -gt 0 ]]; do
 done
 
 # Target-aware defaults when not explicitly overridden:
-# - solve_mpi: spread on 4 nodes with 4 MPI ranks total, 8 OMP threads each
+# - solve_mpi and exp_*: spread on 4 nodes with 4 MPI ranks total, 32 OMP threads each
 # - others (including solve_seq): single node/task
-if [[ "${target}" == "solve_mpi" ]]; then
+if [[ "${target}" == "solve_mpi" || "${target}" == exp_* ]]; then
   if [[ "${has_nodes}" -eq 0 ]]; then
     sbatch_args+=(--nodes 4)
   fi
@@ -124,7 +124,7 @@ if [[ "${target}" == "solve_mpi" ]]; then
     sbatch_args+=(--ntasks 4)
   fi
   if [[ "${has_cpus}" -eq 0 ]]; then
-    sbatch_args+=(--cpus-per-task 8)
+    sbatch_args+=(--cpus-per-task 32)
   fi
 else
   if [[ "${has_nodes}" -eq 0 ]]; then

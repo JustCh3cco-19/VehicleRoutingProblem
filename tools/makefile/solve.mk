@@ -85,6 +85,7 @@ solve_mpi: solve_prepare
 	SOLVE_MPI_MIN_REL_IMPROVEMENT="$(SOLVE_MPI_MIN_REL_IMPROVEMENT)" \
 	SOLVE_MPI_RANKS="$(SOLVE_MPI_RANKS)" \
 	SOLVE_MPI_OMP_THREADS="$(SOLVE_MPI_OMP_THREADS)" \
+	SOLVE_MPI_LAUNCHER="$(SOLVE_MPI_LAUNCHER)" \
 	bash tools/bash/solve_mpi.sh
 
 solve_all: solve_pyvrp solve_seq solve_cuda solve_mpi

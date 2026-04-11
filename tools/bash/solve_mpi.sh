@@ -12,6 +12,7 @@ stag_iters="${SOLVE_MPI_STAGNATION_EPOCHS:-0}"
 improve_rel_pct="${SOLVE_MPI_MIN_REL_IMPROVEMENT:-0.001}"
 mpi_ranks="${SOLVE_MPI_RANKS:-2}"
 omp_threads="${SOLVE_MPI_OMP_THREADS:-2}"
+launcher_pref="${SOLVE_MPI_LAUNCHER:-auto}"
 
 if [ "$repeats" -lt 1 ]; then
   repeats=1
@@ -20,36 +21,33 @@ improve_rel="$(awk "BEGIN { printf \"%.12g\", (${improve_rel_pct}) / 100.0 }")"
 
 launcher_kind="mpirun"
 launcher_cmd=(mpirun -np "$mpi_ranks")
-if [ -n "${SLURM_JOB_ID:-}" ] && command -v srun >/dev/null 2>&1; then
+if [ "$launcher_pref" = "srun" ]; then
   launcher_kind="srun"
   launcher_cmd=(srun --mpi=pmix -n "$mpi_ranks" --cpus-per-task "$omp_threads")
+elif [ "$launcher_pref" = "auto" ]; then
+  if [ -n "${SLURM_JOB_ID:-}" ] && command -v srun >/dev/null 2>&1; then
+    launcher_kind="srun"
+    launcher_cmd=(srun --mpi=pmix -n "$mpi_ranks" --cpus-per-task "$omp_threads")
+  fi
 fi
 echo "[mpi] launcher=${launcher_kind}"
 
 header="name,profile,instance_path,n,K,m,solver_seed,instance_seed,layout_id,run_id,status,elapsed_s,max_rss_gb,best_cost,error"
+header_v2="${header},mpi_ranks,omp_threads,batch_id"
+batch_id="${SOLVE_BATCH_ID:-$(date +%Y%m%d_%H%M%S)}"
 
-# Prepare output CSV in advance, keeping existing rows for n values that are
-# not part of the current execution. New rows are then appended live.
-tmp_csv="$(mktemp)"
-echo "$header" > "$tmp_csv"
-
-if [ -f "$csv" ] && [ -s "$csv" ]; then
-  selected_n_tmp="$(mktemp)"
-  tail -n +2 "$manifest" \
-    | { if [ -n "$clients" ]; then awk -F, -v list="$clients" 'BEGIN{split(list,a,","); for(i in a) wanted[a[i]]=1} ($4 in wanted)'; else cat; fi; } \
-    | { if [ "$limit" -gt 0 ]; then head -n "$limit"; else cat; fi; } \
-    | awk -F, 'NF > 0 && $4 != "" { print $4 }' | sort -u > "$selected_n_tmp"
-
-  if [ -s "$selected_n_tmp" ]; then
-    awk -F, 'NR==FNR { drop[$1]=1; next } FNR==1 { next } !($4 in drop) { print $0 }' "$selected_n_tmp" "$csv" >> "$tmp_csv"
-  else
-    tail -n +2 "$csv" >> "$tmp_csv"
+# Append-only behavior: keep all prior runs and append new rows.
+if [ ! -f "$csv" ] || [ ! -s "$csv" ]; then
+  echo "$header_v2" > "$csv"
+else
+  first_line="$(head -n1 "$csv" 2>/dev/null || true)"
+  if [ "$first_line" = "$header" ]; then
+    tmp_csv="$(mktemp)"
+    echo "$header_v2" > "$tmp_csv"
+    tail -n +2 "$csv" | awk 'NF > 0 { print $0 ",,," }' >> "$tmp_csv"
+    mv "$tmp_csv" "$csv"
   fi
-
-  rm -f "$selected_n_tmp"
 fi
-
-mv "$tmp_csv" "$csv"
 
 selected_instances="$(tail -n +2 "$manifest" \
   | { if [ -n "$clients" ]; then awk -F, -v list="$clients" 'BEGIN{split(list,a,","); for(i in a) wanted[a[i]]=1} ($4 in wanted)'; else cat; fi; } \
@@ -127,10 +125,10 @@ tail -n +2 "$manifest" \
         printf '%s\n' "$out" > "$sol_file"
         if [ "$rc" -eq 0 ]; then
           cost="$(printf '%s\n' "$out" | sed -n 's/^best cost: //p' | tail -n1)"
-          echo "$name,$profile,$instance_path,$n,$K,$m,$seed_run,$instance_seed,$layout_id,$run_id,ok,$elapsed,$rss_gb,$cost," >> "$csv"
+          echo "$name,$profile,$instance_path,$n,$K,$m,$seed_run,$instance_seed,$layout_id,$run_id,ok,$elapsed,$rss_gb,$cost,,$mpi_ranks,$omp_threads,$batch_id" >> "$csv"
         else
           err="$(printf '%s' "$out" | tr '\n' ' ' | tr ',' ';')"
-          echo "$name,$profile,$instance_path,$n,$K,$m,$seed_run,$instance_seed,$layout_id,$run_id,error,$elapsed,$rss_gb,,$err" >> "$csv"
+          echo "$name,$profile,$instance_path,$n,$K,$m,$seed_run,$instance_seed,$layout_id,$run_id,error,$elapsed,$rss_gb,,$err,$mpi_ranks,$omp_threads,$batch_id" >> "$csv"
         fi
         echo "[mpi] run_effettiva: elapsed_s=${elapsed:-n/a} mem_gb=${rss_gb:-n/a} status=$([ "$rc" -eq 0 ] && echo ok || echo error)"
         echo

@@ -48,6 +48,7 @@ Il `Makefile` root include:
 - `tools/makefile/build.mk`
 - `tools/makefile/generate.mk`
 - `tools/makefile/solve.mk`
+- `tools/makefile/experiments.mk`
 - `tools/makefile/phony.mk`
 
 Default goal:
@@ -142,6 +143,7 @@ Per `seq` e `mpi` viene registrato `max_rss_kb` (via `/usr/bin/time`).
 - `SOLVE_MPI_MIN_REL_IMPROVEMENT` (percentuale; es. `0.1` = `0.1%`)
 - `SOLVE_MPI_RANKS`
 - `SOLVE_MPI_OMP_THREADS`
+- `SOLVE_MPI_LAUNCHER` (`auto|mpirun|srun`)
 - `SOLVE_CUDA_VARIANT`
 
 Nota mapping env nel solver C:
@@ -156,6 +158,70 @@ make solve_memory_growth_non_cuda
 ```
 
 Usa un profilo clienti grande (default `4000..32000`) e ripetizioni con `SOLVE_MEMORY_GROWTH_REPEATS`.
+
+## Esperimenti scaling (`exp_*`)
+
+I target `exp_*` sono wrapper sopra `make solve_mpi` pensati per campagne di benchmark riproducibili.
+Ogni target scrive in una directory CSV dedicata (append-only), quindi i risultati non si mescolano con i CSV generali.
+
+Target disponibili:
+- `make exp_strong_openmp`
+  - strong scaling OpenMP intra-node
+  - mantiene `n` fisso (`EXP_STRONG_OPENMP_N`, default `2000`)
+  - usa `MPI_RANKS=1`, varia `OMP_THREADS` (`EXP_STRONG_OPENMP_THREADS`, default `1 2 4 8 16`)
+- `make exp_weak_openmp`
+  - weak scaling OpenMP intra-node
+  - usa coppie `(threads, n)` da `EXP_WEAK_OPENMP_PAIRS` (default `1 2000 2 4000 4 8000 8 16000 16 32000`)
+  - mantiene `MPI_RANKS=1`
+- `make exp_strong_mpi`
+  - strong scaling MPI inter-node
+  - mantiene `n` fisso (`EXP_STRONG_MPI_N`, default `16000`)
+  - varia `MPI_RANKS` (`EXP_STRONG_MPI_RANKS`, default `1 2 4 8`)
+  - mantiene `OMP_THREADS` fisso (`EXP_STRONG_MPI_OMP_THREADS`, default `8`)
+- `make exp_strong_hybrid`
+  - strong scaling ibrido OpenMP+MPI
+  - mantiene `n` fisso (`EXP_STRONG_HYBRID_N`, default `16000`)
+  - varia coppie `(ranks, threads)` con `EXP_STRONG_HYBRID_PAIRS` (default `auto`, scala proporzionalmente con `r=t` in potenze di 2)
+- `make exp_weak_mpi`
+  - weak scaling MPI
+  - usa coppie `(ranks, n)` da `EXP_WEAK_MPI_PAIRS` (default `auto`, `n` proporzionale ai rank)
+  - mantiene `OMP_THREADS` fisso (`EXP_WEAK_MPI_OMP_THREADS`, default `8`)
+- `make exp_weak_hybrid`
+  - weak scaling ibrido OpenMP+MPI
+  - usa triple `(ranks, threads, n)` da `EXP_WEAK_HYBRID_TRIPLETS` (default `auto`, con `r=t` e `n` proporzionale a `r*t`)
+- `make exp_all`
+  - esegue in sequenza tutti i target sopra.
+
+Impostazioni comuni ai target `exp_*`:
+- `EXP_REPEATS` (default `5`): ripetizioni per punto sperimentale
+- `EXP_STAGNATION_EPOCHS` (default `500`)
+- `EXP_MIN_REL_IMPROVEMENT` (default `0.001`)
+- `EXP_MPI_LAUNCHER` (default `mpirun`)
+- `EXP_MAX_CLUSTER_NODES` (default `4`)
+- `EXP_WEAK_BASE_N_PER_WORKER` (default `2000`)
+- timeout disattivato (`SOLVE_MPI_RUNTIME_S=0`) per non troncare i run su tempo.
+
+Output CSV separati:
+- `results/solve_manifest/csv/exp_strong_openmp/manifest_openmp_mpi_per_instance_results.csv`
+- `results/solve_manifest/csv/exp_weak_openmp/manifest_openmp_mpi_per_instance_results.csv`
+- `results/solve_manifest/csv/exp_strong_mpi/manifest_openmp_mpi_per_instance_results.csv`
+- `results/solve_manifest/csv/exp_strong_hybrid/manifest_openmp_mpi_per_instance_results.csv`
+- `results/solve_manifest/csv/exp_weak_mpi/manifest_openmp_mpi_per_instance_results.csv`
+- `results/solve_manifest/csv/exp_weak_hybrid/manifest_openmp_mpi_per_instance_results.csv`
+
+Ogni riga nel CSV MPI include anche:
+- `mpi_ranks`
+- `omp_threads`
+- `batch_id` (identificatore del batch lanciato)
+
+Esempi:
+
+```bash
+make exp_strong_openmp
+make exp_strong_hybrid EXP_STRONG_HYBRID_PAIRS="1 1 1 2 2 2 2 4 4 4"
+make exp_weak_mpi EXP_WEAK_MPI_PAIRS="1 2000 2 4000 4 8000" EXP_REPEATS=3
+make exp_weak_hybrid
+```
 
 ## Output risultati
 
@@ -200,8 +266,8 @@ Note cluster:
 - QoS di default nel job: `students_limit` (override con `--qos`)
 - default submit per target:
   - `solve_seq` (e altri non-MPI): `--nodes=1 --ntasks=1 --cpus-per-task=32`
-  - `solve_mpi`: `--nodes=4 --ntasks=4 --cpus-per-task=8`
-- launcher MPI in `solve_mpi`: usa `srun --mpi=pmix` quando rileva Slurm (`SLURM_JOB_ID`), altrimenti usa `mpirun`
+  - `solve_mpi`: `--nodes=4 --ntasks=4 --cpus-per-task=32`
+- launcher MPI in `solve_mpi`: configurabile con `SOLVE_MPI_LAUNCHER`; per il tuo workflow usa `mpirun`
 - per CUDA sul tuo cluster usa `CUDA_ARCH=sm_75` nei `--make-args`
 
 Esempi:
@@ -213,7 +279,7 @@ tools/batch/submit_solve.sh --target solve_seq \
 
 ```bash
 tools/batch/submit_solve.sh --target solve_mpi --cpus 32 --mem 64G \
-  --make-args "SOLVE_CLIENTS=4000,8000 SOLVE_MPI_RANKS=4 SOLVE_MPI_OMP_THREADS=8 SOLVE_MPI_REPEATS=3"
+  --make-args "SOLVE_CLIENTS=4000,8000 SOLVE_MPI_RANKS=4 SOLVE_MPI_OMP_THREADS=32 SOLVE_MPI_LAUNCHER=mpirun SOLVE_MPI_REPEATS=3"
 ```
 
 ```bash
@@ -322,7 +388,7 @@ Cluster (Slurm), MPI:
 
 ```bash
 tools/batch/submit_solve.sh --target solve_mpi \
-  --make-args "SOLVE_MPI_REPEATS=3 SOLVE_MPI_RUNTIME_S=300 SOLVE_MPI_RANKS=4 SOLVE_MPI_OMP_THREADS=8"
+  --make-args "SOLVE_MPI_REPEATS=3 SOLVE_MPI_RUNTIME_S=300 SOLVE_MPI_RANKS=4 SOLVE_MPI_OMP_THREADS=32 SOLVE_MPI_LAUNCHER=mpirun"
 ```
 
 Cluster (Slurm), CUDA:
@@ -338,7 +404,7 @@ Cluster, esecuzione in coda `seq -> mpi -> cuda`:
 tools/batch/submit_solve.sh --target solve_seq \
   --make-args "SOLVE_SEQ_REPEATS=3 SOLVE_SEQ_RUNTIME_S=300" && \
 tools/batch/submit_solve.sh --target solve_mpi \
-  --make-args "SOLVE_MPI_REPEATS=3 SOLVE_MPI_RUNTIME_S=300 SOLVE_MPI_RANKS=4 SOLVE_MPI_OMP_THREADS=8" && \
+  --make-args "SOLVE_MPI_REPEATS=3 SOLVE_MPI_RUNTIME_S=300 SOLVE_MPI_RANKS=4 SOLVE_MPI_OMP_THREADS=32 SOLVE_MPI_LAUNCHER=mpirun" && \
 tools/batch/submit_solve.sh --target solve_cuda --partition gpu --gres gpu:1 \
   --make-args "SOLVE_CUDA_REPEATS=3 SOLVE_SEQ_RUNTIME_S=300 SOLVE_CUDA_VARIANT=v6 CUDA_ARCH=sm_75"
 ```
@@ -366,7 +432,7 @@ Submit MPI:
 ```bash
 tools/batch/submit_solve.sh --target solve_mpi \
   --qos students_limit --cpus 32 \
-  --make-args "SOLVE_CLIENTS=4000,8000 SOLVE_MPI_RANKS=4 SOLVE_MPI_OMP_THREADS=8 SOLVE_MPI_RUNTIME_S=30"
+  --make-args "SOLVE_CLIENTS=4000,8000 SOLVE_MPI_RANKS=4 SOLVE_MPI_OMP_THREADS=32 SOLVE_MPI_LAUNCHER=mpirun SOLVE_MPI_RUNTIME_S=30"
 ```
 
 Submit CUDA:
