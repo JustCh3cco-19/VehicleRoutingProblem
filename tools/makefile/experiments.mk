@@ -203,3 +203,53 @@ exp_all: exp_strong_openmp exp_weak_openmp exp_strong_mpi exp_strong_hybrid exp_
 	@echo "  $(RESULTS_ROOT)/solve_manifest/csv/exp_strong_hybrid"
 	@echo "  $(RESULTS_ROOT)/solve_manifest/csv/exp_weak_mpi"
 	@echo "  $(RESULTS_ROOT)/solve_manifest/csv/exp_weak_hybrid"
+
+# CUDA experiments
+exp_cuda_scaling_input:
+	@echo "[exp_cuda_scaling_input] input scaling with fixed m=$(EXP_CUDA_SCALING_M_FIXED)"
+	$(MAKE) solve_cuda \
+		SOLVE_CSV_DIR="$(RESULTS_ROOT)/solve_manifest/csv/exp_cuda_scaling_input" \
+		SOLVE_SOLUTIONS_DIR="$(RESULTS_ROOT)/solve_manifest/solutions/exp_cuda_scaling_input" \
+		SOLVE_CLIENTS="$(EXP_CUDA_SCALING_CLIENTS)" \
+		SOLVE_CUDA_VARIANT="$(EXP_CUDA_VARIANT)" \
+		SOLVE_CUDA_REPEATS="$(EXP_CUDA_REPEATS)" \
+		SOLVE_SEQ_M="$(EXP_CUDA_SCALING_M_FIXED)" \
+		SOLVE_CUDA_RUNTIME_S="$(EXP_CUDA_RUNTIME_S)" \
+		SOLVE_CUDA_STAGNATION_EPOCHS="$(EXP_CUDA_STAGNATION_EPOCHS)" \
+		SOLVE_CUDA_MIN_REL_IMPROVEMENT="$(EXP_CUDA_MIN_REL_IMPROVEMENT)" \
+		SOLVE_BATCH_ID="cuda_scaling_input_m$(EXP_CUDA_SCALING_M_FIXED)"
+
+exp_cuda_scaling_ants:
+	@echo "[exp_cuda_scaling_ants] m scaling on clients=$(EXP_CUDA_CLIENTS_FUNCTIONAL)"
+	@for m in $(EXP_CUDA_M_LIST); do \
+		echo "[exp_cuda_scaling_ants] m=$$m"; \
+		$(MAKE) solve_cuda \
+			SOLVE_CSV_DIR="$(RESULTS_ROOT)/solve_manifest/csv/exp_cuda_scaling_ants" \
+			SOLVE_SOLUTIONS_DIR="$(RESULTS_ROOT)/solve_manifest/solutions/exp_cuda_scaling_ants" \
+			SOLVE_CLIENTS="$(EXP_CUDA_CLIENTS_FUNCTIONAL)" \
+			SOLVE_CUDA_VARIANT="$(EXP_CUDA_VARIANT)" \
+			SOLVE_CUDA_REPEATS="$(EXP_CUDA_REPEATS)" \
+			SOLVE_SEQ_M="$$m" \
+			SOLVE_CUDA_RUNTIME_S="$(EXP_CUDA_RUNTIME_S)" \
+			SOLVE_CUDA_STAGNATION_EPOCHS="$(EXP_CUDA_STAGNATION_EPOCHS)" \
+			SOLVE_CUDA_MIN_REL_IMPROVEMENT="$(EXP_CUDA_MIN_REL_IMPROVEMENT)" \
+			SOLVE_BATCH_ID="cuda_scaling_ants_m$$m"; \
+	done
+
+exp_seq_for_cuda:
+	@echo "[exp_seq_for_cuda] sequenziale (non scaling)"
+	$(MAKE) solve_seq \
+		SOLVE_CSV_DIR="$(RESULTS_ROOT)/solve_manifest/csv/exp_cuda_vs_seq" \
+		SOLVE_SOLUTIONS_DIR="$(RESULTS_ROOT)/solve_manifest/solutions/exp_cuda_vs_seq" \
+		SOLVE_CLIENTS="$(EXP_CUDA_CLIENTS_FUNCTIONAL)" \
+		SOLVE_SEQ_REPEATS="$(EXP_CUDA_REPEATS)" \
+		SOLVE_SEQ_RUNTIME_S="$(EXP_CUDA_RUNTIME_S)" \
+		SOLVE_SEQ_STAGNATION_EPOCHS="$(EXP_CUDA_STAGNATION_EPOCHS)" \
+		SOLVE_SEQ_MIN_REL_IMPROVEMENT="$(EXP_CUDA_MIN_REL_IMPROVEMENT)" \
+		SOLVE_BATCH_ID="seq_baseline_for_cuda"
+exp_cuda_all: exp_cuda_scaling_input exp_cuda_scaling_ants exp_seq_for_cuda
+	@echo "CUDA scaling + test sequenziale completed."
+	@echo "CSV dirs:"
+	@echo "  $(RESULTS_ROOT)/solve_manifest/csv/exp_cuda_scaling_input"
+	@echo "  $(RESULTS_ROOT)/solve_manifest/csv/exp_cuda_scaling_ants"
+	@echo "  $(RESULTS_ROOT)/solve_manifest/csv/exp_cuda_vs_seq"
