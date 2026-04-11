@@ -14,12 +14,77 @@ exp_strong_openmp:
 		$(MAKE) solve_mpi \
 			SOLVE_CSV_DIR="$(RESULTS_ROOT)/solve_manifest/csv/exp_strong_openmp" \
 			SOLVE_SOLUTIONS_DIR="$(RESULTS_ROOT)/solve_manifest/solutions/exp_strong_openmp" \
-			SOLVE_BATCH_ID="strong_openmp_n$(EXP_STRONG_OPENMP_N)_t$$t" \
-			SOLVE_CLIENTS="$(EXP_STRONG_OPENMP_N)" \
+			SOLVE_BATCH_ID="strong_openmp_clients_t$$t" \
+			SOLVE_CLIENTS="$(EXP_STRONG_CLIENTS_SERIES)" \
 			SOLVE_MPI_RANKS=1 \
 			SOLVE_MPI_OMP_THREADS="$$t" \
 			SOLVE_MPI_LAUNCHER="$(EXP_MPI_LAUNCHER)" \
-			SOLVE_MPI_REPEATS="$(EXP_REPEATS)" \
+			SOLVE_MPI_REPEATS=1 \
+			SOLVE_MPI_RUNTIME_S=0 \
+			SOLVE_MPI_STAGNATION_EPOCHS="$(EXP_STAGNATION_EPOCHS)" \
+			SOLVE_MPI_MIN_REL_IMPROVEMENT="$(EXP_MIN_REL_IMPROVEMENT)"; \
+	done
+
+exp_strong_mpi:
+	@ranks_list="$(EXP_STRONG_MPI_RANKS)"; \
+	if [ "$$ranks_list" = "auto" ]; then \
+		max_nodes="$(EXP_MAX_CLUSTER_NODES)"; \
+		if [ -n "$${SLURM_JOB_NUM_NODES:-}" ] && [ "$${SLURM_JOB_NUM_NODES}" -lt "$$max_nodes" ]; then \
+			max_nodes="$${SLURM_JOB_NUM_NODES}"; \
+		fi; \
+		r=1; \
+		ranks_list=""; \
+		while [ "$$r" -le "$$max_nodes" ]; do \
+			ranks_list="$$ranks_list $$r"; \
+			r=$$((r*2)); \
+		done; \
+	fi; \
+	for r in $$ranks_list; do \
+		echo "[exp_strong_mpi] mpi_ranks=$$r omp_threads=$(EXP_STRONG_MPI_OMP_THREADS)"; \
+		$(MAKE) solve_mpi \
+			SOLVE_CSV_DIR="$(RESULTS_ROOT)/solve_manifest/csv/exp_strong_mpi" \
+			SOLVE_SOLUTIONS_DIR="$(RESULTS_ROOT)/solve_manifest/solutions/exp_strong_mpi" \
+			SOLVE_BATCH_ID="strong_mpi_clients_r$$r" \
+			SOLVE_CLIENTS="$(EXP_STRONG_CLIENTS_SERIES)" \
+			SOLVE_MPI_RANKS="$$r" \
+			SOLVE_MPI_OMP_THREADS="$(EXP_STRONG_MPI_OMP_THREADS)" \
+			SOLVE_MPI_LAUNCHER="$(EXP_MPI_LAUNCHER)" \
+			SOLVE_MPI_REPEATS=1 \
+			SOLVE_MPI_RUNTIME_S=0 \
+			SOLVE_MPI_STAGNATION_EPOCHS="$(EXP_STAGNATION_EPOCHS)" \
+			SOLVE_MPI_MIN_REL_IMPROVEMENT="$(EXP_MIN_REL_IMPROVEMENT)"; \
+	done
+
+exp_strong_hybrid:
+	@pairs="$(EXP_STRONG_HYBRID_PAIRS)"; \
+	if [ "$$pairs" = "auto" ]; then \
+		max_threads="$${SLURM_CPUS_PER_TASK:-$$(nproc)}"; \
+		max_nodes="$(EXP_MAX_CLUSTER_NODES)"; \
+		if [ -n "$${SLURM_JOB_NUM_NODES:-}" ] && [ "$${SLURM_JOB_NUM_NODES}" -lt "$$max_nodes" ]; then \
+			max_nodes="$${SLURM_JOB_NUM_NODES}"; \
+		fi; \
+		p=1; \
+		pairs=""; \
+		while [ "$$p" -le "$$max_threads" ] && [ "$$p" -le "$$max_nodes" ]; do \
+			pairs="$$pairs $$p $$p"; \
+			p=$$((p*2)); \
+		done; \
+	fi; \
+	set -- $$pairs; \
+	while [ "$$#" -gt 0 ]; do \
+		r="$$1"; \
+		t="$$2"; \
+		shift 2; \
+		echo "[exp_strong_hybrid] mpi_ranks=$$r omp_threads=$$t n=$(EXP_STRONG_HYBRID_N)"; \
+		$(MAKE) solve_mpi \
+			SOLVE_CSV_DIR="$(RESULTS_ROOT)/solve_manifest/csv/exp_strong_hybrid" \
+			SOLVE_SOLUTIONS_DIR="$(RESULTS_ROOT)/solve_manifest/solutions/exp_strong_hybrid" \
+			SOLVE_BATCH_ID="strong_hybrid_clients_r$$r_t$$t" \
+			SOLVE_CLIENTS="$(EXP_STRONG_CLIENTS_SERIES)" \
+			SOLVE_MPI_RANKS="$$r" \
+			SOLVE_MPI_OMP_THREADS="$$t" \
+			SOLVE_MPI_LAUNCHER="$(EXP_MPI_LAUNCHER)" \
+			SOLVE_MPI_REPEATS=1 \
 			SOLVE_MPI_RUNTIME_S=0 \
 			SOLVE_MPI_STAGNATION_EPOCHS="$(EXP_STAGNATION_EPOCHS)" \
 			SOLVE_MPI_MIN_REL_IMPROVEMENT="$(EXP_MIN_REL_IMPROVEMENT)"; \
@@ -51,72 +116,7 @@ exp_weak_openmp:
 			SOLVE_MPI_RANKS=1 \
 			SOLVE_MPI_OMP_THREADS="$$t" \
 			SOLVE_MPI_LAUNCHER="$(EXP_MPI_LAUNCHER)" \
-			SOLVE_MPI_REPEATS="$(EXP_REPEATS)" \
-			SOLVE_MPI_RUNTIME_S=0 \
-			SOLVE_MPI_STAGNATION_EPOCHS="$(EXP_STAGNATION_EPOCHS)" \
-			SOLVE_MPI_MIN_REL_IMPROVEMENT="$(EXP_MIN_REL_IMPROVEMENT)"; \
-	done
-
-exp_strong_mpi:
-	@ranks_list="$(EXP_STRONG_MPI_RANKS)"; \
-	if [ "$$ranks_list" = "auto" ]; then \
-		max_nodes="$(EXP_MAX_CLUSTER_NODES)"; \
-		if [ -n "$${SLURM_JOB_NUM_NODES:-}" ] && [ "$${SLURM_JOB_NUM_NODES}" -lt "$$max_nodes" ]; then \
-			max_nodes="$${SLURM_JOB_NUM_NODES}"; \
-		fi; \
-		r=1; \
-		ranks_list=""; \
-		while [ "$$r" -le "$$max_nodes" ]; do \
-			ranks_list="$$ranks_list $$r"; \
-			r=$$((r*2)); \
-		done; \
-	fi; \
-	for r in $$ranks_list; do \
-		echo "[exp_strong_mpi] mpi_ranks=$$r omp_threads=$(EXP_STRONG_MPI_OMP_THREADS)"; \
-		$(MAKE) solve_mpi \
-			SOLVE_CSV_DIR="$(RESULTS_ROOT)/solve_manifest/csv/exp_strong_mpi" \
-			SOLVE_SOLUTIONS_DIR="$(RESULTS_ROOT)/solve_manifest/solutions/exp_strong_mpi" \
-			SOLVE_BATCH_ID="strong_mpi_n$(EXP_STRONG_MPI_N)_r$$r" \
-			SOLVE_CLIENTS="$(EXP_STRONG_MPI_N)" \
-			SOLVE_MPI_RANKS="$$r" \
-			SOLVE_MPI_OMP_THREADS="$(EXP_STRONG_MPI_OMP_THREADS)" \
-			SOLVE_MPI_LAUNCHER="$(EXP_MPI_LAUNCHER)" \
-			SOLVE_MPI_REPEATS="$(EXP_REPEATS)" \
-			SOLVE_MPI_RUNTIME_S=0 \
-			SOLVE_MPI_STAGNATION_EPOCHS="$(EXP_STAGNATION_EPOCHS)" \
-			SOLVE_MPI_MIN_REL_IMPROVEMENT="$(EXP_MIN_REL_IMPROVEMENT)"; \
-	done
-
-exp_strong_hybrid:
-	@pairs="$(EXP_STRONG_HYBRID_PAIRS)"; \
-	if [ "$$pairs" = "auto" ]; then \
-		max_threads="$${SLURM_CPUS_PER_TASK:-$$(nproc)}"; \
-		max_nodes="$(EXP_MAX_CLUSTER_NODES)"; \
-		if [ -n "$${SLURM_JOB_NUM_NODES:-}" ] && [ "$${SLURM_JOB_NUM_NODES}" -lt "$$max_nodes" ]; then \
-			max_nodes="$${SLURM_JOB_NUM_NODES}"; \
-		fi; \
-		p=1; \
-		pairs=""; \
-		while [ "$$p" -le "$$max_threads" ] && [ "$$p" -le "$$max_nodes" ]; do \
-			pairs="$$pairs $$p $$p"; \
-			p=$$((p*2)); \
-		done; \
-	fi; \
-	set -- $$pairs; \
-	while [ "$$#" -gt 0 ]; do \
-		r="$$1"; \
-		t="$$2"; \
-		shift 2; \
-		echo "[exp_strong_hybrid] mpi_ranks=$$r omp_threads=$$t n=$(EXP_STRONG_HYBRID_N)"; \
-		$(MAKE) solve_mpi \
-			SOLVE_CSV_DIR="$(RESULTS_ROOT)/solve_manifest/csv/exp_strong_hybrid" \
-			SOLVE_SOLUTIONS_DIR="$(RESULTS_ROOT)/solve_manifest/solutions/exp_strong_hybrid" \
-			SOLVE_BATCH_ID="strong_hybrid_n$(EXP_STRONG_HYBRID_N)_r$$r_t$$t" \
-			SOLVE_CLIENTS="$(EXP_STRONG_HYBRID_N)" \
-			SOLVE_MPI_RANKS="$$r" \
-			SOLVE_MPI_OMP_THREADS="$$t" \
-			SOLVE_MPI_LAUNCHER="$(EXP_MPI_LAUNCHER)" \
-			SOLVE_MPI_REPEATS="$(EXP_REPEATS)" \
+			SOLVE_MPI_REPEATS=1 \
 			SOLVE_MPI_RUNTIME_S=0 \
 			SOLVE_MPI_STAGNATION_EPOCHS="$(EXP_STAGNATION_EPOCHS)" \
 			SOLVE_MPI_MIN_REL_IMPROVEMENT="$(EXP_MIN_REL_IMPROVEMENT)"; \
@@ -151,7 +151,7 @@ exp_weak_mpi:
 			SOLVE_MPI_RANKS="$$r" \
 			SOLVE_MPI_OMP_THREADS="$(EXP_WEAK_MPI_OMP_THREADS)" \
 			SOLVE_MPI_LAUNCHER="$(EXP_MPI_LAUNCHER)" \
-			SOLVE_MPI_REPEATS="$(EXP_REPEATS)" \
+			SOLVE_MPI_REPEATS=1 \
 			SOLVE_MPI_RUNTIME_S=0 \
 			SOLVE_MPI_STAGNATION_EPOCHS="$(EXP_STAGNATION_EPOCHS)" \
 			SOLVE_MPI_MIN_REL_IMPROVEMENT="$(EXP_MIN_REL_IMPROVEMENT)"; \
@@ -188,7 +188,7 @@ exp_weak_hybrid:
 			SOLVE_MPI_RANKS="$$r" \
 			SOLVE_MPI_OMP_THREADS="$$t" \
 			SOLVE_MPI_LAUNCHER="$(EXP_MPI_LAUNCHER)" \
-			SOLVE_MPI_REPEATS="$(EXP_REPEATS)" \
+			SOLVE_MPI_REPEATS=1 \
 			SOLVE_MPI_RUNTIME_S=0 \
 			SOLVE_MPI_STAGNATION_EPOCHS="$(EXP_STAGNATION_EPOCHS)" \
 			SOLVE_MPI_MIN_REL_IMPROVEMENT="$(EXP_MIN_REL_IMPROVEMENT)"; \
