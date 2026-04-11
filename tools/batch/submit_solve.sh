@@ -13,7 +13,6 @@ Opzioni:
   --nodes N               Override numero nodi
   --ntasks N              Override numero task Slurm (MPI ranks allocabili)
   --cpus N                Override cpus-per-task
-  --mem SIZE              Override memoria (es. 32G)
   --partition NAME        Override partizione
   --account NAME          Override account
   --qos NAME              Override qos (default nel job: students_limit)
@@ -26,7 +25,7 @@ Esempi:
   tools/batch/submit_solve.sh --target solve_seq \
     --make-args "SOLVE_CLIENTS=500,1000 SOLVE_SEQ_REPEATS=3 SOLVE_SEQ_RUNTIME_S=60"
 
-  tools/batch/submit_solve.sh --target solve_mpi --cpus 32 --mem 64G \
+  tools/batch/submit_solve.sh --target solve_mpi --cpus 32 \
     --make-args "SOLVE_CLIENTS=4000,8000 SOLVE_MPI_RANKS=4 SOLVE_MPI_OMP_THREADS=32 SOLVE_MPI_LAUNCHER=mpirun SOLVE_MPI_REPEATS=3"
 
   tools/batch/submit_solve.sh --target solve_cuda --partition gpu --gres gpu:1 \
@@ -75,10 +74,6 @@ while [[ $# -gt 0 ]]; do
     --cpus)
       sbatch_args+=(--cpus-per-task "${2:-}")
       has_cpus=1
-      shift 2
-      ;;
-    --mem)
-      sbatch_args+=(--mem "${2:-}")
       shift 2
       ;;
     --partition)
