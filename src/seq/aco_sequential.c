@@ -203,7 +203,7 @@ static int seq_shared_init(SeqShared *shared, int n) {
   memset(shared, 0, sizeof(*shared));
   shared->n = n;
   shared->candidate_k = choose_candidate_count(n);
-  shared->candidate_k = clamp_int(shared->candidate_k, 1, ACO_MAX_CANDIDATES);
+  shared->candidate_k = clamp_int(shared->candidate_k, 1, n);
   if (shared->candidate_k > n) {
     shared->candidate_k = n;
   }
