@@ -31,7 +31,7 @@ tail -n +2 "$manifest" \
       rc=$?
       end_ns="$(date +%s%N)"
       elapsed="$(awk "BEGIN {printf \"%.6f\", ($end_ns-$start_ns)/1000000000}")"
-      rss_kb="$(cat "$rss_file" 2>/dev/null)"
+      rss_kb="$(grep -Eo '[0-9]+' "$rss_file" | tail -n1)"
       rm -f "$rss_file"
       rss_gb=""
       if [ -n "$rss_kb" ]; then

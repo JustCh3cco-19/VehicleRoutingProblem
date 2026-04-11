@@ -47,8 +47,9 @@ tail -n +2 "$manifest" \
           "${launcher_cmd[@]}" ./aco_vrp_openmp_mpi.out "$instance_path" "$K" "$m" "$seed_run" </dev/null 2>&1)
         rc=$?
 
-        elapsed="$(cut -d, -f1 "$stats_file" 2>/dev/null)"
-        rss_kb="$(cut -d, -f2 "$stats_file" 2>/dev/null)"
+        stats_line="$(grep -Eo '[0-9]+([.][0-9]+)?,[0-9]+' "$stats_file" | tail -n1)"
+        elapsed="$(printf '%s' "$stats_line" | cut -d, -f1)"
+        rss_kb="$(printf '%s' "$stats_line" | cut -d, -f2)"
         rm -f "$stats_file"
         [ -n "$elapsed" ] || elapsed=""
         rss_gb=""
