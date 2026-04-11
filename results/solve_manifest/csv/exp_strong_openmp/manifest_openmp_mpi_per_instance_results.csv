@@ -1,0 +1,16 @@
+name,profile,instance_path,n,K,m,solver_seed,instance_seed,layout_id,run_id,status,elapsed_s,max_rss_gb,best_cost,error,mpi_ranks,omp_threads,batch_id
+n2000_k8_s19002,generated_mpi,instances/test_aligned/n2000_k8_s19002.vrp,2000,8,64,1234,19002,grid100,1,ok,27.56,0.075977,5157.509,,1,1,strong_openmp_clients_t1
+n4000_k8_s19003,generated_mpi,instances/test_aligned/n4000_k8_s19003.vrp,4000,8,32,1234,19003,grid100,1,ok,46.47,0.256702,7456.659,,1,1,strong_openmp_clients_t1
+n8000_k8_s19004,generated_mpi,instances/test_aligned/n8000_k8_s19004.vrp,8000,8,32,1234,19004,grid100,1,ok,244.15,0.975567,10447.029,,1,1,strong_openmp_clients_t1
+n2000_k8_s19002,generated_mpi,instances/test_aligned/n2000_k8_s19002.vrp,2000,8,64,1234,19002,grid100,1,ok,21.92,0.076859,5204.206,,1,2,strong_openmp_clients_t2
+n4000_k8_s19003,generated_mpi,instances/test_aligned/n4000_k8_s19003.vrp,4000,8,32,1234,19003,grid100,1,ok,29.79,0.258659,7512.278,,1,2,strong_openmp_clients_t2
+n8000_k8_s19004,generated_mpi,instances/test_aligned/n8000_k8_s19004.vrp,8000,8,32,1234,19004,grid100,1,ok,88.68,0.977970,10399.875,,1,2,strong_openmp_clients_t2
+n2000_k8_s19002,generated_mpi,instances/test_aligned/n2000_k8_s19002.vrp,2000,8,64,1234,19002,grid100,1,ok,13.39,0.078880,5194.344,,1,4,strong_openmp_clients_t4
+n4000_k8_s19003,generated_mpi,instances/test_aligned/n4000_k8_s19003.vrp,4000,8,32,1234,19003,grid100,1,ok,32.67,0.261951,7477.370,,1,4,strong_openmp_clients_t4
+n8000_k8_s19004,generated_mpi,instances/test_aligned/n8000_k8_s19004.vrp,8000,8,32,1234,19004,grid100,1,ok,119.96,0.982956,10465.889,,1,4,strong_openmp_clients_t4
+n2000_k8_s19002,generated_mpi,instances/test_aligned/n2000_k8_s19002.vrp,2000,8,64,1234,19002,grid100,1,ok,20.14,0.082314,5191.319,,1,8,strong_openmp_clients_t8
+n4000_k8_s19003,generated_mpi,instances/test_aligned/n4000_k8_s19003.vrp,4000,8,32,1234,19003,grid100,1,ok,56.42,0.268551,7504.181,,1,8,strong_openmp_clients_t8
+n8000_k8_s19004,generated_mpi,instances/test_aligned/n8000_k8_s19004.vrp,8000,8,32,1234,19004,grid100,1,ok,87.34,0.992302,10457.272,,1,8,strong_openmp_clients_t8
+n2000_k8_s19002,generated_mpi,instances/test_aligned/n2000_k8_s19002.vrp,2000,8,64,1234,19002,grid100,1,ok,20.58,0.089115,5182.280,,1,16,strong_openmp_clients_t16
+n4000_k8_s19003,generated_mpi,instances/test_aligned/n4000_k8_s19003.vrp,4000,8,32,1234,19003,grid100,1,ok,57.69,0.282345,7449.216,,1,16,strong_openmp_clients_t16
+n8000_k8_s19004,generated_mpi,instances/test_aligned/n8000_k8_s19004.vrp,8000,8,32,1234,19004,grid100,1,ok,86.05,1.011692,10428.732,,1,16,strong_openmp_clients_t16
