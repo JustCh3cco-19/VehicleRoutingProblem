@@ -52,25 +52,30 @@ run_duration_sum="0.0"
 run_duration_count=0
 run_rss_sum_gb="0.0"
 run_rss_count=0
+declare -A n_duration_sum
+declare -A n_duration_count
+declare -A n_rss_sum_gb
+declare -A n_rss_count
 
 tail -n +2 "$manifest" \
   | { if [ -n "$clients" ]; then awk -F, -v list="$clients" 'BEGIN{split(list,a,","); for(i in a) wanted[a[i]]=1} ($4 in wanted)'; else cat; fi; } \
   | { if [ "$limit" -gt 0 ]; then head -n "$limit"; else cat; fi; } \
   | while IFS=, read -r profile name instance_path n K m solver_seed instance_seed layout_id capacity_formula; do
       done_runs=$((done_runs + 1))
-      if [ "$run_duration_count" -gt 0 ]; then
-        eta_run_s="$(awk "BEGIN {printf \"%.2f\", (${run_duration_sum}) / ${run_duration_count}}")"
+      if [ "${n_duration_count[$n]:-0}" -gt 0 ]; then
+        eta_run_s="$(awk "BEGIN {printf \"%.2f\", (${n_duration_sum[$n]}) / ${n_duration_count[$n]}}")"
       elif [ "$runtime_s" != "0" ]; then
         eta_run_s="$runtime_s"
       else
         eta_run_s="n/a"
       fi
-      if [ "$run_rss_count" -gt 0 ]; then
-        eta_mem_gb="$(awk "BEGIN {printf \"%.3f\", (${run_rss_sum_gb}) / ${run_rss_count}}")"
+      if [ "${n_rss_count[$n]:-0}" -gt 0 ]; then
+        eta_mem_gb="$(awk "BEGIN {printf \"%.3f\", (${n_rss_sum_gb[$n]}) / ${n_rss_count[$n]}}")"
       else
         eta_mem_gb="n/a"
       fi
-      echo "[pyvrp] ${name} (${done_runs}/${total_runs}) eta_run_s=${eta_run_s} eta_mem_gb=${eta_mem_gb}"
+      echo "[pyvrp] ${name} (${done_runs}/${total_runs})"
+      echo "[pyvrp] run_stimata: eta_run_s=${eta_run_s} eta_mem_gb=${eta_mem_gb}"
 
       sol_file="${sol_dir}/${name}_pyvrp_solution.txt"
       rss_file="$(mktemp)"
@@ -84,6 +89,8 @@ tail -n +2 "$manifest" \
       if printf '%s' "$elapsed" | grep -Eq '^[0-9]+([.][0-9]+)?$'; then
         run_duration_sum="$(awk "BEGIN {printf \"%.6f\", (${run_duration_sum}) + (${elapsed})}")"
         run_duration_count=$((run_duration_count + 1))
+        n_duration_sum[$n]="$(awk "BEGIN {printf \"%.6f\", (${n_duration_sum[$n]:-0}) + (${elapsed})}")"
+        n_duration_count[$n]=$(( ${n_duration_count[$n]:-0} + 1 ))
       fi
       rss_kb="$(grep -Eo '[0-9]+' "$rss_file" | tail -n1)"
       rm -f "$rss_file"
@@ -93,6 +100,8 @@ tail -n +2 "$manifest" \
         if printf '%s' "$rss_gb" | grep -Eq '^[0-9]+([.][0-9]+)?$'; then
           run_rss_sum_gb="$(awk "BEGIN {printf \"%.6f\", (${run_rss_sum_gb}) + (${rss_gb})}")"
           run_rss_count=$((run_rss_count + 1))
+          n_rss_sum_gb[$n]="$(awk "BEGIN {printf \"%.6f\", (${n_rss_sum_gb[$n]:-0}) + (${rss_gb})}")"
+          n_rss_count[$n]=$(( ${n_rss_count[$n]:-0} + 1 ))
         fi
       fi
 
@@ -104,7 +113,8 @@ tail -n +2 "$manifest" \
         err="$(printf '%s' "$out" | tr '\n' ' ' | tr ',' ';')"
         echo "$name,$profile,$instance_path,$n,$K,$m,$solver_seed,$instance_seed,$layout_id,error,$elapsed,$rss_gb,,$err" >> "$csv"
       fi
-      echo "[pyvrp] $name done"
+      echo "[pyvrp] run_effettiva: elapsed_s=${elapsed:-n/a} mem_gb=${rss_gb:-n/a} status=$([ "$rc" -eq 0 ] && echo ok || echo error)"
+      echo
     done
 
 echo "wrote $csv"
