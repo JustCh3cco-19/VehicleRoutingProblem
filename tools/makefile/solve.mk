@@ -26,7 +26,7 @@ solve_seq: solve_prepare
 		| { if [ "$(SOLVE_LIMIT)" -gt 0 ]; then head -n "$(SOLVE_LIMIT)"; else cat; fi; } \
 		| wc -l); \
 	if [ "$$rows" -gt 0 ]; then \
-		$(MAKE) all; \
+		$(MAKE) seq; \
 	else \
 		echo "[seq] no matching rows in manifest -> skipping build"; \
 	fi

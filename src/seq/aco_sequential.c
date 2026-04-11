@@ -128,20 +128,9 @@ static int aligned_row_stride(int cols, size_t elem_size) {
 /*
  * Function:  choose_candidate_count
  * ---------------------------------
- * chooses nearest-neighbor candidate count.
+ * returns the full candidate set size for naive sequential selection.
  */
-static int choose_candidate_count(int n) {
-  if (n <= 8) {
-    return n;
-  }
-  if (n <= 256) {
-    return 16;
-  }
-  if (n <= 4096) {
-    return 24;
-  }
-  return 32;
-}
+static int choose_candidate_count(int n) { return n; }
 
 static double wall_time_seconds(void) {
 #ifdef _OPENMP
@@ -245,64 +234,31 @@ static int seq_shared_init(SeqShared *shared, int n) {
 /*
  * Function:  seq_shared_build_candidates
  * --------------------------------------
- * builds nearest-neighbor indices and eta^beta matrix once.
+ * builds full candidate indices and eta^beta matrix once.
  */
 static void seq_shared_build_candidates(SeqShared *shared, double **c,
                                         double beta) {
   int n = shared->n;
-  int k = shared->candidate_k;
   int stride = shared->stride;
 
   for (int i = 0; i <= n; ++i) {
-    int best_nodes[ACO_MAX_CANDIDATES];
-    double best_dists[ACO_MAX_CANDIDATES];
-
-    for (int t = 0; t < k; ++t) {
-      best_nodes[t] = 0;
-      best_dists[t] = DBL_MAX;
-    }
+    int *cand_row = shared->candidate_idx + (size_t)i * (size_t)stride;
+    float *eta_row = shared->eta_beta + (size_t)i * (size_t)stride;
+    int pos = 0;
 
     for (int node = 1; node <= n; ++node) {
       if (node == i) {
         continue;
       }
-
-      double d = c[i][node];
-      int pos = -1;
-      for (int t = 0; t < k; ++t) {
-        if (d < best_dists[t]) {
-          pos = t;
-          break;
-        }
-      }
-
-      if (pos < 0) {
-        continue;
-      }
-
-      for (int s = k - 1; s > pos; --s) {
-        best_dists[s] = best_dists[s - 1];
-        best_nodes[s] = best_nodes[s - 1];
-      }
-      best_dists[pos] = d;
-      best_nodes[pos] = node;
-    }
-
-    int *cand_row = shared->candidate_idx + (size_t)i * (size_t)stride;
-    float *eta_row = shared->eta_beta + (size_t)i * (size_t)stride;
-
-    for (int t = 0; t < k; ++t) {
-      int node = best_nodes[t];
-      cand_row[t] = node;
-      if (node > 0) {
+      cand_row[pos] = node;
+      {
         double eta = 1.0 / (c[i][node] + ACO_EPS);
-        eta_row[t] = (float)fast_pow_nonneg(eta, beta);
-      } else {
-        eta_row[t] = 0.0f;
+        eta_row[pos] = (float)fast_pow_nonneg(eta, beta);
       }
+      ++pos;
     }
 
-    for (int t = k; t < stride; ++t) {
+    for (int t = pos; t < stride; ++t) {
       cand_row[t] = 0;
       eta_row[t] = 0.0f;
     }
@@ -451,85 +407,62 @@ static int find_nearest_unvisited(const SeqShared *shared, int current,
 }
 
 /*
- * Function:  sum_weights
- * ----------------------
- * sums a float buffer using AVX2 when available.
- */
-static double sum_weights(const float *weights, int count) {
-#if defined(__AVX2__)
-  __m256 vsum = _mm256_setzero_ps();
-  int i = 0;
-  for (; i + 8 <= count; i += 8) {
-    __m256 w = _mm256_loadu_ps(weights + i);
-    vsum = _mm256_add_ps(vsum, w);
-  }
-
-  float tmp[8];
-  _mm256_storeu_ps(tmp, vsum);
-  double sum = (double)tmp[0] + (double)tmp[1] + (double)tmp[2] +
-               (double)tmp[3] + (double)tmp[4] + (double)tmp[5] +
-               (double)tmp[6] + (double)tmp[7];
-  for (; i < count; ++i) {
-    sum += (double)weights[i];
-  }
-  return sum;
-#else
-  double sum = 0.0;
-  for (int i = 0; i < count; ++i) {
-    sum += (double)weights[i];
-  }
-  return sum;
-#endif
-}
-
-/*
  * Function:  select_next_customer
  * -------------------------------
- * candidate-first roulette selection with nearest-neighbor fallback.
+ * roulette selection over all available customers with nearest fallback.
  */
 static int select_next_customer(const SeqShared *shared, int current,
                                 const uint64_t *restrict visited,
                                 double **restrict c,
                                 unsigned int *restrict rng_state) {
-  float masked_weights[ACO_MAX_CANDIDATES];
-
   const int *cand_row =
       shared->candidate_idx + (size_t)current * (size_t)shared->stride;
   const float *score_row =
       shared->score + (size_t)current * (size_t)shared->stride;
   int k = shared->candidate_k;
 
+  double denom = 0.0;
   for (int t = 0; t < k; ++t) {
     int node = cand_row[t];
-    int available = 0;
-    if (node > 0) {
-      uint64_t word = visited[(unsigned int)node >> 6];
-      uint64_t bit = (word >> ((unsigned int)node & 63u)) & 1u;
-      available = (bit == 0u);
+    if (node <= 0) {
+      continue;
     }
-    masked_weights[t] = score_row[t] * (float)available;
+    if (visited_is_set(visited, node)) {
+      continue;
+    }
+    double w = (double)score_row[t];
+    if (w > 0.0) {
+      denom += w;
+    }
   }
 
-  double denom = sum_weights(masked_weights, k);
   if (denom > 0.0) {
     double threshold = aco_rand01_state(rng_state) * denom;
     double cumulative = 0.0;
+    int last_valid = 0;
 
-    for (int i = 0; i < k; ++i) {
-      float w = masked_weights[i];
-      if (w <= 0.0f) {
+    for (int t = 0; t < k; ++t) {
+      int node = cand_row[t];
+      if (node <= 0) {
         continue;
       }
-      cumulative += (double)w;
+      if (visited_is_set(visited, node)) {
+        continue;
+      }
+      double w = (double)score_row[t];
+      if (w <= 0.0) {
+        continue;
+      }
+
+      cumulative += w;
+      last_valid = node;
       if (cumulative >= threshold) {
-        return cand_row[i];
+        return node;
       }
     }
 
-    for (int i = k - 1; i >= 0; --i) {
-      if (masked_weights[i] > 0.0f) {
-        return cand_row[i];
-      }
+    if (last_valid > 0) {
+      return last_valid;
     }
   }
 

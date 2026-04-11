@@ -10,7 +10,7 @@ PERF_FLAGS?=
 LIBS=-lm
 NVCC?=$(if $(wildcard /usr/local/cuda-12.8/bin/nvcc),/usr/local/cuda-12.8/bin/nvcc,nvcc)
 CUDA_ARCH?=sm_120
-CUDA_VARIANT?=v2
+CUDA_VARIANT?=v6
 NVCC_FLAGS=-Iinclude -O3 -std=c++17
 CUDA_ARCH_FLAG=$(if $(strip $(CUDA_ARCH)),-arch=$(CUDA_ARCH),)
 COVERAGE_FLAGS=-g --coverage

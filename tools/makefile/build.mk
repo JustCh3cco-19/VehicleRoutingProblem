@@ -1,4 +1,6 @@
-all: $(BIN)
+all: $(BIN) $(OPENMP_MPI_BIN) $(CUDA_BIN)
+
+seq: $(BIN)
 
 src/main.o: src/main.c include/aco.h include/instance_parser.h include/matrix.h include/solution.h
 	$(CC) $(EXTRA_FLAGS) $(FLAGS) $(FORCE_OPT) $(PERF_FLAGS) -c $< -o $@
