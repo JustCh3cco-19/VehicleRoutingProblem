@@ -1,0 +1,2 @@
+profile,name,instance_path,n,K,m,solver_seed,instance_seed,layout_id,capacity_formula
+generated_mpi,n8000_k8_s19104_m128,instances/test_aligned/n8000_k8_s19104_m128.vrp,8000,8,128,1234,19104,grid100,ceil((1+20/100)*n/K)
