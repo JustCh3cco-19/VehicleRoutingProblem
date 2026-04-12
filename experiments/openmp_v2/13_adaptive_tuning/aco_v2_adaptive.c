@@ -103,10 +103,16 @@ static long get_l3_cache_size(void) {
 
 static int tune_candidate_k(int n, long l3_size) {
     if (l3_size <= 0) return 32;
-    double target_bytes = (double)l3_size * 0.6;
-    int k = (int)(target_bytes / ((double)(n + 1) * 4.0));
-    if (k < 16) return 16;
-    if (k > V2_MAX_CANDS) return V2_MAX_CANDS;
+    // Budget ragionata: consideriamo sia cand_idx (4 byte) che score_mat (4 byte)
+    // Totale 8 byte per candidato per ogni nodo.
+    // Safety factor 0.7 per lasciare spazio a bitmask e stack.
+    double target_bytes = (double)l3_size * 0.7;
+    int k = (int)(target_bytes / ((double)(n + 1) * 8.0));
+    
+    if (k < 16) k = 16;
+    if (k > V2_MAX_CANDS) k = V2_MAX_CANDS;
+    
+    // Log per debug (solo rank 0 via master rank check esterno)
     return k;
 }
 

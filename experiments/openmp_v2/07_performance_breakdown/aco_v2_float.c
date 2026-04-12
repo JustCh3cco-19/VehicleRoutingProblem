@@ -20,21 +20,11 @@
 #include <mpi.h>
 #endif
 
-#if defined(__AVX2__)
-#include <immintrin.h>
-#endif
-
 #define V2_ALIGNMENT 64u
-#define V2_MAX_CANDS 512
+#define V2_MAX_CANDS 64
 #define V2_EPS 1e-7f
 
-/* -- Matrices in FLOAT (HPC Optimized) -- */
-typedef struct {
-    int n;
-    int stride;
-    float *data;
-    float **rows;
-} MatrixFloat;
+/* -- Helper Statici (Float) -- */
 
 static size_t align_up_size(size_t value, size_t alignment) {
     size_t rem = value % alignment;
@@ -45,11 +35,27 @@ static size_t align_up_64(size_t value) {
     return align_up_size(value, V2_ALIGNMENT);
 }
 
+static void *aligned_calloc_64(size_t bytes) {
+    size_t alloc_bytes = align_up_64(bytes);
+    void *ptr = aligned_alloc(V2_ALIGNMENT, alloc_bytes);
+    if (!ptr) return NULL;
+    memset(ptr, 0, alloc_bytes);
+    return ptr;
+}
+
+/* -- Matrices in FLOAT -- */
+typedef struct {
+    int n;
+    int stride;
+    float *data;
+    float **rows;
+} MatrixFloat;
+
 static MatrixFloat *matrix_create_float(int n) {
     MatrixFloat *m = malloc(sizeof(*m));
     m->n = n;
     size_t row_bytes = (size_t)(n + 1) * sizeof(float);
-    m->stride = (int)(align_up_64(row_bytes) / sizeof(float));
+    m->stride = (int)(align_up_size(row_bytes, V2_ALIGNMENT) / sizeof(float));
     m->data = aligned_alloc(V2_ALIGNMENT, (size_t)(n + 1) * (size_t)m->stride * sizeof(float));
     m->rows = malloc((size_t)(n + 1) * sizeof(float *));
     for (int i = 0; i <= n; i++) m->rows[i] = m->data + (size_t)i * (size_t)m->stride;
@@ -60,16 +66,6 @@ static MatrixFloat *matrix_create_float(int n) {
 static void matrix_free_float(MatrixFloat *m) {
     if (!m) return;
     free(m->data); free(m->rows); free(m);
-}
-
-/* -- Helper Statici (Float) -- */
-
-static void *aligned_calloc_64(size_t bytes) {
-    size_t alloc_bytes = align_up_64(bytes);
-    void *ptr = aligned_alloc(V2_ALIGNMENT, alloc_bytes);
-    if (!ptr) return NULL;
-    memset(ptr, 0, alloc_bytes);
-    return ptr;
 }
 
 static double wall_time(void) {
@@ -106,7 +102,7 @@ static int tune_candidate_k(int n, long l3_size) {
     double target_bytes = (double)l3_size * 0.6;
     int k = (int)(target_bytes / ((double)(n + 1) * 4.0));
     if (k < 16) return 16;
-    if (k > V2_MAX_CANDS) return V2_MAX_CANDS;
+    if (k > 64) return 64;
     return k;
 }
 
@@ -115,23 +111,6 @@ static float fast_powf(float base, float exp) {
     if (exp == 2.0f) return base * base;
     if (exp == 0.5f) return sqrtf(base);
     return powf(base, exp);
-}
-
-static void load_v2_directives(double *max_runtime_sec, int *max_stagnation_epochs, double *min_rel_improvement) {
-  const char *s_timeout = getenv("ACO_SOLVER_TIMEOUT_SECONDS");
-  const char *s_stagnation = getenv("ACO_SOLVER_STAGNATION_EPOCHS");
-  const char *s_rel = getenv("ACO_SOLVER_MIN_REL_IMPROVEMENT");
-  *max_runtime_sec = (s_timeout && *s_timeout) ? atof(s_timeout) : 0.0;
-  *max_stagnation_epochs = (s_stagnation && *s_stagnation) ? atoi(s_stagnation) : 0;
-  *min_rel_improvement = (s_rel && *s_rel) ? atof(s_rel) : 1e-3;
-}
-
-static int is_sig_imp(double prev_best, double new_best, double min_rel_improvement) {
-  if (prev_best >= DBL_MAX || new_best >= DBL_MAX) return (new_best < prev_best);
-  if (new_best >= prev_best - V2_EPS) return 0;
-  double abs_gain = prev_best - new_best;
-  double rel_gain = abs_gain / fmax(prev_best, V2_EPS);
-  return rel_gain + V2_EPS >= min_rel_improvement;
 }
 
 typedef struct {
@@ -151,7 +130,7 @@ static void v2_shared_free(V2RankShared *s) {
 static int v2_shared_init(V2RankShared *s, int n, int cand_k, const MatrixFloat *c_mat, double beta) {
     s->n = n; s->cand_k = cand_k;
     size_t row_bytes = (size_t)s->cand_k * sizeof(float);
-    s->stride = (int)(align_up_64(row_bytes) / sizeof(float));
+    s->stride = (int)(align_up_size(row_bytes, V2_ALIGNMENT) / sizeof(float));
     s->visited_words = (n / 64) + 1;
     size_t total_elems = (size_t)(n + 1) * (size_t)s->stride;
     s->cand_idx = aligned_calloc_64(total_elems * sizeof(int));
@@ -196,47 +175,18 @@ static int v2_ws_init(AcoThreadWorkspace *ws, int K, int n, int words) {
 }
 
 static int find_nearest_unvisited(const V2RankShared *s, int curr, const uint64_t *visited, const MatrixFloat *c) {
-    int best = 0;
-    float best_d = FLT_MAX;
+    int best = 0; float best_d = FLT_MAX;
     const float *row = c->rows[curr];
-
-    #if defined(__AVX2__)
-    // Prova a scansionare a blocchi di 8 con SIMD se il nodo non è visitato
-    // Nota: La bitmask è ancora la guida primaria per evitare caricamenti inutili
-    #endif
-
     for (int w = 0; w < s->visited_words; w++) {
-        uint64_t v = visited[w];
-        if (v == 0xFFFFFFFFFFFFFFFFull) continue;
-        uint64_t mask = ~v;
-        int base = w << 6;
+        uint64_t v = visited[w]; if (v == 0xFFFFFFFFFFFFFFFFull) continue;
+        uint64_t mask = ~v; int base = w << 6;
         if (w == s->visited_words - 1) {
-            int bits = (s->n % 64) + 1;
-            if (bits < 64) mask &= (1ull << bits) - 1;
+            int bits = (s->n % 64) + 1; if (bits < 64) mask &= (1ull << bits) - 1;
         }
         if (w == 0) mask &= ~1ull;
-
-        #if defined(__AVX2__)
-        // Ottimizzazione: se il blocco da 64 ha molti bit liberi, la scansione SIMD è più veloce
-        // del loop ctzll se fatta con intelligenza. Per ora usiamo ctzll ma pre-carichiamo i dati.
-        #endif
-
         while (mask != 0) {
-            int bit = __builtin_ctzll(mask);
-            int node = base + bit;
-            
-            // Prefetching manuale del prossimo nodo possibile
-            uint64_t next_mask = mask & (mask - 1);
-            if (next_mask != 0) {
-                int next_bit = __builtin_ctzll(next_mask);
-                __builtin_prefetch(&row[base + next_bit], 0, 3);
-            }
-
-            float d = row[node];
-            if (d < best_d) {
-                best_d = d;
-                best = node;
-            }
+            int bit = __builtin_ctzll(mask); int node = base + bit;
+            if (row[node] < best_d) { best_d = row[node]; best = node; }
             mask &= mask - 1;
         }
     }
@@ -293,6 +243,7 @@ static void sync_tau_v2(MatrixFloat *tau, int mpi_size) {
 }
 #endif
 
+// Cost needs double for precision
 static double solution_cost_f(const Solution *s, float **c) {
     double total = 0.0;
     for (int i = 0; i < s->K; i++) {
@@ -310,7 +261,13 @@ void aco_vrp_v2_run(int n, int K, int cap, int m, double **c, double alpha, doub
 #endif
 
     double max_runtime_sec; int max_stagnation_epochs; double min_rel_improvement;
-    load_v2_directives(&max_runtime_sec, &max_stagnation_epochs, &min_rel_improvement);
+    const char *s_timeout = getenv("ACO_SOLVER_TIMEOUT_SECONDS");
+    const char *s_stagnation = getenv("ACO_SOLVER_STAGNATION_EPOCHS");
+    const char *s_rel = getenv("ACO_SOLVER_MIN_REL_IMPROVEMENT");
+    max_runtime_sec = (s_timeout && *s_timeout) ? atof(s_timeout) : 0.0;
+    max_stagnation_epochs = (s_stagnation && *s_stagnation) ? atoi(s_stagnation) : 0;
+    min_rel_improvement = (s_rel && *s_rel) ? atof(s_rel) : 1e-3;
+
     long l3_size = get_l3_cache_size(); int cand_k = tune_candidate_k(n, l3_size);
     int total_m = (m <= 0) ? (n / 2) * mpi_size : m;
     int local_m = total_m / mpi_size + (mpi_rank < (total_m % mpi_size));
@@ -333,13 +290,7 @@ void aco_vrp_v2_run(int n, int K, int cap, int m, double **c, double alpha, doub
     const char *s_fixed = getenv("ACO_SOLVER_FIXED_EPOCHS");
     int fixed_epochs = (s_fixed && *s_fixed) ? atoi(s_fixed) : 0;
 
-    if (mpi_rank == 0) {
-        printf("Hybrid V2 Solver (FLOAT Optimized) starting... (N=%d, K=%d, M=%d)\n", n, K, total_m);
-        if (fixed_epochs > 0) printf("  FIXED EPOCHS MODE: %d iterations\n", fixed_epochs);
-        if (l3_size > 0) printf("  Detected L3 Cache: %.2f MB. Auto-tuned K_cand = %d\n", (double)l3_size / (1024*1024), cand_k);
-        const char *omp_sched = getenv("OMP_SCHEDULE");
-        printf("  OMP_SCHEDULE: %s\n", omp_sched ? omp_sched : "default (static)");
-    }
+    double t_score = 0, t_ant = 0, t_evap = 0, t_dep = 0, t_mpi = 0;
 
     #pragma omp parallel default(shared) proc_bind(close)
     {
@@ -355,6 +306,7 @@ void aco_vrp_v2_run(int n, int K, int cap, int m, double **c, double alpha, doub
             #pragma omp barrier
             if (stop_now) break;
 
+            double ts = wall_time();
             #pragma omp for schedule(runtime)
             for (int i = 0; i <= n; i++) {
                 int *cands = shared.cand_idx + (size_t)i * (size_t)shared.stride;
@@ -367,6 +319,8 @@ void aco_vrp_v2_run(int n, int K, int cap, int m, double **c, double alpha, doub
                 }
             }
             #pragma omp barrier
+            #pragma omp master
+            { t_score += wall_time() - ts; ts = wall_time(); }
 
             double t_best_c = DBL_MAX;
             #pragma omp single
@@ -381,6 +335,8 @@ void aco_vrp_v2_run(int n, int K, int cap, int m, double **c, double alpha, doub
             #pragma omp critical
             { if (t_best_c < iter_best_cost) { iter_best_cost = t_best_c; solution_copy(iter_best, ws.thread_best); } }
             #pragma omp barrier
+            #pragma omp master
+            { t_ant += wall_time() - ts; ts = wall_time(); }
 
             #pragma omp master
             {
@@ -388,18 +344,21 @@ void aco_vrp_v2_run(int n, int K, int cap, int m, double **c, double alpha, doub
                 if (mpi_size > 1) { double g_min = iter_best_cost; MPI_Allreduce(MPI_IN_PLACE, &g_min, 1, MPI_DOUBLE, MPI_MIN, MPI_COMM_WORLD); iter_best_cost = g_min; }
 #endif
                 if (iter_best_cost < *best_cost) {
-                    if (is_sig_imp(*best_cost, iter_best_cost, min_rel_improvement)) iter_since_best = 0; else iter_since_best++;
+                    double abs_g = *best_cost - iter_best_cost;
+                    double rel_g = abs_g / fmax(*best_cost, 1e-9);
+                    if (rel_g + 1e-9 >= min_rel_improvement) iter_since_best = 0; else iter_since_best++;
                     *best_cost = iter_best_cost; solution_copy(best_sol, iter_best);
                     tau_max = (float)(1.0 / ((1.0 - rho) * (*best_cost))); tau_min = tau_max * 0.05f;
-                    if (mpi_rank == 0) printf("Epoch %d: New Best Cost = %.3f (T = %.2fs)\n", iter, *best_cost, wall_time()-start_time);
                 } else iter_since_best++;
             }
             #pragma omp barrier
-            if (stop_now) break;
 
             float rho_f = (float)rho;
             #pragma omp for collapse(2) schedule(runtime)
             for (int i = 0; i <= n; i++) for (int j = 0; j <= n; j++) if (i != j) tau_mat->rows[i][j] *= (1.0f - rho_f);
+            #pragma omp barrier
+            #pragma omp master
+            { t_evap += wall_time() - ts; ts = wall_time(); }
 
             float dep = (float)(0.3 * Q / fmax(iter_best_cost, 1e-9));
             #pragma omp for schedule(runtime)
@@ -427,6 +386,9 @@ void aco_vrp_v2_run(int n, int K, int cap, int m, double **c, double alpha, doub
                   }
               }
             }
+            #pragma omp barrier
+            #pragma omp master
+            { t_dep += wall_time() - ts; ts = wall_time(); }
 
             #pragma omp for collapse(2) schedule(runtime)
             for (int i = 0; i <= n; i++) {
@@ -436,24 +398,30 @@ void aco_vrp_v2_run(int n, int K, int cap, int m, double **c, double alpha, doub
                     else if (tau_mat->rows[i][j] > tau_max) tau_mat->rows[i][j] = tau_max;
                 }
             }
-
-            if (iter_since_best > 0 && (iter_since_best % 32 == 0)) {
-              #pragma omp for schedule(runtime)
-              for (int i = 0; i <= n; i++) for (int j = 0; j <= n; j++) if (i != j) tau_mat->rows[i][j] = 0.5f * tau_mat->rows[i][j] + 0.5f * (float)tau0;
-            }
-
 #ifdef USE_MPI
             #pragma omp master
             if (mpi_size > 1) sync_tau_v2(tau_mat, mpi_size);
             #pragma omp barrier
+            #pragma omp master
+            { t_mpi += wall_time() - ts; }
 #endif
         }
         v2_ws_free(&ws);
     }
 
     if (mpi_rank == 0) {
-        printf("Executed Epochs: %d\n", total_iters);
-        printf("V2 Completion. Final Best: %.3f. Time: %.3fs\n", *best_cost, wall_time() - start_time);
+        double t_total = t_score + t_ant + t_evap + t_dep + t_mpi;
+        printf("\n--- V2 FLOAT PERFORMANCE BREAKDOWN (Rank 0) ---\n");
+        printf("Phase          | Avg Time/Epoch | Percentage\n");
+        printf("---------------|----------------|-----------\n");
+        printf("Score Prep     | %14.2f ms | %5.1f%%\n", (t_score*1000)/total_iters, (t_score/t_total)*100);
+        printf("Construction   | %14.2f ms | %5.1f%%\n", (t_ant*1000)/total_iters, (t_ant/t_total)*100);
+        printf("Evaporation    | %14.2f ms | %5.1f%%\n", (t_evap*1000)/total_iters, (t_evap/t_total)*100);
+        printf("Deposit        | %14.2f ms | %5.1f%%\n", (t_dep*1000)/total_iters, (t_dep/t_total)*100);
+        printf("MPI Sync       | %14.2f ms | %5.1f%%\n", (t_mpi*1000)/total_iters, (t_mpi/t_total)*100);
+        printf("---------------|----------------|-----------\n");
+        printf("Total/Epoch    | %14.2f ms | 100.0%%\n", (t_total*1000)/total_iters);
+        printf("Final Best: %.3f. Time: %.3fs\n", *best_cost, wall_time() - start_time);
     }
     matrix_free_float(tau_mat); matrix_free_float(c_mat);
     free(score_mat); solution_free(iter_best); v2_shared_free(&shared);

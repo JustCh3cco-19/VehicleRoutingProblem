@@ -33,48 +33,61 @@ static size_t align_up_size(size_t value, size_t alignment) {
  *  returns: matrix pointer on success
  *           NULL on allocation failure
  */
-double **matrix_alloc(int n) {
-  if (n < 0) {
-    return NULL;
-  }
+Matrix *matrix_create(int n) {
+  if (n < 0) return NULL;
+
+  Matrix *m = malloc(sizeof(Matrix));
+  if (!m) return NULL;
 
   int size = n + 1;
   size_t row_bytes = (size_t)size * sizeof(double);
   size_t padded_row_bytes = align_up_size(row_bytes, MATRIX_ALIGNMENT);
-  size_t stride = padded_row_bytes / sizeof(double);
-  size_t total_elems = (size_t)size * stride;
+  m->stride = (int)(padded_row_bytes / sizeof(double));
+  m->n = n;
+
+  size_t total_elems = (size_t)size * (size_t)m->stride;
   size_t total_bytes = total_elems * sizeof(double);
   size_t aligned_total_bytes = align_up_size(total_bytes, MATRIX_ALIGNMENT);
 
-  double *data = aligned_alloc(MATRIX_ALIGNMENT, aligned_total_bytes);
-  if (!data) {
+  m->data = aligned_alloc(MATRIX_ALIGNMENT, aligned_total_bytes);
+  if (!m->data) {
+    free(m);
     return NULL;
   }
-  memset(data, 0, aligned_total_bytes);
+  memset(m->data, 0, aligned_total_bytes);
 
-  double **m = malloc((size_t)size * sizeof(double *));
-  if (!m) {
-    free(data);
+  m->rows = malloc((size_t)size * sizeof(double *));
+  if (!m->rows) {
+    free(m->data);
+    free(m);
     return NULL;
   }
 
   for (int i = 0; i < size; ++i) {
-    m[i] = data + (size_t)i * stride;
+    m->rows[i] = m->data + (size_t)i * (size_t)m->stride;
   }
 
   return m;
 }
 
-/*
- * Function:  matrix_free
- * ----------------------
- * frees a matrix allocated by matrix_alloc by releasing contiguous data first
- * and row-pointer array second.
- *
- *  m: matrix pointer returned by matrix_alloc; NULL is accepted
- *
- *  returns: nothing
- */
+void matrix_free_handle(Matrix *m) {
+  if (!m) return;
+  free(m->rows);
+  free(m->data);
+  free(m);
+}
+
+double **matrix_alloc(int n) {
+  Matrix *m = matrix_create(n);
+  if (!m) return NULL;
+  double **rows = m->rows;
+  // We lose the handle here in legacy mode, but this matches old behavior
+  // Actually, to keep it compatible with matrix_free(m[0], m), we'd need to leak m.
+  // Let's just keep the old implementation for matrix_alloc to be safe.
+  free(m); // but m->rows and m->data are still valid
+  return rows;
+}
+
 void matrix_free(double **m) {
   if (!m) return;
   free(m[0]);

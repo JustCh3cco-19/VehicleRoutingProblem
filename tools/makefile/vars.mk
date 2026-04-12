@@ -41,6 +41,10 @@ OBJ=src/main.o $(SEQ_OBJ) $(ACO_SHARED_OBJ) $(SOLUTION_OBJ) $(MATRIX_OBJ) $(INST
 
 OPENMP_MPI_BIN=aco_vrp_openmp_mpi.out
 OPENMP_MPI_SRC=src/main.c $(PAR_SRC) $(ACO_SHARED_SRC) $(SOLUTION_SRC) $(MATRIX_SRC) $(INSTANCE_PARSER_SRC)
+OPENMP_MPI_V2_BIN=aco_vrp_v2_openmp_mpi.out
+OPENMP_MPI_V2_SRC=src/main.c src/openmp-mpi/aco_v2.c $(ACO_SHARED_SRC) $(SOLUTION_SRC) $(MATRIX_SRC) $(INSTANCE_PARSER_SRC)
+OPENMP_MPI_V3_BIN=aco_vrp_v3_openmp_mpi.out
+OPENMP_MPI_V3_SRC=src/main_v3.c src/openmp-mpi/aco_v3.c $(ACO_SHARED_SRC) $(SOLUTION_SRC) $(MATRIX_SRC) $(INSTANCE_PARSER_SRC)
 CUDA_BIN=aco_vrp_cuda.out
 CUDA_MAIN_SRC=src/cuda/main_vrp.cu
 CUDA_ACO_SRC=src/cuda/aco_cuda_$(CUDA_VARIANT).cu

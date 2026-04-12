@@ -25,6 +25,25 @@ exp_strong_openmp:
 			SOLVE_MPI_MIN_REL_IMPROVEMENT="$(EXP_MIN_REL_IMPROVEMENT)"; \
 	done
 
+exp_strong_openmp_n8000_m256:
+	@threads_list="1 2 4 8 16"; \
+	for t in $$threads_list; do \
+		echo "[exp_strong_openmp_n8000_m256] mpi_ranks=1 omp_threads=$$t n=8000 m=256"; \
+		$(MAKE) solve_mpi \
+			SOLVE_MANIFEST_MPI="instances/test_aligned/manifest_openmp_mpi_n8000_m256.csv" \
+			SOLVE_CSV_DIR="$(RESULTS_ROOT)/solve_manifest/csv/exp_strong_openmp_n8000_m256" \
+			SOLVE_SOLUTIONS_DIR="$(RESULTS_ROOT)/solve_manifest/solutions/exp_strong_openmp_n8000_m256" \
+			SOLVE_BATCH_ID="strong_openmp_n8000_m256_t$$t" \
+			SOLVE_CLIENTS="8000" \
+			SOLVE_MPI_RANKS=1 \
+			SOLVE_MPI_OMP_THREADS="$$t" \
+			SOLVE_MPI_LAUNCHER="$(EXP_MPI_LAUNCHER)" \
+			SOLVE_MPI_REPEATS=1 \
+			SOLVE_MPI_RUNTIME_S=0 \
+			SOLVE_MPI_STAGNATION_EPOCHS="$(EXP_STAGNATION_EPOCHS)" \
+			SOLVE_MPI_MIN_REL_IMPROVEMENT="$(EXP_MIN_REL_IMPROVEMENT)"; \
+	done
+
 exp_strong_mpi:
 	@ranks_list="$(EXP_STRONG_MPI_RANKS)"; \
 	if [ "$$ranks_list" = "auto" ]; then \

@@ -225,13 +225,6 @@ static int find_nearest_unvisited(const V2RankShared *s, int curr, const uint64_
             int bit = __builtin_ctzll(mask);
             int node = base + bit;
             
-            // Prefetching manuale del prossimo nodo possibile
-            uint64_t next_mask = mask & (mask - 1);
-            if (next_mask != 0) {
-                int next_bit = __builtin_ctzll(next_mask);
-                __builtin_prefetch(&row[base + next_bit], 0, 3);
-            }
-
             float d = row[node];
             if (d < best_d) {
                 best_d = d;

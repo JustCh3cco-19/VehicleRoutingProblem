@@ -20,12 +20,8 @@
 #include <mpi.h>
 #endif
 
-#if defined(__AVX2__)
-#include <immintrin.h>
-#endif
-
 #define V2_ALIGNMENT 64u
-#define V2_MAX_CANDS 512
+#define V2_MAX_CANDS 64
 #define V2_EPS 1e-7f
 
 /* -- Matrices in FLOAT (HPC Optimized) -- */
@@ -106,7 +102,7 @@ static int tune_candidate_k(int n, long l3_size) {
     double target_bytes = (double)l3_size * 0.6;
     int k = (int)(target_bytes / ((double)(n + 1) * 4.0));
     if (k < 16) return 16;
-    if (k > V2_MAX_CANDS) return V2_MAX_CANDS;
+    if (k > 64) return 64;
     return k;
 }
 
@@ -196,47 +192,18 @@ static int v2_ws_init(AcoThreadWorkspace *ws, int K, int n, int words) {
 }
 
 static int find_nearest_unvisited(const V2RankShared *s, int curr, const uint64_t *visited, const MatrixFloat *c) {
-    int best = 0;
-    float best_d = FLT_MAX;
+    int best = 0; float best_d = FLT_MAX;
     const float *row = c->rows[curr];
-
-    #if defined(__AVX2__)
-    // Prova a scansionare a blocchi di 8 con SIMD se il nodo non è visitato
-    // Nota: La bitmask è ancora la guida primaria per evitare caricamenti inutili
-    #endif
-
     for (int w = 0; w < s->visited_words; w++) {
-        uint64_t v = visited[w];
-        if (v == 0xFFFFFFFFFFFFFFFFull) continue;
-        uint64_t mask = ~v;
-        int base = w << 6;
+        uint64_t v = visited[w]; if (v == 0xFFFFFFFFFFFFFFFFull) continue;
+        uint64_t mask = ~v; int base = w << 6;
         if (w == s->visited_words - 1) {
-            int bits = (s->n % 64) + 1;
-            if (bits < 64) mask &= (1ull << bits) - 1;
+            int bits = (s->n % 64) + 1; if (bits < 64) mask &= (1ull << bits) - 1;
         }
         if (w == 0) mask &= ~1ull;
-
-        #if defined(__AVX2__)
-        // Ottimizzazione: se il blocco da 64 ha molti bit liberi, la scansione SIMD è più veloce
-        // del loop ctzll se fatta con intelligenza. Per ora usiamo ctzll ma pre-carichiamo i dati.
-        #endif
-
         while (mask != 0) {
-            int bit = __builtin_ctzll(mask);
-            int node = base + bit;
-            
-            // Prefetching manuale del prossimo nodo possibile
-            uint64_t next_mask = mask & (mask - 1);
-            if (next_mask != 0) {
-                int next_bit = __builtin_ctzll(next_mask);
-                __builtin_prefetch(&row[base + next_bit], 0, 3);
-            }
-
-            float d = row[node];
-            if (d < best_d) {
-                best_d = d;
-                best = node;
-            }
+            int bit = __builtin_ctzll(mask); int node = base + bit;
+            if (row[node] < best_d) { best_d = row[node]; best = node; }
             mask &= mask - 1;
         }
     }

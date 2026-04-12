@@ -1,4 +1,7 @@
 #include "aco.h"
+#ifdef ACO_VRP_V2
+#include "aco_v2.h"
+#endif
 #include "instance_parser.h"
 #include "matrix.h"
 #include "solution.h"
@@ -12,17 +15,6 @@
 #include <mpi.h>
 #endif
 
-/*
- * Function:  fill_example_costs
- * -----------------------------
- * fills the cost matrix with a simple symmetric example:
- * c[i][j] = 0 when i == j, otherwise 1 + |i-j|.
- *
- *  c: matrix to fill
- *  n: number of customers (matrix size is n+1)
- *
- *  returns: nothing
- */
 static void fill_example_costs(double **c, int n) {
   for (int i = 0; i <= n; ++i) {
     for (int j = 0; j <= n; ++j) {
@@ -51,42 +43,16 @@ static void print_solution_routes(const Solution *best, int K) {
   }
 }
 
-/*
- * Function:  parse_int_arg
- * ------------------------
- * parses one non-negative integer argument with bounds checking.
- *
- *  s: input string
- *  out: output parsed integer when parsing succeeds
- *
- *  returns: 1 on success
- *           0 on parsing/conversion/range error
- */
 static int parse_int_arg(const char *s, int *out) {
   char *end = NULL;
   errno = 0;
   long v = strtol(s, &end, 10);
-  if (errno != 0 || end == s || *end != '\0') {
-    return 0;
-  }
-  if (v < 0 || v > 100000000L) {
-    return 0;
-  }
+  if (errno != 0 || end == s || *end != '\0') return 0;
+  if (v < 0 || v > 100000000L) return 0;
   *out = (int)v;
   return 1;
 }
 
-/*
- * Function:  parse_uint_arg
- * -------------------------
- * parses one unsigned 32-bit integer argument.
- *
- *  s: input string
- *  ok: output success flag (set to 1 on success, 0 on error)
- *
- *  returns: parsed unsigned value on success
- *           0 on error (with *ok set to 0)
- */
 static unsigned int parse_uint_arg(const char *s, int *ok) {
   char *end = NULL;
   errno = 0;
@@ -99,18 +65,6 @@ static unsigned int parse_uint_arg(const char *s, int *ok) {
   return (unsigned int)v;
 }
 
-/*
- * Function:  main
- * --------------
- * parses CLI arguments, initializes optional MPI runtime, builds a demo cost
- * matrix, runs aco_vrp, and prints the best cost.
- *
- *  argc: number of command-line arguments
- *  argv: command-line argument array
- *
- *  returns: 0 on success
- *           1 on usage/initialization/allocation failures
- */
 int main(int argc, char **argv) {
   int status = 0;
   unsigned int seed = 1234u;
@@ -121,145 +75,92 @@ int main(int argc, char **argv) {
 #ifdef USE_MPI
   int mpi_rank = 0;
   int provided = 0;
-  if (MPI_Init_thread(NULL, NULL, MPI_THREAD_FUNNELED, &provided) !=
-      MPI_SUCCESS) {
+  if (MPI_Init_thread(NULL, NULL, MPI_THREAD_FUNNELED, &provided) != MPI_SUCCESS) {
     fprintf(stderr, "MPI_Init_thread failed\n");
     return 1;
   }
   MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
 #endif
 
-  int n = 5;
-  int K = 2;
-  int m = 10;
+  int n = 5, K = 2, m = 10;
   if (argc == 5 && parse_int_arg(argv[1], &n)) {
     int ok = 1;
     ok = ok && parse_int_arg(argv[2], &K);
     ok = ok && parse_int_arg(argv[3], &m);
     seed = parse_uint_arg(argv[4], &ok);
-
     if (!ok || n <= 0 || K <= 0 || m < 0) {
-      if (
 #ifdef USE_MPI
-          mpi_rank == 0 &&
+      if (mpi_rank == 0)
 #endif
-          1) {
-        fprintf(stderr,
-                "usage: %s [n K m seed]\n"
-                "example: %s 200 16 0 1234   (m=0 => auto ants)\n",
-                argv[0], argv[0]);
-      }
-      status = 1;
-      goto cleanup_mpi;
+        fprintf(stderr, "usage: %s [n K m seed]\n", argv[0]);
+      status = 1; goto cleanup_mpi;
     }
   } else if ((argc == 4 || argc == 5) && argv[1] != NULL) {
-    int ok = 1;
-    instance_path = argv[1];
+    int ok = 1; instance_path = argv[1];
     ok = ok && parse_int_arg(argv[2], &K);
     ok = ok && parse_int_arg(argv[3], &m);
-    if (argc == 5) {
-      seed = parse_uint_arg(argv[4], &ok);
-    }
-
+    if (argc == 5) seed = parse_uint_arg(argv[4], &ok);
     if (!ok || K <= 0 || m < 0) {
-      if (
 #ifdef USE_MPI
-          mpi_rank == 0 &&
+      if (mpi_rank == 0)
 #endif
-          1) {
-        fprintf(stderr,
-                "usage: %s [n K m seed]\n"
-                "   or: %s <instance.vrp> <K> <m> [seed]\n"
-                "example: %s instances/test_aligned/n500_k8_s19000.vrp 8 32 9000\n",
-                argv[0], argv[0], argv[0]);
-      }
-      status = 1;
-      goto cleanup_mpi;
+        fprintf(stderr, "usage: %s <instance.vrp> <K> <m> [seed]\n", argv[0]);
+      status = 1; goto cleanup_mpi;
     }
     use_instance_file = 1;
   } else if (argc != 1) {
-    if (
 #ifdef USE_MPI
-        mpi_rank == 0 &&
+    if (mpi_rank == 0)
 #endif
-        1) {
-      fprintf(stderr,
-              "usage: %s [n K m seed]\n"
-              "   or: %s <instance.vrp> <K> <m> [seed]\n"
-              "example: %s 200 16 0 1234   (m=0 => auto ants)\n",
-              argv[0], argv[0], argv[0]);
-    }
-    status = 1;
-    goto cleanup_mpi;
+      fprintf(stderr, "usage: %s [options]\n", argv[0]);
+    status = 1; goto cleanup_mpi;
   }
 
-  double alpha = 1.0;
-  double beta = 2.0;
-  double rho = 0.5;
-  double tau0 = 1.0;
-  double Q = 1.0;
-
+  double alpha = 1.0, beta = 2.0, rho = 0.5, tau0 = 1.0, Q = 1.0;
   double **c = NULL;
   if (use_instance_file) {
-    if (vrp_load_tsplib_euc2d_matrix_ex(instance_path, &n, &c, &instance_meta) !=
-        0) {
-      if (
+    if (vrp_load_tsplib_euc2d_matrix_ex(instance_path, &n, &c, &instance_meta) != 0) {
 #ifdef USE_MPI
-          mpi_rank == 0 &&
+      if (mpi_rank == 0)
 #endif
-          1) {
         fprintf(stderr, "failed to load instance: %s\n", instance_path);
-      }
-      status = 1;
-      goto cleanup_mpi;
+      status = 1; goto cleanup_mpi;
     }
   } else {
     c = matrix_alloc(n);
-    if (!c) {
-      fprintf(stderr, "failed to allocate cost matrix\n");
-      status = 1;
-      goto cleanup_mpi;
-    }
+    if (!c) { fprintf(stderr, "failed to allocate cost matrix\n"); status = 1; goto cleanup_mpi; }
     fill_example_costs(c, n);
   }
 
   Solution *best = solution_create(K, n);
-  if (!best) {
-    fprintf(stderr, "failed to allocate solution\n");
-    status = 1;
-    matrix_free(c);
-    goto cleanup_mpi;
-  }
+  if (!best) { fprintf(stderr, "failed to allocate solution\n"); status = 1; matrix_free(c); goto cleanup_mpi; }
 
   double best_cost = 0.0;
   if (use_instance_file) {
     if (instance_meta.vehicles > 0 && instance_meta.vehicles != K) {
-      fprintf(stderr,
-              "instance VEHICLES mismatch: CLI K=%d, file VEHICLES=%d\n", K,
-              instance_meta.vehicles);
-      status = 1;
-      solution_free(best);
-      matrix_free(c);
-      goto cleanup_mpi;
+      fprintf(stderr, "instance VEHICLES mismatch: CLI K=%d, file VEHICLES=%d\n", K, instance_meta.vehicles);
+      status = 1; solution_free(best); matrix_free(c); goto cleanup_mpi;
     }
-    aco_vrp_with_capacity(n, K, instance_meta.capacity, m, c, alpha, beta,
-                          rho, tau0, Q, seed, best, &best_cost);
+#ifdef ACO_VRP_V2
+    aco_vrp_v2_with_capacity(n, K, instance_meta.capacity, m, c, alpha, beta, rho, tau0, Q, seed, best, &best_cost);
+#else
+    aco_vrp_with_capacity(n, K, instance_meta.capacity, m, c, alpha, beta, rho, tau0, Q, seed, best, &best_cost);
+#endif
   } else {
-    aco_vrp(n, K, m, c, alpha, beta, rho, tau0, Q, seed, best,
-            &best_cost);
+#ifdef ACO_VRP_V2
+    aco_vrp_v2(n, K, m, c, alpha, beta, rho, tau0, Q, seed, best, &best_cost);
+#else
+    aco_vrp(n, K, m, c, alpha, beta, rho, tau0, Q, seed, best, &best_cost);
+#endif
   }
 
 #ifdef USE_MPI
-  if (mpi_rank == 0) {
-    print_solution_routes(best, K);
-    printf("Cost: %.3f\n", best_cost);
-    printf("best cost: %.3f\n", best_cost);
-  }
-#else
-  print_solution_routes(best, K);
-  printf("Cost: %.3f\n", best_cost);
-  printf("best cost: %.3f\n", best_cost);
+  if (mpi_rank == 0)
 #endif
+  {
+    print_solution_routes(best, K);
+    printf("Cost: %.3f\nbest cost: %.3f\n", best_cost, best_cost);
+  }
 
   solution_free(best);
   matrix_free(c);

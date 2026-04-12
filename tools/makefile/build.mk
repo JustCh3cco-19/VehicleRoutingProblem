@@ -28,6 +28,16 @@ openmp_mpi: $(OPENMP_MPI_BIN)
 $(OPENMP_MPI_BIN): $(OPENMP_MPI_SRC) include/aco.h include/matrix.h include/solution.h
 	$(MPICC) $(EXTRA_FLAGS) $(FLAGS) $(FORCE_OPT) $(PERF_FLAGS) $(OMPFLAG) -DUSE_MPI $(OPENMP_MPI_SRC) $(LIBS) -o $@
 
+openmp_mpi_v2: $(OPENMP_MPI_V2_BIN)
+
+$(OPENMP_MPI_V2_BIN): $(OPENMP_MPI_V2_SRC) include/aco_v2.h include/aco.h include/matrix.h include/solution.h
+	$(MPICC) $(EXTRA_FLAGS) $(FLAGS) $(FORCE_OPT) $(PERF_FLAGS) $(OMPFLAG) -DUSE_MPI -DACO_VRP_V2 $(OPENMP_MPI_V2_SRC) $(LIBS) -o $@
+
+openmp_mpi_v3: $(OPENMP_MPI_V3_BIN)
+
+$(OPENMP_MPI_V3_BIN): $(OPENMP_MPI_V3_SRC) include/aco_v3.h include/aco.h include/matrix.h include/solution.h
+	$(MPICC) $(EXTRA_FLAGS) $(FLAGS) $(FORCE_OPT) $(PERF_FLAGS) $(OMPFLAG) -DUSE_MPI $(OPENMP_MPI_V3_SRC) $(LIBS) -o $@
+
 cuda: $(CUDA_BIN)
 
 $(CUDA_MAIN_OBJ): $(CUDA_MAIN_SRC) include/aco.h include/instance_parser.h include/matrix.h include/solution.h
