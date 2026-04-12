@@ -53,3 +53,44 @@ dkms.conf
 
 # debug information files
 *.dwo
+
+# Project build outputs
+/aco_vrp_seq
+/tests/test_aco
+*.gcno
+*.gcda
+*.gcov
+
+.vscode/
+
+report/
+
+results/
+
+__pycache__/
+
+
+design.md
+
+src/vehicle_routing_problem.egg-info/*
+
+uv.lock
+
+.codex
+
+# Local env
+.venv/
+
+# Local raw datasets / dumps
+francesco_data/
+iacopo_data/
+*.tar.gz
+
+# Generated merged analysis artifacts
+merged_by_run_backend/
+merged_by_test/
+merged_compact/
+merged_manifests_clean/
+
+# Extra local caches
+*.log
