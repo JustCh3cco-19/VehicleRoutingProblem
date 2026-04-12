@@ -34,7 +34,6 @@ typedef struct {
   int visited_words;
   int *candidate_idx;
   float *eta_beta;
-  float *score;
 } AcoRankShared;
 
 typedef struct {
