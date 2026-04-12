@@ -6,10 +6,12 @@
 
 #define MATRIX_ALIGNMENT 64u
 
-/*
- * Function:  align_up_size
- * ------------------------
- * rounds a size value up to the next multiple of alignment.
+
+/**
+ * @brief Executes `align_up_size`.
+ * @param value Function parameter.
+ * @param alignment Function parameter.
+ * @return Function result.
  */
 static size_t align_up_size(size_t value, size_t alignment) {
   size_t rem = value % alignment;
@@ -19,19 +21,11 @@ static size_t align_up_size(size_t value, size_t alignment) {
   return value + (alignment - rem);
 }
 
-/*
- * Function:  matrix_alloc
- * -----------------------
- * allocates a contiguous (n+1) x (n+1) matrix with:
- * - 64-byte aligned base pointer
- * - padded row stride so each row starts on a cache-line boundary
- * - zero-initialized storage
- * a secondary array of row pointers is built for m[i][j] access.
- *
- *  n: highest node index; effective matrix side length is n+1
- *
- *  returns: matrix pointer on success
- *           NULL on allocation failure
+
+/**
+ * @brief Executes `matrix_create`.
+ * @param n Function parameter.
+ * @return Function result.
  */
 Matrix *matrix_create(int n) {
   if (n < 0) return NULL;
@@ -70,6 +64,10 @@ Matrix *matrix_create(int n) {
   return m;
 }
 
+/**
+ * @brief Executes `matrix_free_handle`.
+ * @param m Function parameter.
+ */
 void matrix_free_handle(Matrix *m) {
   if (!m) return;
   free(m->rows);
@@ -77,17 +75,26 @@ void matrix_free_handle(Matrix *m) {
   free(m);
 }
 
+/**
+ * @brief Executes `matrix_alloc`.
+ * @param n Function parameter.
+ * @return Function result.
+ */
 double **matrix_alloc(int n) {
   Matrix *m = matrix_create(n);
   if (!m) return NULL;
   double **rows = m->rows;
-  // We lose the handle here in legacy mode, but this matches old behavior
-  // Actually, to keep it compatible with matrix_free(m[0], m), we'd need to leak m.
-  // Let's just keep the old implementation for matrix_alloc to be safe.
-  free(m); // but m->rows and m->data are still valid
+
+
+
+  free(m);
   return rows;
 }
 
+/**
+ * @brief Executes `matrix_free`.
+ * @param m Function parameter.
+ */
 void matrix_free(double **m) {
   if (!m) return;
   free(m[0]);

@@ -10,7 +10,7 @@ PERF_FLAGS?=
 LIBS=-lm
 NVCC?=$(if $(wildcard /usr/local/cuda-12.8/bin/nvcc),/usr/local/cuda-12.8/bin/nvcc,nvcc)
 CUDA_ARCH?=sm_120
-CUDA_VARIANT?=v6
+CUDA_VARIANT?=core
 NVCC_FLAGS=-Iinclude -O3 -std=c++17
 CUDA_ARCH_FLAG=$(if $(strip $(CUDA_ARCH)),-arch=$(CUDA_ARCH),)
 COVERAGE_FLAGS=-g --coverage
@@ -41,17 +41,13 @@ OBJ=src/main.o $(SEQ_OBJ) $(ACO_SHARED_OBJ) $(SOLUTION_OBJ) $(MATRIX_OBJ) $(INST
 
 OPENMP_MPI_BIN=aco_vrp_openmp_mpi.out
 OPENMP_MPI_SRC=src/main.c $(PAR_SRC) $(ACO_SHARED_SRC) $(SOLUTION_SRC) $(MATRIX_SRC) $(INSTANCE_PARSER_SRC)
-OPENMP_MPI_V2_BIN=aco_vrp_v2_openmp_mpi.out
-OPENMP_MPI_V2_SRC=src/main.c src/openmp-mpi/aco_v2.c $(ACO_SHARED_SRC) $(SOLUTION_SRC) $(MATRIX_SRC) $(INSTANCE_PARSER_SRC)
-OPENMP_MPI_V3_BIN=aco_vrp_v3_openmp_mpi.out
-OPENMP_MPI_V3_SRC=src/main_v3.c src/openmp-mpi/aco_v3.c $(ACO_SHARED_SRC) $(SOLUTION_SRC) $(MATRIX_SRC) $(INSTANCE_PARSER_SRC)
 CUDA_BIN=aco_vrp_cuda.out
 CUDA_MAIN_SRC=src/cuda/main_vrp.cu
-CUDA_ACO_SRC=src/cuda/aco_cuda_$(CUDA_VARIANT).cu
-CUDA_KERNELS_SRC=src/cuda/aco_cuda_$(CUDA_VARIANT)_kernels.cu
+CUDA_ACO_SRC=src/cuda/aco_cuda.cu
+CUDA_KERNELS_SRC=src/cuda/aco_cuda_kernels.cu
 CUDA_MAIN_OBJ=src/cuda/main_vrp.o
-CUDA_ACO_OBJ=src/cuda/aco_cuda_$(CUDA_VARIANT).o
-CUDA_KERNELS_OBJ=src/cuda/aco_cuda_$(CUDA_VARIANT)_kernels.o
+CUDA_ACO_OBJ=src/cuda/aco_cuda.o
+CUDA_KERNELS_OBJ=src/cuda/aco_cuda_kernels.o
 CUDA_COMMON_OBJ=$(SOLUTION_OBJ) $(MATRIX_OBJ)
 CUDA_OBJ=$(CUDA_MAIN_OBJ) $(CUDA_ACO_OBJ) $(CUDA_KERNELS_OBJ) $(CUDA_COMMON_OBJ) $(INSTANCE_PARSER_OBJ)
 MPI_NP=2
@@ -121,7 +117,7 @@ EXP_CUDA_REPEATS?=1
 EXP_CUDA_RUNTIME_S?=300
 EXP_CUDA_STAGNATION_EPOCHS?=500
 EXP_CUDA_MIN_REL_IMPROVEMENT?=10
-EXP_CUDA_VARIANT?=v6
+EXP_CUDA_VARIANT?=$(CUDA_VARIANT)
 
 GEN_INST_DIR?=instances/test_aligned
 GEN_CLIENTS?=4000,8000,16000,32000,64000,128000,200000

@@ -12,6 +12,11 @@
 #include <mpi.h>
 #endif
 
+/**
+ * @brief Fills an example distance matrix used in local/demo execution mode.
+ * @param c Distance matrix.
+ * @param n Number of customers.
+ */
 static void fill_example_costs(double **c, int n) {
   for (int i = 0; i <= n; ++i) {
     for (int j = 0; j <= n; ++j) {
@@ -24,6 +29,11 @@ static void fill_example_costs(double **c, int n) {
   }
 }
 
+/**
+ * @brief Prints routes from a solution in human-readable format.
+ * @param best Best solution to print.
+ * @param K Number of routes.
+ */
 static void print_solution_routes(const Solution *best, int K) {
   for (int i = 0; i < K; ++i) {
     const Route *r = &best->routes[i];
@@ -40,6 +50,12 @@ static void print_solution_routes(const Solution *best, int K) {
   }
 }
 
+/**
+ * @brief Parses a positive integer argument.
+ * @param s Input string.
+ * @param out Output parsed value.
+ * @return 1 on success, 0 on parse/range error.
+ */
 static int parse_int_arg(const char *s, int *out) {
   char *end = NULL;
   errno = 0;
@@ -50,6 +66,12 @@ static int parse_int_arg(const char *s, int *out) {
   return 1;
 }
 
+/**
+ * @brief Parses an unsigned integer argument.
+ * @param s Input string.
+ * @param ok Output parse status flag.
+ * @return Parsed value if valid, 0 otherwise.
+ */
 static unsigned int parse_uint_arg(const char *s, int *ok) {
   char *end = NULL;
   errno = 0;
@@ -62,6 +84,12 @@ static unsigned int parse_uint_arg(const char *s, int *ok) {
   return (unsigned int)v;
 }
 
+/**
+ * @brief CLI entrypoint for sequential and MPI/OpenMP backends.
+ * @param argc Argument count.
+ * @param argv Argument vector.
+ * @return 0 on success, non-zero on error.
+ */
 int main(int argc, char **argv) {
   int status = 0;
   unsigned int seed = 1234u;
@@ -138,17 +166,9 @@ int main(int argc, char **argv) {
       fprintf(stderr, "instance VEHICLES mismatch: CLI K=%d, file VEHICLES=%d\n", K, instance_meta.vehicles);
       status = 1; solution_free(best); matrix_free(c); goto cleanup_mpi;
     }
-#ifdef ACO_VRP_V2
-    aco_vrp_v2_with_capacity(n, K, instance_meta.capacity, m, c, alpha, beta, rho, tau0, Q, seed, best, &best_cost);
-#else
     aco_vrp_with_capacity(n, K, instance_meta.capacity, m, c, alpha, beta, rho, tau0, Q, seed, best, &best_cost);
-#endif
   } else {
-#ifdef ACO_VRP_V2
-    aco_vrp_v2(n, K, m, c, alpha, beta, rho, tau0, Q, seed, best, &best_cost);
-#else
     aco_vrp(n, K, m, c, alpha, beta, rho, tau0, Q, seed, best, &best_cost);
-#endif
   }
 
 #ifdef USE_MPI

@@ -19,9 +19,9 @@
 #include <mpi.h>
 #endif
 
-#define V2_ALIGNMENT 64u
-#define V2_MAX_CANDS 512
-#define V2_EPS 1e-7f
+#define ACO_MPI_ALIGNMENT 64u
+#define ACO_MPI_MAX_CANDS 512
+#define ACO_MPI_EPS 1e-7f
 
 typedef struct {
     uint32_t edge_idx;
@@ -35,36 +35,59 @@ typedef struct {
     float **rows;
 } MatrixFloat;
 
+/**
+ * @brief Executes `align_up_64`.
+ * @param value Function parameter.
+ * @return Function result.
+ */
 static size_t align_up_64(size_t value) {
-    size_t rem = value % V2_ALIGNMENT;
-    return (rem == 0u) ? value : value + (V2_ALIGNMENT - rem);
+    size_t rem = value % ACO_MPI_ALIGNMENT;
+    return (rem == 0u) ? value : value + (ACO_MPI_ALIGNMENT - rem);
 }
 
+/**
+ * @brief Executes `matrix_create_float`.
+ * @param n Function parameter.
+ * @return Function result.
+ */
 static MatrixFloat *matrix_create_float(int n) {
     MatrixFloat *m = malloc(sizeof(*m));
     m->n = n;
     size_t row_bytes = (size_t)(n + 1) * sizeof(float);
     m->stride = (int)(align_up_64(row_bytes) / sizeof(float));
-    m->data = aligned_alloc(V2_ALIGNMENT, (size_t)(n + 1) * (size_t)m->stride * sizeof(float));
+    m->data = aligned_alloc(ACO_MPI_ALIGNMENT, (size_t)(n + 1) * (size_t)m->stride * sizeof(float));
     m->rows = malloc((size_t)(n + 1) * sizeof(float *));
     for (int i = 0; i <= n; i++) m->rows[i] = m->data + (size_t)i * (size_t)m->stride;
     memset(m->data, 0, (size_t)(n + 1) * (size_t)m->stride * sizeof(float));
     return m;
 }
 
+/**
+ * @brief Executes `matrix_free_float`.
+ * @param m Function parameter.
+ */
 static void matrix_free_float(MatrixFloat *m) {
     if (!m) return;
     free(m->data); free(m->rows); free(m);
 }
 
+/**
+ * @brief Executes `aligned_calloc_64`.
+ * @param bytes Function parameter.
+ * @return Function result.
+ */
 static void *aligned_calloc_64(size_t bytes) {
     size_t alloc_bytes = align_up_64(bytes);
-    void *ptr = aligned_alloc(V2_ALIGNMENT, alloc_bytes);
+    void *ptr = aligned_alloc(ACO_MPI_ALIGNMENT, alloc_bytes);
     if (!ptr) return NULL;
     memset(ptr, 0, alloc_bytes);
     return ptr;
 }
 
+/**
+ * @brief Executes `wall_time`.
+ * @return Function result.
+ */
 static double wall_time(void) {
 #ifdef USE_MPI
     int init = 0; MPI_Initialized(&init);
@@ -78,6 +101,10 @@ static double wall_time(void) {
 #endif
 }
 
+/**
+ * @brief Executes `get_l3_cache_size`.
+ * @return Function result.
+ */
 static long get_l3_cache_size(void) {
     FILE *f = fopen("/sys/devices/system/cpu/cpu0/cache/index3/size", "r");
     if (!f) return 0;
@@ -94,15 +121,27 @@ static long get_l3_cache_size(void) {
     return size;
 }
 
+/**
+ * @brief Executes `tune_candidate_k`.
+ * @param n Function parameter.
+ * @param l3_size Function parameter.
+ * @return Function result.
+ */
 static int tune_candidate_k(int n, long l3_size) {
     if (l3_size <= 0) return 32;
     double target_bytes = (double)l3_size * 0.7;
     int k = (int)(target_bytes / ((double)(n + 1) * 8.0));
     if (k < 16) k = 16;
-    if (k > V2_MAX_CANDS) k = V2_MAX_CANDS;
+    if (k > ACO_MPI_MAX_CANDS) k = ACO_MPI_MAX_CANDS;
     return k;
 }
 
+/**
+ * @brief Executes `fast_powf`.
+ * @param base Function parameter.
+ * @param exp Function parameter.
+ * @return Function result.
+ */
 static float fast_powf(float base, float exp) {
     if (exp == 1.0f) return base;
     if (exp == 2.0f) return base * base;
@@ -118,15 +157,28 @@ typedef struct {
     int meta_words;
     int *cand_idx;
     float *eta_beta;
-} V2RankShared;
+} AcoMpiRankShared;
 
-static void v2_shared_free(V2RankShared *s) {
+/**
+ * @brief Executes `aco_mpi_shared_free`.
+ * @param s Function parameter.
+ */
+static void aco_mpi_shared_free(AcoMpiRankShared *s) {
     if (!s) return;
     if (s->eta_beta) free(s->eta_beta);
     if (s->cand_idx) free(s->cand_idx);
 }
 
-static int v2_shared_init(V2RankShared *s, int n, int cand_k, const MatrixFloat *c_mat, double beta) {
+/**
+ * @brief Executes `aco_mpi_shared_init`.
+ * @param s Function parameter.
+ * @param n Function parameter.
+ * @param cand_k Function parameter.
+ * @param c_mat Function parameter.
+ * @param beta Function parameter.
+ * @return Function result.
+ */
+static int aco_mpi_shared_init(AcoMpiRankShared *s, int n, int cand_k, const MatrixFloat *c_mat, double beta) {
     s->n = n; s->cand_k = cand_k;
     size_t row_bytes = (size_t)s->cand_k * sizeof(float);
     s->stride = (int)(align_up_64(row_bytes) / sizeof(float));
@@ -138,7 +190,7 @@ static int v2_shared_init(V2RankShared *s, int n, int cand_k, const MatrixFloat 
     if (!s->cand_idx || !s->eta_beta) return 0;
     #pragma omp parallel for schedule(static)
     for (int i = 0; i <= n; i++) {
-        int nodes[V2_MAX_CANDS]; float dists[V2_MAX_CANDS];
+        int nodes[ACO_MPI_MAX_CANDS]; float dists[ACO_MPI_MAX_CANDS];
         for (int t = 0; t < s->cand_k; t++) { nodes[t] = -1; dists[t] = FLT_MAX; }
         const float *row = c_mat->rows[i];
         for (int node = 1; node <= n; node++) {
@@ -169,7 +221,11 @@ typedef struct {
     Solution *thread_best;
 } HierarchicalWorkspace;
 
-static void v2_ws_free(HierarchicalWorkspace *ws) {
+/**
+ * @brief Executes `aco_mpi_ws_free`.
+ * @param ws Function parameter.
+ */
+static void aco_mpi_ws_free(HierarchicalWorkspace *ws) {
   if (!ws) return;
   if (ws->route_loads) free(ws->route_loads);
   if (ws->visited) free(ws->visited);
@@ -178,16 +234,33 @@ static void v2_ws_free(HierarchicalWorkspace *ws) {
   if (ws->sol) solution_free(ws->sol);
 }
 
-static int v2_ws_init(HierarchicalWorkspace *ws, int K, int n, int words, int meta_words) {
+/**
+ * @brief Executes `aco_mpi_ws_init`.
+ * @param ws Function parameter.
+ * @param K Function parameter.
+ * @param n Function parameter.
+ * @param words Function parameter.
+ * @param meta_words Function parameter.
+ * @return Function result.
+ */
+static int aco_mpi_ws_init(HierarchicalWorkspace *ws, int K, int n, int words, int meta_words) {
   ws->sol = solution_create(K, n); ws->thread_best = solution_create(K, n);
   ws->visited = aligned_calloc_64((size_t)words * sizeof(uint64_t));
   ws->meta_active = aligned_calloc_64((size_t)meta_words * sizeof(uint64_t));
   ws->route_loads = calloc((size_t)K, sizeof(int));
-  if (!ws->sol || !ws->thread_best || !ws->visited || !ws->meta_active || !ws->route_loads) { v2_ws_free(ws); return 0; }
+  if (!ws->sol || !ws->thread_best || !ws->visited || !ws->meta_active || !ws->route_loads) { aco_mpi_ws_free(ws); return 0; }
   return 1;
 }
 
-static int find_nearest_unvisited_h(const V2RankShared *s, int curr, const HierarchicalWorkspace *ws, const MatrixFloat *c) {
+/**
+ * @brief Executes `find_nearest_unvisited_h`.
+ * @param s Function parameter.
+ * @param curr Function parameter.
+ * @param ws Function parameter.
+ * @param c Function parameter.
+ * @return Function result.
+ */
+static int find_nearest_unvisited_h(const AcoMpiRankShared *s, int curr, const HierarchicalWorkspace *ws, const MatrixFloat *c) {
     int best = 0; float best_d = FLT_MAX;
     const float *row = c->rows[curr];
     for (int mw = 0; mw < s->meta_words; mw++) {
@@ -209,7 +282,16 @@ static int find_nearest_unvisited_h(const V2RankShared *s, int curr, const Hiera
     return best;
 }
 
-static void build_ant_v2_h(HierarchicalWorkspace *ws, const V2RankShared *s, int K, int cap, const MatrixFloat *c, const float *scores) {
+/**
+ * @brief Executes `build_ant_h`.
+ * @param ws Function parameter.
+ * @param s Function parameter.
+ * @param K Function parameter.
+ * @param cap Function parameter.
+ * @param c Function parameter.
+ * @param scores Function parameter.
+ */
+static void build_ant_h(HierarchicalWorkspace *ws, const AcoMpiRankShared *s, int K, int cap, const MatrixFloat *c, const float *scores) {
     solution_reset(ws->sol); memset(ws->visited, 0, (size_t)s->visited_words * sizeof(uint64_t));
     memset(ws->meta_active, 0xFF, (size_t)s->meta_words * sizeof(uint64_t));
     memset(ws->route_loads, 0, (size_t)K * sizeof(int));
@@ -247,11 +329,17 @@ static void build_ant_v2_h(HierarchicalWorkspace *ws, const V2RankShared *s, int
     }
 }
 
+/**
+ * @brief Executes `solution_cost_f`.
+ * @param s Function parameter.
+ * @param c Function parameter.
+ * @return Function result.
+ */
 static double solution_cost_f(const Solution *s, float **c) {
     double total = 0.0;
     for (int i = 0; i < s->K; i++) {
         const Route *r = &s->routes[i];
-        if (r->len <= 2) continue; // Skip empty
+        if (r->len <= 2) continue;
         for (int t = 0; t + 1 < r->len; t++) total += (double)c[r->nodes[t]][r->nodes[t+1]];
     }
     return total;
@@ -267,6 +355,11 @@ typedef struct {
     int active;
 } AsyncSparseContext;
 
+/**
+ * @brief Executes `async_sparse_init`.
+ * @param ctx Function parameter.
+ * @param mpi_size Function parameter.
+ */
 static void async_sparse_init(AsyncSparseContext *ctx, int mpi_size) {
     ctx->req = MPI_REQUEST_NULL; ctx->recv_buf = NULL;
     ctx->counts = calloc((size_t)mpi_size, sizeof(int));
@@ -281,14 +374,26 @@ static void async_sparse_init(AsyncSparseContext *ctx, int mpi_size) {
     ctx->active = 0;
 }
 
+/**
+ * @brief Executes `async_sparse_cleanup`.
+ * @param ctx Function parameter.
+ */
 static void async_sparse_cleanup(AsyncSparseContext *ctx) {
     if (!ctx) return;
     if (ctx->active) MPI_Wait(&ctx->req, MPI_STATUS_IGNORE);
-    if (ctx->counts) free(ctx->counts); if (ctx->displs) free(ctx->displs);
+    if (ctx->counts) free(ctx->counts);
+    if (ctx->displs) free(ctx->displs);
     if (ctx->recv_buf) free(ctx->recv_buf);
     MPI_Type_free(&ctx->type); ctx->active = 0;
 }
 
+/**
+ * @brief Executes `async_sparse_wait_and_apply`.
+ * @param ctx Function parameter.
+ * @param tau Function parameter.
+ * @param mpi_rank Function parameter.
+ * @param mpi_size Function parameter.
+ */
 static void async_sparse_wait_and_apply(AsyncSparseContext *ctx, MatrixFloat *tau, int mpi_rank, int mpi_size) {
     if (!ctx->active) return;
     MPI_Wait(&ctx->req, MPI_STATUS_IGNORE);
@@ -302,6 +407,13 @@ static void async_sparse_wait_and_apply(AsyncSparseContext *ctx, MatrixFloat *ta
     free(ctx->recv_buf); ctx->recv_buf = NULL; ctx->active = 0;
 }
 
+/**
+ * @brief Executes `async_sparse_start`.
+ * @param ctx Function parameter.
+ * @param local_deltas Function parameter.
+ * @param local_count Function parameter.
+ * @param mpi_size Function parameter.
+ */
 static void async_sparse_start(AsyncSparseContext *ctx, SparseDelta *local_deltas, int local_count, int mpi_size) {
     int my_c = local_count;
     MPI_Allgather(&my_c, 1, MPI_INT, ctx->counts, 1, MPI_INT, MPI_COMM_WORLD);
@@ -315,23 +427,52 @@ static void async_sparse_start(AsyncSparseContext *ctx, SparseDelta *local_delta
 }
 #endif
 
-static void load_v2_directives(double *max_runtime_sec, int *max_stagnation_epochs, double *min_rel_improvement) {
+/**
+ * @brief Executes `load_aco_mpi_directives`.
+ * @param max_runtime_sec Function parameter.
+ * @param max_stagnation_epochs Function parameter.
+ * @param min_rel_improvement Function parameter.
+ */
+static void load_aco_mpi_directives(double *max_runtime_sec, int *max_stagnation_epochs, double *min_rel_improvement) {
   const char *s_timeout = getenv("ACO_SOLVER_TIMEOUT_SECONDS");
   const char *s_stagnation = getenv("ACO_SOLVER_STAGNATION_EPOCHS");
   const char *s_rel = getenv("ACO_SOLVER_MIN_REL_IMPROVEMENT");
   *max_runtime_sec = (s_timeout && *s_timeout) ? atof(s_timeout) : 0.0;
-  *max_stagnation_epochs = (s_stagnation && *s_stagnation) ? atoi(s_stagnation) : 100; // Default 100
+  *max_stagnation_epochs = (s_stagnation && *s_stagnation) ? atoi(s_stagnation) : 100;
   *min_rel_improvement = (s_rel && *s_rel) ? atof(s_rel) : 1e-3;
 }
 
+/**
+ * @brief Executes `is_sig_imp`.
+ * @param prev_best Function parameter.
+ * @param new_best Function parameter.
+ * @param min_rel_improvement Function parameter.
+ * @return Function result.
+ */
 static int is_sig_imp(double prev_best, double new_best, double min_rel_improvement) {
   if (prev_best >= DBL_MAX || new_best >= DBL_MAX) return (new_best < prev_best);
-  if (new_best >= prev_best - V2_EPS) return 0;
+  if (new_best >= prev_best - ACO_MPI_EPS) return 0;
   double abs_gain = prev_best - new_best;
-  double rel_gain = abs_gain / fmax(prev_best, (double)V2_EPS);
-  return rel_gain + (double)V2_EPS >= min_rel_improvement;
+  double rel_gain = abs_gain / fmax(prev_best, (double)ACO_MPI_EPS);
+  return rel_gain + (double)ACO_MPI_EPS >= min_rel_improvement;
 }
 
+/**
+ * @brief Core MPI/OpenMP ACO execution loop.
+ * @param n Number of customers.
+ * @param K Number of vehicles.
+ * @param cap Per-vehicle customer capacity.
+ * @param m Number of ants (0 enables backend auto-tuning).
+ * @param c Distance matrix.
+ * @param alpha Pheromone exponent.
+ * @param beta Heuristic exponent.
+ * @param rho Evaporation factor.
+ * @param tau0 Initial pheromone value.
+ * @param Q Deposit scaling factor.
+ * @param seed RNG seed.
+ * @param best_sol Output best solution.
+ * @param best_cost Output best cost.
+ */
 void aco_vrp_run(int n, int K, int cap, int m, double **c, double alpha, double beta, double rho, double tau0, double Q, unsigned int seed, Solution *best_sol, double *best_cost) {
     int mpi_rank = 0, mpi_size = 1;
 #ifdef USE_MPI
@@ -343,12 +484,12 @@ void aco_vrp_run(int n, int K, int cap, int m, double **c, double alpha, double 
     int ant_off = mpi_rank * (total_m / mpi_size) + ((mpi_rank < (total_m % mpi_size)) ? mpi_rank : (total_m % mpi_size));
     int local_m = total_m / mpi_size + (mpi_rank < (total_m % mpi_size));
     double max_runtime_sec; int max_stagnation_epochs; double min_rel_improvement;
-    load_v2_directives(&max_runtime_sec, &max_stagnation_epochs, &min_rel_improvement);
+    load_aco_mpi_directives(&max_runtime_sec, &max_stagnation_epochs, &min_rel_improvement);
     MatrixFloat *tau_mat = matrix_create_float(n); MatrixFloat *c_mat = matrix_create_float(n);
     #pragma omp parallel for schedule(static)
     for (int i = 0; i <= n; i++) for (int j = 0; j <= n; j++) { c_mat->rows[i][j] = (float)c[i][j]; tau_mat->rows[i][j] = (i==j) ? 0.0f : (float)tau0; }
-    V2RankShared shared; v2_shared_init(&shared, n, cand_k, c_mat, beta);
-    float *score_mat = aligned_alloc(V2_ALIGNMENT, (size_t)(n + 1) * (size_t)shared.stride * sizeof(float));
+    AcoMpiRankShared shared; aco_mpi_shared_init(&shared, n, cand_k, c_mat, beta);
+    float *score_mat = aligned_alloc(ACO_MPI_ALIGNMENT, (size_t)(n + 1) * (size_t)shared.stride * sizeof(float));
     Solution *iter_best_sol_rank = solution_create(K, n); double iter_best_cost_g = DBL_MAX; *best_cost = DBL_MAX; double start_time = wall_time();
     const char *s_fixed = getenv("ACO_SOLVER_FIXED_EPOCHS"); int fixed_epochs = (s_fixed && *s_fixed) ? atoi(s_fixed) : 0;
 #ifdef USE_MPI
@@ -357,9 +498,8 @@ void aco_vrp_run(int n, int K, int cap, int m, double **c, double alpha, double 
     int iter_since_best = 0; SparseDelta *rank_deltas = malloc((size_t)(n + K + 500) * 2 * sizeof(SparseDelta)); int rank_delta_count = 0;
     #pragma omp parallel default(shared) proc_bind(close)
     {
-        HierarchicalWorkspace ws; v2_ws_init(&ws, K, n, shared.visited_words, shared.meta_words);
+        HierarchicalWorkspace ws; aco_mpi_ws_init(&ws, K, n, shared.visited_words, shared.meta_words);
         if (mpi_rank == 0 && omp_get_thread_num() == 0) printf("ACO Parallel Starting with %d threads. N=%d K=%d Cap=%d\n", omp_get_num_threads(), n, K, cap);
-        float tau_max = (float)tau0, tau_min = (float)tau0*0.05f;
         for (int iter = 0; (fixed_epochs > 0 && iter < fixed_epochs) || (fixed_epochs <= 0 && iter_since_best < max_stagnation_epochs); iter++) {
 #ifdef USE_MPI
             #pragma omp master
@@ -377,7 +517,7 @@ void aco_vrp_run(int n, int K, int cap, int m, double **c, double alpha, double 
             #pragma omp for schedule(runtime) nowait
             for (int a = 0; a < local_m; a++) {
                 ws.rng_state = aco_make_ant_seed(seed, iter, ant_off + a);
-                build_ant_v2_h(&ws, &shared, K, cap, c_mat, score_mat);
+                build_ant_h(&ws, &shared, K, cap, c_mat, score_mat);
                 double cost = solution_cost_f(ws.sol, c_mat->rows);
                 if (cost < t_best_c) { t_best_c = cost; solution_copy(ws.thread_best, ws.sol); }
             }
@@ -392,7 +532,7 @@ void aco_vrp_run(int n, int K, int cap, int m, double **c, double alpha, double 
 #endif
                 if (is_sig_imp(*best_cost, g_min, min_rel_improvement)) iter_since_best = 0; else iter_since_best++;
                 if (g_min < *best_cost) { *best_cost = g_min; solution_copy(best_sol, iter_best_sol_rank);
-                    tau_max = (float)(1.0 / ((1.0 - rho) * (*best_cost))); tau_min = tau_max * 0.05f; }
+                }
                 if (mpi_rank == 0 && iter % 10 == 0) printf("Epoch %d: Best Cost = %.3f (Since Last Imp: %d)\n", iter, *best_cost, iter_since_best);
                 iter_best_cost_g = DBL_MAX; rank_delta_count = 0;
             }
@@ -435,26 +575,23 @@ void aco_vrp_run(int n, int K, int cap, int m, double **c, double alpha, double 
         #pragma omp master
         async_sparse_cleanup(&async_ctx);
 #endif
-        v2_ws_free(&ws);
+        aco_mpi_ws_free(&ws);
     }
     free(rank_deltas); if (mpi_rank == 0) printf("ACO Parallel Ultimate Completion. Best: %.3f. Time: %.3fs\n", *best_cost, wall_time() - start_time);
-    matrix_free_float(tau_mat); matrix_free_float(c_mat); free(score_mat); solution_free(iter_best_sol_rank); v2_shared_free(&shared);
+    matrix_free_float(tau_mat); matrix_free_float(c_mat); free(score_mat); solution_free(iter_best_sol_rank); aco_mpi_shared_free(&shared);
 }
 
+/**
+ * @brief Runs the MPI/OpenMP ACO solver with explicit vehicle capacity.
+ */
 void aco_vrp_with_capacity(int n, int K, int vehicle_capacity_customers, int m, double **c, double alpha, double beta, double rho, double tau0, double Q, unsigned int seed, Solution *best_solution, double *best_cost) {
     aco_vrp_run(n, K, vehicle_capacity_customers, m, c, alpha, beta, rho, tau0, Q, seed, best_solution, best_cost);
 }
 
+/**
+ * @brief Runs the MPI/OpenMP ACO solver with auto-derived vehicle capacity.
+ */
 void aco_vrp(int n, int K, int m, double **c, double alpha, double beta, double rho, double tau0, double Q, unsigned int seed, Solution *best_solution, double *best_cost) {
     int cap = (K > 0) ? (int)(((long long)120 * n + 100 * K - 1) / (100 * K)) : n;
     aco_vrp_with_capacity(n, K, cap, m, c, alpha, beta, rho, tau0, Q, seed, best_solution, best_cost);
-}
-
-void aco_vrp_v2_with_capacity(int n, int K, int vehicle_capacity_customers, int m, double **c, double alpha, double beta, double rho, double tau0, double Q, unsigned int seed, Solution *best_solution, double *best_cost) {
-    aco_vrp_run(n, K, vehicle_capacity_customers, m, c, alpha, beta, rho, tau0, Q, seed, best_solution, best_cost);
-}
-
-void aco_vrp_v2(int n, int K, int m, double **c, double alpha, double beta, double rho, double tau0, double Q, unsigned int seed, Solution *best_solution, double *best_cost) {
-    int cap = (K > 0) ? (int)(((long long)120 * n + 100 * K - 1) / (100 * K)) : n;
-    aco_vrp_v2_with_capacity(n, K, cap, m, c, alpha, beta, rho, tau0, Q, seed, best_solution, best_cost);
 }

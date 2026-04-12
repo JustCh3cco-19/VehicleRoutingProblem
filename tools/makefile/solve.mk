@@ -4,7 +4,6 @@ solve_prepare:
 	@mkdir -p $(SOLVE_SOLUTIONS_DIR)/pyvrp
 	@mkdir -p $(SOLVE_SOLUTIONS_DIR)/seq
 	@mkdir -p $(SOLVE_SOLUTIONS_DIR)/cuda
-	@mkdir -p $(SOLVE_SOLUTIONS_DIR)/cuda_$(SOLVE_CUDA_VARIANT)
 	@mkdir -p $(SOLVE_SOLUTIONS_DIR)/mpi
 	@test -f "$(SOLVE_MANIFEST)" || (echo "missing manifest: $(SOLVE_MANIFEST)" && exit 1)
 	@test -f "$(SOLVE_MANIFEST_MPI)" || (echo "missing manifest: $(SOLVE_MANIFEST_MPI)" && exit 1)
@@ -61,7 +60,6 @@ solve_cuda: solve_prepare
 	SOLVE_LIMIT="$(SOLVE_LIMIT)" \
 	SOLVE_SEQ_M="$(SOLVE_SEQ_M)" \
 	SOLVE_CUDA_REPEATS="$(SOLVE_CUDA_REPEATS)" \
-	SOLVE_CUDA_VARIANT="$(SOLVE_CUDA_VARIANT)" \
 	SOLVE_CUDA_RUNTIME_S="$(SOLVE_CUDA_RUNTIME_S)" \
 	SOLVE_CUDA_STAGNATION_EPOCHS="$(SOLVE_CUDA_STAGNATION_EPOCHS)" \
 	SOLVE_CUDA_MIN_REL_IMPROVEMENT="$(SOLVE_CUDA_MIN_REL_IMPROVEMENT)" \

@@ -29,7 +29,7 @@ Esempi:
     --make-args "SOLVE_CLIENTS=4000,8000 SOLVE_MPI_RANKS=4 SOLVE_MPI_OMP_THREADS=32 SOLVE_MPI_LAUNCHER=mpirun SOLVE_MPI_REPEATS=3"
 
   tools/batch/submit_solve.sh --target solve_cuda --partition gpu --gres gpu:1 \
-    --make-args "SOLVE_CLIENTS=500,1000 SOLVE_CUDA_REPEATS=3 SOLVE_CUDA_VARIANT=v4 CUDA_ARCH=sm_75"
+    --make-args "SOLVE_CLIENTS=500,1000 SOLVE_CUDA_REPEATS=3 CUDA_ARCH=sm_75"
 EOF
 }
 

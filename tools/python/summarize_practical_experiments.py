@@ -111,17 +111,32 @@ def load_backend_rows(root: Path, exp_dir: str, filename: str) -> list[dict[str,
     return read_rows(root / "solve_manifest" / "csv" / exp_dir / filename)
 
 
+def load_backend_rows_any(root: Path, exp_dir: str, filenames: list[str]) -> list[dict[str, str]]:
+    for name in filenames:
+        rows = load_backend_rows(root, exp_dir, name)
+        if rows:
+            return rows
+    return []
+
+
 def summarize_quality(root: Path, cuda_variant: str) -> list[dict[str, str]]:
-    backends: list[tuple[str, str, str]] = [
-        ("seq", "exp_quality_seq", "manifest_seq_per_instance_results.csv"),
-        ("openmp", "exp_quality_openmp", "manifest_openmp_mpi_per_instance_results.csv"),
-        ("mpi", "exp_quality_mpi", "manifest_openmp_mpi_per_instance_results.csv"),
-        ("hybrid", "exp_quality_hybrid", "manifest_openmp_mpi_per_instance_results.csv"),
-        ("cuda", "exp_quality_cuda", f"manifest_cuda_{cuda_variant}_per_instance_results.csv"),
+    backends: list[tuple[str, str, list[str]]] = [
+        ("seq", "exp_quality_seq", ["manifest_seq_per_instance_results.csv"]),
+        ("openmp", "exp_quality_openmp", ["manifest_openmp_mpi_per_instance_results.csv"]),
+        ("mpi", "exp_quality_mpi", ["manifest_openmp_mpi_per_instance_results.csv"]),
+        ("hybrid", "exp_quality_hybrid", ["manifest_openmp_mpi_per_instance_results.csv"]),
+        (
+            "cuda",
+            "exp_quality_cuda",
+            [
+                "manifest_cuda_per_instance_results.csv",
+                f"manifest_cuda_{cuda_variant}_per_instance_results.csv",
+            ],
+        ),
     ]
     out: list[dict[str, str]] = []
-    for backend, exp_dir, file_name in backends:
-        rows = [r for r in load_backend_rows(root, exp_dir, file_name) if r.get("status") == "ok"]
+    for backend, exp_dir, file_names in backends:
+        rows = [r for r in load_backend_rows_any(root, exp_dir, file_names) if r.get("status") == "ok"]
         if not rows:
             continue
         groups: dict[int, list[float]] = {}
@@ -161,8 +176,10 @@ def aggregate_by_n(rows: list[dict[str, str]]) -> dict[int, float]:
 def summarize_cuda_comparison(root: Path, cuda_variant: str) -> list[dict[str, str]]:
     seq_rows = load_backend_rows(root, "exp_seq_vs_cuda_practical", "manifest_seq_per_instance_results.csv")
     omp_rows = load_backend_rows(root, "exp_openmp_vs_cuda_practical", "manifest_openmp_mpi_per_instance_results.csv")
-    cuda_rows = load_backend_rows(
-        root, "exp_cuda_size_sweep_practical", f"manifest_cuda_{cuda_variant}_per_instance_results.csv"
+    cuda_rows = load_backend_rows_any(
+        root,
+        "exp_cuda_size_sweep_practical",
+        ["manifest_cuda_per_instance_results.csv", f"manifest_cuda_{cuda_variant}_per_instance_results.csv"],
     )
 
     seq_n = aggregate_by_n(seq_rows)
@@ -277,7 +294,7 @@ def write_report(
 def main() -> int:
     p = argparse.ArgumentParser(description="Summarize practical experiment outputs.")
     p.add_argument("--root", required=True, help="Campaign root (results/practical_campaign/<tag>).")
-    p.add_argument("--cuda-variant", default="v6")
+    p.add_argument("--cuda-variant", default="core")
     args = p.parse_args()
 
     root = Path(args.root)

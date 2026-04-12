@@ -4,10 +4,8 @@
 #include <stdbool.h>
 #include <stddef.h>
 
-/*
- * Struct:  Route
- * --------------
- * stores a single vehicle route as a dynamic sequence of node ids.
+/**
+ * @brief A single vehicle route represented as a dynamic list of node ids.
  */
 typedef struct {
   int *nodes;
@@ -15,10 +13,8 @@ typedef struct {
   int cap;
 } Route;
 
-/*
- * Struct:  Solution
- * -----------------
- * stores a complete VRP solution with K routes and backing contiguous storage.
+/**
+ * @brief A complete VRP solution containing K routes.
  */
 typedef struct {
   Route *routes;
@@ -27,52 +23,56 @@ typedef struct {
   int *nodes_storage;
 } Solution;
 
-/*
- * Function:  solution_create
- * --------------------------
- * allocates and initializes a solution with K routes.
+/**
+ * @brief Allocates and initializes a solution with K routes.
+ * @param K Number of vehicles.
+ * @param n Number of customers.
+ * @return Allocated solution handle or NULL on failure.
  */
 Solution *solution_create(int K, int n);
 
-/*
- * Function:  solution_free
- * ------------------------
- * releases all memory associated with a solution.
+/**
+ * @brief Releases all memory associated with a solution.
+ * @param s Solution handle.
  */
 void solution_free(Solution *s);
 
-/*
- * Function:  solution_reset
- * -------------------------
- * clears all routes in a solution.
+/**
+ * @brief Clears all routes in a solution.
+ * @param s Solution handle.
  */
 void solution_reset(Solution *s);
 
-/*
- * Function:  solution_copy
- * ------------------------
- * copies route contents from src to dst.
+/**
+ * @brief Copies route content from source to destination.
+ * @param dst Destination solution.
+ * @param src Source solution.
  */
 void solution_copy(Solution *dst, const Solution *src);
 
-/*
- * Function:  solution_cost
- * ------------------------
- * computes total traversal cost of all arcs.
+/**
+ * @brief Computes the total traversal cost of all arcs in a solution.
+ * @param s Solution handle.
+ * @param c Distance matrix.
+ * @return Total route cost.
  */
 double solution_cost(const Solution *s, double **c);
 
-/*
- * Function:  route_append
- * -----------------------
- * appends one node to a route if capacity is available.
+/**
+ * @brief Appends a node to a route if capacity allows it.
+ * @param r Route handle.
+ * @param node Node id to append.
  */
 void route_append(Route *r, int node);
 
-/*
- * Function:  solution_validate
- * ----------------------------
- * validates VRP structural constraints.
+/**
+ * @brief Validates core VRP structural constraints for a solution.
+ * @param s Solution handle.
+ * @param n Number of customers.
+ * @param K Number of vehicles.
+ * @param err Output error message buffer.
+ * @param err_len Size of output error buffer.
+ * @return true if valid, false otherwise.
  */
 bool solution_validate(const Solution *s, int n, int K, char *err, size_t err_len);
 

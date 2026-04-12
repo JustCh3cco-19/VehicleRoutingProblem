@@ -5,7 +5,7 @@ extern "C" {
 #include "solution.h"
 }
 
-#include "aco_cuda_v6_kernels.h"
+#include "aco_cuda_kernels.h"
 
 #include <cuda_runtime.h>
 #include <float.h>
@@ -25,12 +25,22 @@ extern "C" {
     }                                                                        \
   } while (0)
 
+/**
+ * @brief Executes `wall_time_seconds`.
+ * @return Function result.
+ */
 static double wall_time_seconds(void) {
   struct timespec ts;
   timespec_get(&ts, TIME_UTC);
   return (double)ts.tv_sec + (double)ts.tv_nsec * 1e-9;
 }
 
+/**
+ * @brief Executes `load_timer_directives`.
+ * @param max_runtime_sec Function parameter.
+ * @param max_stagnation_epochs Function parameter.
+ * @param min_rel_improvement Function parameter.
+ */
 static void load_timer_directives(double *max_runtime_sec,
                                   int *max_stagnation_epochs,
                                   double *min_rel_improvement) {
@@ -51,6 +61,13 @@ static void load_timer_directives(double *max_runtime_sec,
   }
 }
 
+/**
+ * @brief Executes `is_significant_improvement`.
+ * @param prev_best Function parameter.
+ * @param new_best Function parameter.
+ * @param min_rel_improvement Function parameter.
+ * @return Function result.
+ */
 static int is_significant_improvement(double prev_best, double new_best,
                                       double min_rel_improvement) {
   if (prev_best >= DBL_MAX || new_best >= DBL_MAX) {
@@ -64,7 +81,15 @@ static int is_significant_improvement(double prev_best, double new_best,
   return rel_gain + ACO_EPS >= min_rel_improvement;
 }
 
-static int select_iter_best_host(const CudaV6AntSummary *summary, int m,
+/**
+ * @brief Executes `select_iter_best_host`.
+ * @param summary Function parameter.
+ * @param m Function parameter.
+ * @param best_idx Function parameter.
+ * @param best_cost Function parameter.
+ * @return Function result.
+ */
+static int select_iter_best_host(const CudaAntSummary *summary, int m,
                                  int *best_idx, float *best_cost) {
   int found = 0;
   int idx = -1;
@@ -76,7 +101,7 @@ static int select_iter_best_host(const CudaV6AntSummary *summary, int m,
       continue;
     }
     if (!found || summary[i].cost < cost ||
-        (fabsf(summary[i].cost - cost) <= (float)CUDA_V6_EPS && i < idx)) {
+        (fabsf(summary[i].cost - cost) <= (float)CUDA_EPS && i < idx)) {
       found = 1;
       idx = i;
       cost = summary[i].cost;
@@ -88,15 +113,25 @@ static int select_iter_best_host(const CudaV6AntSummary *summary, int m,
   return found;
 }
 
+/**
+ * @brief Executes `copy_ant_to_solution`.
+ * @param routes Function parameter.
+ * @param route_lengths Function parameter.
+ * @param K Function parameter.
+ * @param m Function parameter.
+ * @param ant_idx Function parameter.
+ * @param dst Function parameter.
+ * @return Function result.
+ */
 static int copy_ant_to_solution(const int *routes, const int *route_lengths,
                                 int K, int m, int ant_idx,
                                 Solution *dst) {
   int v;
   solution_reset(dst);
 
-  // Note: in v6 routes are step-interleaved. routes[step * m + ant]
-  // We need to reconstruct the vehicle routes from this interleaved format.
-  // Actually, the kernel writes sequentially for each vehicle, but interleaves across ants.
+
+
+
   int global_step = 0;
   for (v = 0; v < K; ++v) {
     int len = route_lengths[ant_idx * K + v];
@@ -108,39 +143,57 @@ static int copy_ant_to_solution(const int *routes, const int *route_lengths,
 
     r->len = len;
     for (int t = 0; t < len; ++t) {
-        // global_step increments for each step of each vehicle
+
         r->nodes[t] = routes[(global_step + t) * m + ant_idx];
     }
-    global_step += len - 1; // lengths includes depot return, which is the start of the next if not the first.
-                            // Actually, in the kernel, each vehicle starts at step 0 (depot) but we just keep incrementing global_step.
-                            // Let's rely on the lengths array. 
-                            // The kernel does: global_step++; routes[global_step*m+ant] = move;
+    global_step += len - 1;
+
+
+
   }
 
   return 1;
 }
 
-int aco_vrp_cuda_with_capacity_v6(int n, int K, int vehicle_capacity_customers,
+/**
+ * @brief Runs the CUDA ACO backend with explicit vehicle capacity.
+ * @param n Number of customers.
+ * @param K Number of vehicles.
+ * @param vehicle_capacity_customers Per-vehicle customer capacity.
+ * @param m Number of ants (0 enables backend default tuning).
+ * @param coords_x X coordinates.
+ * @param coords_y Y coordinates.
+ * @param alpha Pheromone exponent.
+ * @param beta Heuristic exponent.
+ * @param rho Evaporation factor.
+ * @param tau0 Initial pheromone value.
+ * @param Q Deposit scaling factor.
+ * @param seed RNG seed.
+ * @param best_solution Output best solution.
+ * @param best_cost Output best cost.
+ * @return 0 on success, non-zero on failure.
+ */
+int aco_vrp_cuda_with_capacity(int n, int K, int vehicle_capacity_customers,
                                   int m, float *coords_x, float *coords_y,
                                   double alpha, double beta, double rho,
                                   double tau0, double Q, unsigned int seed,
                                   Solution *best_solution, double *best_cost) {
-  // Config
+
   int cand_k = 32;
   if (n <= 32) cand_k = n;
-  
+
   if (m == 0) m = 256;
-  
-  // Pheromone quantization config
-  float log_tau_min = logf(0.0001f); // Adjust as needed
+
+
+  float log_tau_min = logf(0.0001f);
   float log_tau_max = logf(100.0f);
   uint8_t q_tau_min = 0;
   uint8_t q_tau_max = 255;
   float log_tau_step = (log_tau_max - log_tau_min) / (float)(q_tau_max - q_tau_min);
   float log_rho = logf(1.0f - (float)rho);
   uint8_t q_evap_delta = (uint8_t)fmaxf(1.0f, roundf(-log_rho / log_tau_step));
-  
-  CudaV6Params params = {0};
+
+  CudaParams params = {0};
   params.n = n;
   params.K = K;
   params.m = m;
@@ -151,7 +204,7 @@ int aco_vrp_cuda_with_capacity_v6(int n, int K, int vehicle_capacity_customers,
   params.beta = (float)beta;
   params.rho = (float)rho;
   params.tau0 = (float)tau0;
-  params.Q = (float)Q * 100.0f; // Multiplier to force quantization to trigger
+  params.Q = (float)Q * 100.0f;
   params.tau_min = 0.0001f;
   params.tau_max = 100.0f;
   params.log_tau_min = log_tau_min;
@@ -160,21 +213,21 @@ int aco_vrp_cuda_with_capacity_v6(int n, int K, int vehicle_capacity_customers,
   params.q_tau_max = q_tau_max;
   params.q_evap_delta = q_evap_delta;
 
-  params.visited_l1_words = (n + 64) / 64; // bits to words
+  params.visited_l1_words = (n + 64) / 64;
   params.visited_l2_words = (params.visited_l1_words + 63) / 64;
-  params.visited_row_stride = ((params.visited_l1_words * 8 + 127) / 128) * 128; // align to 128 bytes
-  params.depot_close_weight = 2.0f; // Give depot a bit of bias
+  params.visited_row_stride = ((params.visited_l1_words * 8 + 127) / 128) * 128;
+  params.depot_close_weight = 2.0f;
 
   uint8_t q_tau0 = (uint8_t)fmaxf((float)q_tau_min, fminf((float)q_tau_max, roundf((logf(params.tau0) - log_tau_min) / log_tau_step)));
 
-  // Setup arrays
+
   float2 *h_coords = (float2 *)malloc((n + 1) * sizeof(float2));
   for (int i = 0; i <= n; i++) {
       h_coords[i].x = coords_x[i];
       h_coords[i].y = coords_y[i];
   }
 
-  // Device allocations
+
   float2 *d_coords = NULL;
   uint8_t *d_tau = NULL;
   int *d_candidate_idx = NULL;
@@ -184,8 +237,8 @@ int aco_vrp_cuda_with_capacity_v6(int n, int K, int vehicle_capacity_customers,
   uint64_t *d_visited_l1 = NULL;
   uint64_t *d_visited_l2 = NULL;
   unsigned int *d_rng_states = NULL;
-  CudaV6AntSummary *d_ant_summary = NULL;
-  CudaV6IterStats *d_iter_stats = NULL;
+  CudaAntSummary *d_ant_summary = NULL;
+  CudaIterStats *d_iter_stats = NULL;
 
   size_t total_elements = (size_t)(n + 1) * (size_t)(n + 1);
   size_t tau_alloc_elements = (total_elements + 3) & ~3ull;
@@ -194,32 +247,32 @@ int aco_vrp_cuda_with_capacity_v6(int n, int K, int vehicle_capacity_customers,
   CHECK_CUDA(cudaMalloc(&d_tau, tau_alloc_elements * sizeof(uint8_t)));
   CHECK_CUDA(cudaMalloc(&d_candidate_idx, (n + 1) * cand_k * sizeof(int)));
   CHECK_CUDA(cudaMalloc(&d_eta_beta, (n + 1) * cand_k * sizeof(float)));
-  
-  // Routes: step interleaved. max_steps = K * (n+1) -> allocating max_steps * m
+
+
   int max_steps = params.route_max_len + 1;
   CHECK_CUDA(cudaMalloc(&d_routes, max_steps * m * sizeof(int)));
   CHECK_CUDA(cudaMalloc(&d_route_lengths, m * K * sizeof(int)));
-  
+
   CHECK_CUDA(cudaMalloc(&d_visited_l1, m * params.visited_row_stride));
   CHECK_CUDA(cudaMalloc(&d_visited_l2, m * params.visited_l2_words * sizeof(uint64_t)));
   CHECK_CUDA(cudaMalloc(&d_rng_states, m * sizeof(unsigned int)));
-  CHECK_CUDA(cudaMalloc(&d_ant_summary, m * sizeof(CudaV6AntSummary)));
-  CHECK_CUDA(cudaMalloc(&d_iter_stats, sizeof(CudaV6IterStats)));
+  CHECK_CUDA(cudaMalloc(&d_ant_summary, m * sizeof(CudaAntSummary)));
+  CHECK_CUDA(cudaMalloc(&d_iter_stats, sizeof(CudaIterStats)));
 
   CHECK_CUDA(cudaMemcpy(d_coords, h_coords, (n + 1) * sizeof(float2), cudaMemcpyHostToDevice));
 
-  // Initialize tau & candidates
-  launch_init_tau_v6(d_tau, n, q_tau0);
+
+  launch_init_tau(d_tau, n, q_tau0);
   CHECK_CUDA(cudaDeviceSynchronize());
-  launch_build_candidate_lists_v6(d_coords, d_candidate_idx, d_eta_beta, params);
+  launch_build_candidate_lists(d_coords, d_candidate_idx, d_eta_beta, params);
   CHECK_CUDA(cudaDeviceSynchronize());
 
-  // Host buffers for reading back
-  CudaV6AntSummary *h_ant_summary = (CudaV6AntSummary *)malloc(m * sizeof(CudaV6AntSummary));
+
+  CudaAntSummary *h_ant_summary = (CudaAntSummary *)malloc(m * sizeof(CudaAntSummary));
   int *h_routes = (int *)malloc(max_steps * m * sizeof(int));
   int *h_route_lengths = (int *)malloc(m * K * sizeof(int));
 
-  // Global best flat storage for reinforcement
+
   int *h_flat_routes = (int *)malloc(K * (n + 1) * sizeof(int));
   int *h_flat_lengths = (int *)malloc(K * sizeof(int));
   int *d_flat_routes = NULL;
@@ -237,7 +290,7 @@ int aco_vrp_cuda_with_capacity_v6(int n, int K, int vehicle_capacity_customers,
   double start_time = wall_time_seconds();
   double global_best = DBL_MAX;
 
-  printf("CUDA v6 Solver starting... (N=%d, K=%d, M=%d)\n", n, K, m);
+  printf("CUDA Solver starting... (N=%d, K=%d, M=%d)\n", n, K, m);
 
   while (1) {
     double current_time = wall_time_seconds();
@@ -248,15 +301,15 @@ int aco_vrp_cuda_with_capacity_v6(int n, int K, int vehicle_capacity_customers,
       break;
     }
 
-    launch_reset_ant_state_v6(d_routes, d_route_lengths, d_visited_l1, d_visited_l2, d_rng_states, d_ant_summary, params, seed + iter);
-    CHECK_CUDA(cudaDeviceSynchronize());
-    
-    CHECK_CUDA(cudaMemset(d_iter_stats, 0, sizeof(CudaV6IterStats)));
-
-    launch_construct_solutions_v6(d_coords, d_tau, d_candidate_idx, d_eta_beta, d_routes, d_route_lengths, d_visited_l1, d_visited_l2, d_rng_states, d_ant_summary, d_iter_stats, params);
+    launch_reset_ant_state(d_routes, d_route_lengths, d_visited_l1, d_visited_l2, d_rng_states, d_ant_summary, params, seed + iter);
     CHECK_CUDA(cudaDeviceSynchronize());
 
-    CHECK_CUDA(cudaMemcpy(h_ant_summary, d_ant_summary, m * sizeof(CudaV6AntSummary), cudaMemcpyDeviceToHost));
+    CHECK_CUDA(cudaMemset(d_iter_stats, 0, sizeof(CudaIterStats)));
+
+    launch_construct_solutions(d_coords, d_tau, d_candidate_idx, d_eta_beta, d_routes, d_route_lengths, d_visited_l1, d_visited_l2, d_rng_states, d_ant_summary, d_iter_stats, params);
+    CHECK_CUDA(cudaDeviceSynchronize());
+
+    CHECK_CUDA(cudaMemcpy(h_ant_summary, d_ant_summary, m * sizeof(CudaAntSummary), cudaMemcpyDeviceToHost));
 
     int best_idx = -1;
     float best_iter_cost = FLT_MAX;
@@ -278,7 +331,7 @@ int aco_vrp_cuda_with_capacity_v6(int n, int K, int vehicle_capacity_customers,
 
         copy_ant_to_solution(h_routes, h_route_lengths, K, m, best_idx, best_solution);
 
-        // Flatten global best for reinforcement
+
         for (int v = 0; v < K; v++) {
           h_flat_lengths[v] = best_solution->routes[v].len;
           for (int i = 0; i < best_solution->routes[v].len; i++) {
@@ -291,17 +344,17 @@ int aco_vrp_cuda_with_capacity_v6(int n, int K, int vehicle_capacity_customers,
         iter_since_best++;
       }
 
-      launch_evaporate_tau_v6(d_tau, n, params.q_evap_delta, params.q_tau_min);
+      launch_evaporate_tau(d_tau, n, params.q_evap_delta, params.q_tau_min);
       CHECK_CUDA(cudaDeviceSynchronize());
-      
-      // Reinforce iteration best (30%)
+
+
       float iter_deposit = (0.3f * params.Q) / best_iter_cost;
-      launch_deposit_solution_v6(d_tau, d_routes, d_route_lengths, iter_deposit, best_idx, params);
-      
-      // Reinforce global best (70%)
+      launch_deposit_solution(d_tau, d_routes, d_route_lengths, iter_deposit, best_idx, params);
+
+
       float global_deposit = (0.7f * params.Q) / (float)global_best;
-      launch_deposit_flat_solution_v6(d_tau, d_flat_routes, d_flat_lengths, global_deposit, params);
-      
+      launch_deposit_flat_solution(d_tau, d_flat_routes, d_flat_lengths, global_deposit, params);
+
       CHECK_CUDA(cudaDeviceSynchronize());
     } else {
       iter_since_best++;
@@ -310,7 +363,7 @@ int aco_vrp_cuda_with_capacity_v6(int n, int K, int vehicle_capacity_customers,
     iter++;
   }
 
-  // Cleanup
+
   cudaFree(d_coords);
   cudaFree(d_tau);
   cudaFree(d_candidate_idx);
@@ -324,7 +377,7 @@ int aco_vrp_cuda_with_capacity_v6(int n, int K, int vehicle_capacity_customers,
   cudaFree(d_iter_stats);
   cudaFree(d_flat_routes);
   cudaFree(d_flat_lengths);
-  
+
   free(h_coords);
   free(h_ant_summary);
   free(h_routes);

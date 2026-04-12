@@ -230,7 +230,6 @@ exp_cuda_scaling_input:
 		SOLVE_CSV_DIR="$(RESULTS_ROOT)/solve_manifest/csv/exp_cuda_scaling_input" \
 		SOLVE_SOLUTIONS_DIR="$(RESULTS_ROOT)/solve_manifest/solutions/exp_cuda_scaling_input" \
 		SOLVE_CLIENTS="$(EXP_CUDA_SCALING_CLIENTS)" \
-		SOLVE_CUDA_VARIANT="$(EXP_CUDA_VARIANT)" \
 		SOLVE_CUDA_REPEATS="$(EXP_CUDA_REPEATS)" \
 		SOLVE_SEQ_M="$(EXP_CUDA_SCALING_M_FIXED)" \
 		SOLVE_CUDA_RUNTIME_S="$(EXP_CUDA_RUNTIME_S)" \
@@ -246,7 +245,6 @@ exp_cuda_scaling_ants:
 			SOLVE_CSV_DIR="$(RESULTS_ROOT)/solve_manifest/csv/exp_cuda_scaling_ants" \
 			SOLVE_SOLUTIONS_DIR="$(RESULTS_ROOT)/solve_manifest/solutions/exp_cuda_scaling_ants" \
 			SOLVE_CLIENTS="$(EXP_CUDA_CLIENTS_FUNCTIONAL)" \
-			SOLVE_CUDA_VARIANT="$(EXP_CUDA_VARIANT)" \
 			SOLVE_CUDA_REPEATS="$(EXP_CUDA_REPEATS)" \
 			SOLVE_SEQ_M="$$m" \
 			SOLVE_CUDA_RUNTIME_S="$(EXP_CUDA_RUNTIME_S)" \

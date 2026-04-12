@@ -28,25 +28,15 @@ openmp_mpi: $(OPENMP_MPI_BIN)
 $(OPENMP_MPI_BIN): $(OPENMP_MPI_SRC) include/aco.h include/matrix.h include/solution.h
 	$(MPICC) $(EXTRA_FLAGS) $(FLAGS) $(FORCE_OPT) $(PERF_FLAGS) $(OMPFLAG) -DUSE_MPI $(OPENMP_MPI_SRC) $(LIBS) -o $@
 
-openmp_mpi_v2: $(OPENMP_MPI_V2_BIN)
-
-$(OPENMP_MPI_V2_BIN): $(OPENMP_MPI_V2_SRC) include/aco_v2.h include/aco.h include/matrix.h include/solution.h
-	$(MPICC) $(EXTRA_FLAGS) $(FLAGS) $(FORCE_OPT) $(PERF_FLAGS) $(OMPFLAG) -DUSE_MPI -DACO_VRP_V2 $(OPENMP_MPI_V2_SRC) $(LIBS) -o $@
-
-openmp_mpi_v3: $(OPENMP_MPI_V3_BIN)
-
-$(OPENMP_MPI_V3_BIN): $(OPENMP_MPI_V3_SRC) include/aco_v3.h include/aco.h include/matrix.h include/solution.h
-	$(MPICC) $(EXTRA_FLAGS) $(FLAGS) $(FORCE_OPT) $(PERF_FLAGS) $(OMPFLAG) -DUSE_MPI $(OPENMP_MPI_V3_SRC) $(LIBS) -o $@
-
 cuda: $(CUDA_BIN)
 
 $(CUDA_MAIN_OBJ): $(CUDA_MAIN_SRC) include/aco.h include/instance_parser.h include/matrix.h include/solution.h
-	$(NVCC) $(NVCC_FLAGS) $(CUDA_ARCH_FLAG) -DCUDA_VARIANT_$(CUDA_VARIANT) -c $< -o $@
-
-$(CUDA_ACO_OBJ): $(CUDA_ACO_SRC) include/aco.h include/aco_cuda_$(CUDA_VARIANT)_kernels.h include/matrix.h include/solution.h
 	$(NVCC) $(NVCC_FLAGS) $(CUDA_ARCH_FLAG) -c $< -o $@
 
-$(CUDA_KERNELS_OBJ): $(CUDA_KERNELS_SRC) include/aco_cuda_$(CUDA_VARIANT)_kernels.h
+$(CUDA_ACO_OBJ): $(CUDA_ACO_SRC) include/aco.h include/aco_cuda_kernels.h include/matrix.h include/solution.h
+	$(NVCC) $(NVCC_FLAGS) $(CUDA_ARCH_FLAG) -c $< -o $@
+
+$(CUDA_KERNELS_OBJ): $(CUDA_KERNELS_SRC) include/aco_cuda_kernels.h
 	$(NVCC) $(NVCC_FLAGS) $(CUDA_ARCH_FLAG) -c $< -o $@
 
 $(CUDA_BIN): $(CUDA_OBJ)

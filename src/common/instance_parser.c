@@ -6,10 +6,26 @@
 #include <stdlib.h>
 #include <string.h>
 
+/**
+ * @brief Executes `euc_2d`.
+ * @param x1 Function parameter.
+ * @param y1 Function parameter.
+ * @param x2 Function parameter.
+ * @param y2 Function parameter.
+ * @return Function result.
+ */
 static double euc_2d(double x1, double y1, double x2, double y2) {
     return sqrt(pow(x1 - x2, 2) + pow(y1 - y2, 2));
 }
 
+/**
+ * @brief Executes `vrp_load_tsplib_euc2d_matrix_ex`.
+ * @param path Function parameter.
+ * @param n_out Function parameter.
+ * @param c_out Function parameter.
+ * @param meta_out Function parameter.
+ * @return Function result.
+ */
 int vrp_load_tsplib_euc2d_matrix_ex(const char *path, int *n_out,
                                     double ***c_out,
                                     VrpInstanceMeta *meta_out) {
@@ -35,10 +51,10 @@ int vrp_load_tsplib_euc2d_matrix_ex(const char *path, int *n_out,
         if (strncmp(line, "DIMENSION", 9) == 0) {
             char *colon = strchr(line, ':');
             if (colon) {
-                n = atoi(colon + 1) - 1; // n is number of customers, DIMENSION is n+1
+                n = atoi(colon + 1) - 1;
             } else {
-                sscanf(line, "DIMENSION: %d", &n); // try without space
-                if (n == 0) sscanf(line, "DIMENSION %d", &n); // try without colon
+                sscanf(line, "DIMENSION: %d", &n);
+                if (n == 0) sscanf(line, "DIMENSION %d", &n);
                 n -= 1;
             }
         } else if (strncmp(line, "VEHICLES", 8) == 0) {
@@ -187,10 +203,26 @@ int vrp_load_tsplib_euc2d_matrix_ex(const char *path, int *n_out,
     return 0;
 }
 
+/**
+ * @brief Executes `vrp_load_tsplib_euc2d_matrix`.
+ * @param path Function parameter.
+ * @param n_out Function parameter.
+ * @param c_out Function parameter.
+ * @return Function result.
+ */
 int vrp_load_tsplib_euc2d_matrix(const char *path, int *n_out, double ***c_out) {
     return vrp_load_tsplib_euc2d_matrix_ex(path, n_out, c_out, NULL);
 }
 
+/**
+ * @brief Executes `vrp_load_tsplib_euc2d_coords`.
+ * @param path Function parameter.
+ * @param n_out Function parameter.
+ * @param coords_x_out Function parameter.
+ * @param coords_y_out Function parameter.
+ * @param meta_out Function parameter.
+ * @return Function result.
+ */
 int vrp_load_tsplib_euc2d_coords(const char *path, int *n_out,
                                  float **coords_x_out, float **coords_y_out,
                                  VrpInstanceMeta *meta_out) {

@@ -24,10 +24,12 @@
 #define ACO_ALIGNMENT 64u
 #define ACO_MAX_CANDIDATES 64
 
-/*
- * Function:  align_up_size
- * ------------------------
- * rounds a value up to a multiple of alignment.
+
+/**
+ * @brief Executes `align_up_size`.
+ * @param value Function parameter.
+ * @param alignment Function parameter.
+ * @return Function result.
  */
 static size_t align_up_size(size_t value, size_t alignment) {
   size_t rem = value % alignment;
@@ -37,10 +39,11 @@ static size_t align_up_size(size_t value, size_t alignment) {
   return value + (alignment - rem);
 }
 
-/*
- * Function:  aligned_calloc_bytes
- * -------------------------------
- * allocates cache-line aligned zeroed memory.
+
+/**
+ * @brief Executes `aligned_calloc_bytes`.
+ * @param bytes Function parameter.
+ * @return Function result.
  */
 static void *aligned_calloc_bytes(size_t bytes) {
   size_t alloc_bytes = align_up_size(bytes, ACO_ALIGNMENT);
@@ -52,10 +55,13 @@ static void *aligned_calloc_bytes(size_t bytes) {
   return ptr;
 }
 
-/*
- * Function:  clamp_int
- * --------------------
- * clamps an integer value within an inclusive [lo, hi] interval.
+
+/**
+ * @brief Executes `clamp_int`.
+ * @param x Function parameter.
+ * @param lo Function parameter.
+ * @param hi Function parameter.
+ * @return Function result.
  */
 static int clamp_int(int x, int lo, int hi) {
   if (x < lo) {
@@ -67,10 +73,11 @@ static int clamp_int(int x, int lo, int hi) {
   return x;
 }
 
-/*
- * Function:  choose_auto_total_ants
- * ---------------------------------
- * selects an automatic ant count based on problem size and available workers.
+
+/**
+ * @brief Executes `choose_auto_total_ants`.
+ * @param n Function parameter.
+ * @return Function result.
  */
 static int choose_auto_total_ants(int n) {
   int workers = 1;
@@ -96,10 +103,12 @@ static int choose_auto_total_ants(int n) {
   return total_ants;
 }
 
-/*
- * Function:  fast_pow_nonneg
- * --------------------------
- * evaluates base^exponent with fast paths for common exponents.
+
+/**
+ * @brief Executes `fast_pow_nonneg`.
+ * @param base Function parameter.
+ * @param exponent Function parameter.
+ * @return Function result.
  */
 static double fast_pow_nonneg(double base, double exponent) {
   if (exponent == 1.0) {
@@ -114,10 +123,12 @@ static double fast_pow_nonneg(double base, double exponent) {
   return pow(base, exponent);
 }
 
-/*
- * Function:  aligned_row_stride
- * -----------------------------
- * computes row stride in elements with 64-byte row alignment.
+
+/**
+ * @brief Executes `aligned_row_stride`.
+ * @param cols Function parameter.
+ * @param elem_size Function parameter.
+ * @return Function result.
  */
 static int aligned_row_stride(int cols, size_t elem_size) {
   size_t row_bytes = (size_t)cols * elem_size;
@@ -125,13 +136,18 @@ static int aligned_row_stride(int cols, size_t elem_size) {
   return (int)(padded / elem_size);
 }
 
-/*
- * Function:  choose_candidate_count
- * ---------------------------------
- * returns the full candidate set size for naive sequential selection.
+
+/**
+ * @brief Executes `choose_candidate_count`.
+ * @param n Function parameter.
+ * @return Function result.
  */
 static int choose_candidate_count(int n) { return n; }
 
+/**
+ * @brief Executes `wall_time_seconds`.
+ * @return Function result.
+ */
 static double wall_time_seconds(void) {
 #ifdef _OPENMP
   return omp_get_wtime();
@@ -142,6 +158,12 @@ static double wall_time_seconds(void) {
 #endif
 }
 
+/**
+ * @brief Executes `load_timer_directives`.
+ * @param max_runtime_sec Function parameter.
+ * @param max_stagnation_epochs Function parameter.
+ * @param min_rel_improvement Function parameter.
+ */
 static void load_timer_directives(double *max_runtime_sec,
                                   int *max_stagnation_epochs,
                                   double *min_rel_improvement) {
@@ -162,6 +184,13 @@ static void load_timer_directives(double *max_runtime_sec,
   }
 }
 
+/**
+ * @brief Executes `is_significant_improvement`.
+ * @param prev_best Function parameter.
+ * @param new_best Function parameter.
+ * @param min_rel_improvement Function parameter.
+ * @return Function result.
+ */
 static int is_significant_improvement(double prev_best, double new_best,
                                       double min_rel_improvement) {
   if (prev_best >= DBL_MAX || new_best >= DBL_MAX) {
@@ -175,10 +204,10 @@ static int is_significant_improvement(double prev_best, double new_best,
   return rel_gain + ACO_EPS >= min_rel_improvement;
 }
 
-/*
- * Function:  seq_shared_free
- * --------------------------
- * releases per-run shared candidate/score structures.
+
+/**
+ * @brief Executes `seq_shared_free`.
+ * @param shared Function parameter.
  */
 static void seq_shared_free(SeqShared *shared) {
   if (!shared) {
@@ -190,10 +219,12 @@ static void seq_shared_free(SeqShared *shared) {
   memset(shared, 0, sizeof(*shared));
 }
 
-/*
- * Function:  seq_shared_init
- * --------------------------
- * allocates shared candidate, heuristic and score matrices.
+
+/**
+ * @brief Executes `seq_shared_init`.
+ * @param shared Function parameter.
+ * @param n Function parameter.
+ * @return Function result.
  */
 static int seq_shared_init(SeqShared *shared, int n) {
   if (!shared || n < 1) {
@@ -231,10 +262,12 @@ static int seq_shared_init(SeqShared *shared, int n) {
   return 1;
 }
 
-/*
- * Function:  seq_shared_build_candidates
- * --------------------------------------
- * builds full candidate indices and eta^beta matrix once.
+
+/**
+ * @brief Executes `seq_shared_build_candidates`.
+ * @param shared Function parameter.
+ * @param c Function parameter.
+ * @param beta Function parameter.
  */
 static void seq_shared_build_candidates(SeqShared *shared, double **c,
                                         double beta) {
@@ -265,10 +298,14 @@ static void seq_shared_build_candidates(SeqShared *shared, double **c,
   }
 }
 
-/*
- * Function:  update_score_row_alpha1
- * ----------------------------------
- * AVX2/scalar kernel for score = tau * eta_beta.
+
+/**
+ * @brief Executes `update_score_row_alpha1`.
+ * @param cand_row Function parameter.
+ * @param eta_row Function parameter.
+ * @param score_row Function parameter.
+ * @param tau_row Function parameter.
+ * @param k Function parameter.
  */
 static void update_score_row_alpha1(const int *restrict cand_row,
                                     const float *restrict eta_row,
@@ -291,10 +328,14 @@ static void update_score_row_alpha1(const int *restrict cand_row,
   }
 }
 
-/*
- * Function:  update_score_row_alpha2
- * ----------------------------------
- * AVX2/scalar kernel for score = tau^2 * eta_beta.
+
+/**
+ * @brief Executes `update_score_row_alpha2`.
+ * @param cand_row Function parameter.
+ * @param eta_row Function parameter.
+ * @param score_row Function parameter.
+ * @param tau_row Function parameter.
+ * @param k Function parameter.
  */
 static void update_score_row_alpha2(const int *restrict cand_row,
                                     const float *restrict eta_row,
@@ -323,10 +364,12 @@ static void update_score_row_alpha2(const int *restrict cand_row,
   }
 }
 
-/*
- * Function:  seq_shared_update_scores
- * -----------------------------------
- * updates score matrix S = tau^alpha * eta^beta for candidate arcs.
+
+/**
+ * @brief Executes `seq_shared_update_scores`.
+ * @param shared Function parameter.
+ * @param tau Function parameter.
+ * @param alpha Function parameter.
  */
 static void seq_shared_update_scores(SeqShared *shared, double **restrict tau,
                                      double alpha) {
@@ -362,10 +405,12 @@ static void seq_shared_update_scores(SeqShared *shared, double **restrict tau,
   }
 }
 
-/*
- * Function:  visited_is_set
- * -------------------------
- * tests whether a customer has already been visited.
+
+/**
+ * @brief Executes `visited_is_set`.
+ * @param visited Function parameter.
+ * @param node Function parameter.
+ * @return Function result.
  */
 static inline int visited_is_set(const uint64_t *visited, int node) {
   return (int)((visited[(unsigned int)node >> 6] >>
@@ -373,20 +418,25 @@ static inline int visited_is_set(const uint64_t *visited, int node) {
                1u);
 }
 
-/*
- * Function:  visited_set
- * ----------------------
- * marks a customer as visited.
+
+/**
+ * @brief Executes `visited_set`.
+ * @param visited Function parameter.
+ * @param node Function parameter.
  */
 static inline void visited_set(uint64_t *visited, int node) {
   visited[(unsigned int)node >> 6] |= (uint64_t)1u
                                      << ((unsigned int)node & 63u);
 }
 
-/*
- * Function:  find_nearest_unvisited
- * ---------------------------------
- * fallback selector that returns the nearest unvisited customer.
+
+/**
+ * @brief Executes `find_nearest_unvisited`.
+ * @param shared Function parameter.
+ * @param current Function parameter.
+ * @param visited Function parameter.
+ * @param c Function parameter.
+ * @return Function result.
  */
 static int find_nearest_unvisited(const SeqShared *shared, int current,
                                   const uint64_t *restrict visited,
@@ -406,10 +456,15 @@ static int find_nearest_unvisited(const SeqShared *shared, int current,
   return best;
 }
 
-/*
- * Function:  select_next_customer
- * -------------------------------
- * roulette selection over all available customers with nearest fallback.
+
+/**
+ * @brief Executes `select_next_customer`.
+ * @param shared Function parameter.
+ * @param current Function parameter.
+ * @param visited Function parameter.
+ * @param c Function parameter.
+ * @param rng_state Function parameter.
+ * @return Function result.
  */
 static int select_next_customer(const SeqShared *shared, int current,
                                 const uint64_t *restrict visited,
@@ -469,10 +524,14 @@ static int select_next_customer(const SeqShared *shared, int current,
   return find_nearest_unvisited(shared, current, visited, c);
 }
 
-/*
- * Function:  seq_workspace_init
- * -----------------------------
- * allocates sequential workspace used across ants.
+
+/**
+ * @brief Executes `seq_workspace_init`.
+ * @param ws Function parameter.
+ * @param K Function parameter.
+ * @param n Function parameter.
+ * @param visited_words Function parameter.
+ * @return Function result.
  */
 static int seq_workspace_init(SeqWorkspace *ws, int K, int n,
                               int visited_words) {
@@ -494,10 +553,10 @@ static int seq_workspace_init(SeqWorkspace *ws, int K, int n,
   return 1;
 }
 
-/*
- * Function:  seq_workspace_free
- * -----------------------------
- * releases workspace buffers.
+
+/**
+ * @brief Executes `seq_workspace_free`.
+ * @param ws Function parameter.
  */
 static void seq_workspace_free(SeqWorkspace *ws) {
   if (!ws) {
@@ -509,10 +568,14 @@ static void seq_workspace_free(SeqWorkspace *ws) {
   memset(ws, 0, sizeof(*ws));
 }
 
-/*
- * Function:  build_ant_solution
- * -----------------------------
- * builds one ant solution with bitmask-tracked visited customers.
+
+/**
+ * @brief Executes `build_ant_solution`.
+ * @param ws Function parameter.
+ * @param shared Function parameter.
+ * @param K Function parameter.
+ * @param vehicle_capacity_customers Function parameter.
+ * @param c Function parameter.
  */
 static void build_ant_solution(SeqWorkspace *ws, const SeqShared *shared, int K,
                                int vehicle_capacity_customers,
@@ -581,10 +644,25 @@ static void build_ant_solution(SeqWorkspace *ws, const SeqShared *shared, int K,
   }
 }
 
-/*
- * Function:  aco_vrp_run_with_timer
- * ------------------
- * internal sequential solver routine with timer directives already resolved.
+
+/**
+ * @brief Executes `aco_vrp_run_with_timer`.
+ * @param n Function parameter.
+ * @param K Function parameter.
+ * @param vehicle_capacity_customers Function parameter.
+ * @param m Function parameter.
+ * @param c Function parameter.
+ * @param alpha Function parameter.
+ * @param beta Function parameter.
+ * @param rho Function parameter.
+ * @param tau0 Function parameter.
+ * @param Q Function parameter.
+ * @param seed Function parameter.
+ * @param best_solution Function parameter.
+ * @param best_cost Function parameter.
+ * @param max_runtime_sec Function parameter.
+ * @param max_stagnation_epochs Function parameter.
+ * @param min_rel_improvement Function parameter.
  */
 static void aco_vrp_run_with_timer(int n, int K, int vehicle_capacity_customers,
                                    int m, double **c, double alpha,
@@ -774,6 +852,21 @@ static void aco_vrp_run_with_timer(int n, int K, int vehicle_capacity_customers,
   matrix_free(tau);
 }
 
+/**
+ * @brief Runs the sequential ACO solver with auto-derived vehicle capacity.
+ * @param n Number of customers.
+ * @param K Number of vehicles.
+ * @param m Number of ants (0 enables backend auto-tuning).
+ * @param c Distance matrix.
+ * @param alpha Pheromone exponent.
+ * @param beta Heuristic exponent.
+ * @param rho Evaporation factor.
+ * @param tau0 Initial pheromone value.
+ * @param Q Deposit scaling factor.
+ * @param seed RNG seed.
+ * @param best_solution Output best solution.
+ * @param best_cost Output best cost.
+ */
 void aco_vrp(int n, int K, int m, double **c, double alpha,
              double beta, double rho, double tau0, double Q,
              unsigned int seed, Solution *best_solution, double *best_cost) {
@@ -786,6 +879,22 @@ void aco_vrp(int n, int K, int m, double **c, double alpha,
                         beta, rho, tau0, Q, seed, best_solution, best_cost);
 }
 
+/**
+ * @brief Runs the sequential ACO solver with explicit vehicle capacity.
+ * @param n Number of customers.
+ * @param K Number of vehicles.
+ * @param vehicle_capacity_customers Per-vehicle customer capacity.
+ * @param m Number of ants (0 enables backend auto-tuning).
+ * @param c Distance matrix.
+ * @param alpha Pheromone exponent.
+ * @param beta Heuristic exponent.
+ * @param rho Evaporation factor.
+ * @param tau0 Initial pheromone value.
+ * @param Q Deposit scaling factor.
+ * @param seed RNG seed.
+ * @param best_solution Output best solution.
+ * @param best_cost Output best cost.
+ */
 void aco_vrp_with_capacity(int n, int K, int vehicle_capacity_customers, int m,
                            double **c, double alpha, double beta,
                            double rho, double tau0, double Q,

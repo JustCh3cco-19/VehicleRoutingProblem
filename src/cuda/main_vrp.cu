@@ -1,7 +1,6 @@
 extern "C" {
 #include "aco.h"
 #include "instance_parser.h"
-#include "matrix.h"
 #include "solution.h"
 }
 
@@ -9,18 +8,36 @@ extern "C" {
 #include <stdlib.h>
 #include <errno.h>
 
+/**
+ * @brief Runs the CUDA ACO backend with explicit vehicle capacity.
+ * @param n Number of customers.
+ * @param K Number of vehicles.
+ * @param vehicle_capacity_customers Per-vehicle customer capacity.
+ * @param m Number of ants.
+ * @param coords_x X coordinates.
+ * @param coords_y Y coordinates.
+ * @param alpha Pheromone exponent.
+ * @param beta Heuristic exponent.
+ * @param rho Evaporation factor.
+ * @param tau0 Initial pheromone value.
+ * @param Q Deposit factor.
+ * @param seed RNG seed.
+ * @param best_solution Output best solution.
+ * @param best_cost Output best cost.
+ * @return 0 on success, non-zero on failure.
+ */
 int aco_vrp_cuda_with_capacity(int n, int K, int vehicle_capacity_customers,
-                               int m, double **c, double alpha, double beta,
-                               double rho, double tau0, double Q,
-                               unsigned int seed, Solution *best_solution,
-                               double *best_cost);
+                               int m, float *coords_x, float *coords_y,
+                               double alpha, double beta, double rho,
+                               double tau0, double Q, unsigned int seed,
+                               Solution *best_solution, double *best_cost);
 
-int aco_vrp_cuda_with_capacity_v6(int n, int K, int vehicle_capacity_customers,
-                                  int m, float *coords_x, float *coords_y,
-                                  double alpha, double beta, double rho,
-                                  double tau0, double Q, unsigned int seed,
-                                  Solution *best_solution, double *best_cost);
-
+/**
+ * @brief Parses a positive integer argument.
+ * @param s Input string.
+ * @param out Output parsed value.
+ * @return 1 on success, 0 on parse/range error.
+ */
 static int parse_int_arg(const char *s, int *out) {
     char *end = NULL;
     long v;
@@ -36,6 +53,12 @@ static int parse_int_arg(const char *s, int *out) {
     return 1;
 }
 
+/**
+ * @brief Parses an unsigned integer argument.
+ * @param s Input string.
+ * @param ok Output parse status flag.
+ * @return Parsed value if valid, 0 otherwise.
+ */
 static unsigned int parse_uint_arg(const char *s, int *ok) {
     char *end = NULL;
     unsigned long v;
@@ -49,6 +72,11 @@ static unsigned int parse_uint_arg(const char *s, int *ok) {
     return (unsigned int)v;
 }
 
+/**
+ * @brief Prints routes from a solution in human-readable format.
+ * @param best Best solution to print.
+ * @param K Number of routes.
+ */
 static void print_solution_routes(const Solution *best, int K) {
     int i;
     for (i = 0; i < K; ++i) {
@@ -67,6 +95,12 @@ static void print_solution_routes(const Solution *best, int K) {
     }
 }
 
+/**
+ * @brief CLI entrypoint for the CUDA backend.
+ * @param argc Argument count.
+ * @param argv Argument vector.
+ * @return 0 on success, non-zero on error.
+ */
 int main(int argc, char **argv) {
     const char *path;
     int K = 0;
@@ -75,7 +109,8 @@ int main(int argc, char **argv) {
     unsigned int seed = 1234u;
     int n = 0;
     VrpInstanceMeta instance_meta = {0};
-    double **c = NULL;
+    float *coords_x = NULL;
+    float *coords_y = NULL;
     double alpha = 1.0;
     double beta = 2.0;
     double rho = 0.5;
@@ -102,44 +137,27 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-#ifdef CUDA_VARIANT_v6
-    float *coords_x = NULL;
-    float *coords_y = NULL;
     if (vrp_load_tsplib_euc2d_coords(path, &n, &coords_x, &coords_y, &instance_meta) != 0) {
         return 1;
     }
-#else
-    if (vrp_load_tsplib_euc2d_matrix_ex(path, &n, &c, &instance_meta) != 0) {
-        return 1;
-    }
-#endif
 
     if (instance_meta.vehicles > 0 && instance_meta.vehicles != K) {
         fprintf(stderr, "instance VEHICLES mismatch: CLI K=%d, file VEHICLES=%d\n",
                 K, instance_meta.vehicles);
-#ifndef CUDA_VARIANT_v6
-        matrix_free(c);
-#else
         free(coords_x);
         free(coords_y);
-#endif
         return 1;
     }
 
     best = solution_create(K, n);
     if (!best) {
         fprintf(stderr, "failed to allocate solution\n");
-#ifndef CUDA_VARIANT_v6
-        matrix_free(c);
-#else
         free(coords_x);
         free(coords_y);
-#endif
         return 1;
     }
-    
-#ifdef CUDA_VARIANT_v6
-    if (aco_vrp_cuda_with_capacity_v6(n, K, instance_meta.capacity, m, coords_x, coords_y, alpha,
+
+    if (aco_vrp_cuda_with_capacity(n, K, instance_meta.capacity, m, coords_x, coords_y, alpha,
                                       beta, rho, tau0, Q, seed, best,
                                       &best_cost) != 0) {
         fprintf(stderr, "CUDA solver failed\n");
@@ -148,27 +166,13 @@ int main(int argc, char **argv) {
         free(coords_y);
         return 1;
     }
-#else
-    if (aco_vrp_cuda_with_capacity(n, K, instance_meta.capacity, m, c, alpha,
-                                   beta, rho, tau0, Q, seed, best,
-                                   &best_cost) != 0) {
-        fprintf(stderr, "CUDA solver failed\n");
-        solution_free(best);
-        matrix_free(c);
-        return 1;
-    }
-#endif
 
     print_solution_routes(best, K);
     printf("Cost: %.3f\n", best_cost);
     printf("best cost: %.3f\n", best_cost);
 
     solution_free(best);
-#ifdef CUDA_VARIANT_v6
     free(coords_x);
     free(coords_y);
-#else
-    matrix_free(c);
-#endif
     return 0;
 }

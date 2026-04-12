@@ -5,16 +5,12 @@
 #include <stdlib.h>
 #include <string.h>
 
-/*
- * Function:  fast_pow_nonneg
- * --------------------------
- * evaluates base^exponent for non-negative base, with fast paths for common
- * exponents used in ACO.
- *
- *  base: non-negative input value
- *  exponent: power exponent
- *
- *  returns: base raised to exponent
+
+/**
+ * @brief Executes `fast_pow_nonneg`.
+ * @param base Function parameter.
+ * @param exponent Function parameter.
+ * @return Function result.
  */
 static double fast_pow_nonneg(double base, double exponent) {
   if (exponent == 1.0) {
@@ -29,36 +25,27 @@ static double fast_pow_nonneg(double base, double exponent) {
   return pow(base, exponent);
 }
 
-/*
- * Function:  score_cache_line_copy
- * --------------------------------
- * copies one full score row between cache levels.
- *
- *  dst: destination row
- *  src: source row
- *  line_len: number of row entries
- *
- *  returns: nothing
+
+/**
+ * @brief Executes `score_cache_line_copy`.
+ * @param dst Function parameter.
+ * @param src Function parameter.
+ * @param line_len Function parameter.
  */
 static void score_cache_line_copy(double *dst, const double *src, int line_len) {
   memcpy(dst, src, (size_t)line_len * sizeof(double));
 }
 
-/*
- * Function:  score_cache_compute_row
- * ----------------------------------
- * computes one full desirability row:
- * score[current][node] = tau[current][node]^alpha * eta[current][node]^beta.
- *
- *  dst: output row buffer of length n+1
- *  current: source row index
- *  n: max node index
- *  tau: pheromone matrix
- *  eta: heuristic matrix
- *  alpha: pheromone exponent
- *  beta: heuristic exponent
- *
- *  returns: nothing
+
+/**
+ * @brief Executes `score_cache_compute_row`.
+ * @param dst Function parameter.
+ * @param current Function parameter.
+ * @param n Function parameter.
+ * @param tau Function parameter.
+ * @param eta Function parameter.
+ * @param alpha Function parameter.
+ * @param beta Function parameter.
  */
 static void score_cache_compute_row(double *dst, int current, int n,
                                     double **tau, double **eta, double alpha,
@@ -77,38 +64,38 @@ static void score_cache_compute_row(double *dst, int current, int n,
   }
 }
 
-/*
- * Function:  score_cache_get_l1_line
- * ----------------------------------
- * returns pointer to one L1 line by index.
+
+/**
+ * @brief Executes `score_cache_get_l1_line`.
+ * @param cache Function parameter.
+ * @param idx Function parameter.
+ * @return Function result.
  */
 static double *score_cache_get_l1_line(AcoScoreCache *cache, int idx) {
   return cache->l1_rows + (size_t)idx * (size_t)cache->line_len;
 }
 
-/*
- * Function:  score_cache_get_l2_line
- * ----------------------------------
- * returns pointer to one L2 line by index.
+
+/**
+ * @brief Executes `score_cache_get_l2_line`.
+ * @param cache Function parameter.
+ * @param idx Function parameter.
+ * @return Function result.
  */
 static double *score_cache_get_l2_line(AcoScoreCache *cache, int idx) {
   return cache->l2_rows + (size_t)idx * (size_t)cache->line_len;
 }
 
-/*
- * Function:  score_cache_get_row
- * ------------------------------
- * looks up one desirability row in layered cache and fills it on miss.
- *
- *  cache: cache instance
- *  current: row key
- *  tau: pheromone matrix
- *  eta: heuristic matrix
- *  alpha: pheromone exponent
- *  beta: heuristic exponent
- *
- *  returns: pointer to cached row on success
- *           NULL when cache is unavailable for this request
+
+/**
+ * @brief Executes `score_cache_get_row`.
+ * @param cache Function parameter.
+ * @param current Function parameter.
+ * @param tau Function parameter.
+ * @param eta Function parameter.
+ * @param alpha Function parameter.
+ * @param beta Function parameter.
+ * @return Function result.
  */
 static const double *score_cache_get_row(AcoScoreCache *cache, int current,
                                          double **tau, double **eta,
@@ -149,17 +136,13 @@ static const double *score_cache_get_row(AcoScoreCache *cache, int current,
   return l1_line;
 }
 
-/*
- * Function:  aco_score_cache_create
- * ---------------------------------
- * allocates and initializes layered score-cache storage.
- *
- *  n: highest node index
- *  l1_lines: number of L1 cache lines
- *  l2_lines: number of L2 cache lines
- *
- *  returns: cache pointer on success
- *           NULL on allocation failure or invalid input
+
+/**
+ * @brief Executes `aco_score_cache_create`.
+ * @param n Function parameter.
+ * @param l1_lines Function parameter.
+ * @param l2_lines Function parameter.
+ * @return Function result.
  */
 AcoScoreCache *aco_score_cache_create(int n, int l1_lines, int l2_lines) {
   if (n < 0) {
@@ -205,14 +188,10 @@ AcoScoreCache *aco_score_cache_create(int n, int l1_lines, int l2_lines) {
   return cache;
 }
 
-/*
- * Function:  aco_score_cache_invalidate
- * -------------------------------------
- * marks all L1/L2 cache lines as invalid after pheromone updates.
- *
- *  cache: cache instance
- *
- *  returns: nothing
+
+/**
+ * @brief Executes `aco_score_cache_invalidate`.
+ * @param cache Function parameter.
  */
 void aco_score_cache_invalidate(AcoScoreCache *cache) {
   if (!cache) {
@@ -227,14 +206,10 @@ void aco_score_cache_invalidate(AcoScoreCache *cache) {
   }
 }
 
-/*
- * Function:  aco_score_cache_reset_stats
- * --------------------------------------
- * resets hit/miss counters to zero.
- *
- *  cache: cache instance
- *
- *  returns: nothing
+
+/**
+ * @brief Executes `aco_score_cache_reset_stats`.
+ * @param cache Function parameter.
  */
 void aco_score_cache_reset_stats(AcoScoreCache *cache) {
   if (!cache) {
@@ -245,15 +220,11 @@ void aco_score_cache_reset_stats(AcoScoreCache *cache) {
   cache->l3_misses = 0;
 }
 
-/*
- * Function:  aco_score_cache_get_stats
- * ------------------------------------
- * snapshots cache statistics into the provided output structure.
- *
- *  cache: cache instance
- *  out: destination stats structure
- *
- *  returns: nothing
+
+/**
+ * @brief Executes `aco_score_cache_get_stats`.
+ * @param cache Function parameter.
+ * @param out Function parameter.
  */
 void aco_score_cache_get_stats(const AcoScoreCache *cache, AcoCacheStats *out) {
   if (!out) {
@@ -272,14 +243,10 @@ void aco_score_cache_get_stats(const AcoScoreCache *cache, AcoCacheStats *out) {
   out->l3_misses = cache->l3_misses;
 }
 
-/*
- * Function:  aco_score_cache_free
- * -------------------------------
- * releases all memory owned by a score cache instance.
- *
- *  cache: cache instance to free; NULL is accepted
- *
- *  returns: nothing
+
+/**
+ * @brief Executes `aco_score_cache_free`.
+ * @param cache Function parameter.
  */
 void aco_score_cache_free(AcoScoreCache *cache) {
   if (!cache) {
@@ -293,26 +260,20 @@ void aco_score_cache_free(AcoScoreCache *cache) {
   free(cache);
 }
 
-/*
- * Function:  rand01
- * -----------------
- * returns a pseudo-random value in [0, 1] using the C runtime RNG.
- *
- *  returns: random double in [0, 1]
+
+/**
+ * @brief Executes `rand01`.
+ * @return Function result.
  */
 static double rand01(void) {
   return (double)rand() / (double)RAND_MAX;
 }
 
-/*
- * Function:  aco_rand01_state
- * ---------------------------
- * generates random values in [0, 1] from a local xorshift RNG state when
- * provided; otherwise falls back to rand01().
- *
- *  state: optional RNG state pointer
- *
- *  returns: pseudo-random double in [0, 1]
+
+/**
+ * @brief Executes `aco_rand01_state`.
+ * @param state Function parameter.
+ * @return Function result.
  */
 double aco_rand01_state(unsigned int *state) {
   if (!state) {
@@ -332,17 +293,13 @@ double aco_rand01_state(unsigned int *state) {
   return (double)x / (double)UINT_MAX;
 }
 
-/*
- * Function:  aco_make_ant_seed
- * ----------------------------
- * deterministically mixes base seed, iteration index, and ant index to build
- * a non-zero per-ant seed.
- *
- *  base_seed: user-provided base seed
- *  iter: iteration index
- *  ant_index: ant index
- *
- *  returns: non-zero seed value
+
+/**
+ * @brief Executes `aco_make_ant_seed`.
+ * @param base_seed Function parameter.
+ * @param iter Function parameter.
+ * @param ant_index Function parameter.
+ * @return Function result.
  */
 unsigned int aco_make_ant_seed(unsigned int base_seed, int iter,
                                int ant_index) {
@@ -353,26 +310,21 @@ unsigned int aco_make_ant_seed(unsigned int base_seed, int iter,
   return x ? x : 1u;
 }
 
-/*
- * Function:  aco_select_next
- * --------------------------
- * performs roulette-wheel selection among unvisited nodes using scores:
- * score(node) = tau[current][node]^alpha * eta[current][node]^beta.
- *
- *  current: current node id
- *  unvisited_nodes: compact list of currently unvisited customers
- *  unvisited_count: number of valid entries in unvisited_nodes
- *  tau: pheromone matrix
- *  eta: heuristic matrix
- *  alpha: pheromone exponent
- *  beta: heuristic exponent
- *  roulette_r: random value in [0, 1] for thresholding
- *  candidate_scores: scratch array to store per-candidate scores
- *  selected_index: optional output index in unvisited_nodes
- *  score_cache: optional layered cache for score rows
- *
- *  returns: selected customer id on success
- *           0 if unvisited_count is non-positive
+
+/**
+ * @brief Executes `aco_select_next`.
+ * @param current Function parameter.
+ * @param unvisited_nodes Function parameter.
+ * @param unvisited_count Function parameter.
+ * @param tau Function parameter.
+ * @param eta Function parameter.
+ * @param alpha Function parameter.
+ * @param beta Function parameter.
+ * @param roulette_r Function parameter.
+ * @param candidate_scores Function parameter.
+ * @param selected_index Function parameter.
+ * @param score_cache Function parameter.
+ * @return Function result.
  */
 int aco_select_next(int current, const int *unvisited_nodes,
                     int unvisited_count, double **tau, double **eta,
@@ -423,31 +375,22 @@ int aco_select_next(int current, const int *unvisited_nodes,
   return unvisited_nodes[chosen_idx];
 }
 
-/*
- * Function:  aco_build_ant_solution
- * ---------------------------------
- * builds one ant solution route-by-route.
- * algorithm outline:
- * 1) initialize unvisited list [1..n] and pre-generate random draws
- * 2) for each route, repeatedly select next customer with aco_select_next
- * 3) remove selected customer from unvisited list with swap-remove
- * 4) after K routes, append any remaining customers to the last route
- *
- *  sol: solution object to fill
- *  n: number of customers
- *  K: number of routes
- *  tau: pheromone matrix
- *  eta: heuristic matrix
- *  alpha: pheromone exponent
- *  beta: heuristic exponent
- *  vehicle_capacity_customers: max customers per route (unit demand); <=0 means unlimited
- *  score_cache: optional layered cache for score rows
- *  rng_state: RNG state used to draw random numbers
- *  unvisited_nodes: scratch array of size >= n
- *  candidate_scores: scratch array of size >= n
- *  random_draws: scratch array of size >= n
- *
- *  returns: nothing
+
+/**
+ * @brief Executes `aco_build_ant_solution`.
+ * @param sol Function parameter.
+ * @param n Function parameter.
+ * @param K Function parameter.
+ * @param tau Function parameter.
+ * @param eta Function parameter.
+ * @param alpha Function parameter.
+ * @param beta Function parameter.
+ * @param vehicle_capacity_customers Function parameter.
+ * @param score_cache Function parameter.
+ * @param rng_state Function parameter.
+ * @param unvisited_nodes Function parameter.
+ * @param candidate_scores Function parameter.
+ * @param random_draws Function parameter.
  */
 void aco_build_ant_solution(
     Solution *sol, int n, int K, double **tau, double **eta, double alpha,

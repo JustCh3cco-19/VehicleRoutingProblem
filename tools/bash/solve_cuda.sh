@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
 set -uo pipefail
 
-variant="${SOLVE_CUDA_VARIANT}"
-csv="${SOLVE_CSV_DIR}/manifest_cuda_${variant}_per_instance_results.csv"
-sol_dir="${SOLVE_SOLUTIONS_DIR}/cuda_${variant}"
+csv="${SOLVE_CSV_DIR}/manifest_cuda_per_instance_results.csv"
+sol_dir="${SOLVE_SOLUTIONS_DIR}/cuda"
 manifest="${SOLVE_MANIFEST_CUDA:-${SOLVE_MANIFEST:-instances/test_aligned/manifest_cuda.csv}}"
 clients="${SOLVE_CLIENTS:-}"
 limit="${SOLVE_LIMIT:-0}"
@@ -94,7 +93,7 @@ tail -n +2 "$manifest" \
         echo "[cuda] ${name} run=${run_id} (${done_runs}/${total_runs})"
         echo "[cuda] run_stimata: eta_run_s=${eta_run_s} eta_mem_gb=${eta_mem_gb}"
 
-        sol_file="${sol_dir}/${name}_cuda_${variant}_run${run_id}_solution.txt"
+        sol_file="${sol_dir}/${name}_cuda_run${run_id}_solution.txt"
         time_file="$(mktemp)"
 
         out=$(/usr/bin/time -f "%e,%M" -o "$time_file" env \

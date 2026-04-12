@@ -7,10 +7,12 @@
 
 #define SOLUTION_ALIGNMENT 64u
 
-/*
- * Function:  align_up_size
- * ------------------------
- * rounds a byte count up to the next alignment boundary.
+
+/**
+ * @brief Executes `align_up_size`.
+ * @param value Function parameter.
+ * @param alignment Function parameter.
+ * @return Function result.
  */
 static size_t align_up_size(size_t value, size_t alignment) {
   size_t rem = value % alignment;
@@ -20,15 +22,11 @@ static size_t align_up_size(size_t value, size_t alignment) {
   return value + (alignment - rem);
 }
 
-/*
- * Function:  route_append
- * -----------------------
- * appends one node to a route if there is free capacity.
- *
- *  r: destination route
- *  node: node id to append
- *
- *  returns: nothing; if capacity is exhausted, the route is unchanged
+
+/**
+ * @brief Executes `route_append`.
+ * @param r Function parameter.
+ * @param node Function parameter.
  */
 void route_append(Route *r, int node) {
   if (r->len >= r->cap) {
@@ -37,18 +35,12 @@ void route_append(Route *r, int node) {
   r->nodes[r->len++] = node;
 }
 
-/*
- * Function:  solution_create
- * --------------------------
- * allocates a Solution with K routes. each route gets capacity n+2 to hold
- * depot start/end and up to all customers. all route node arrays are slices
- * of one aligned contiguous storage buffer.
- *
- *  K: number of routes
- *  n: number of customers
- *
- *  returns: allocated Solution pointer on success
- *           NULL on allocation failure
+
+/**
+ * @brief Executes `solution_create`.
+ * @param K Function parameter.
+ * @param n Function parameter.
+ * @return Function result.
  */
 Solution *solution_create(int K, int n) {
   if (K <= 0 || n < 0) {
@@ -86,14 +78,10 @@ Solution *solution_create(int K, int n) {
   return s;
 }
 
-/*
- * Function:  solution_reset
- * -------------------------
- * clears all route lengths without reallocating memory.
- *
- *  s: solution to reset
- *
- *  returns: nothing
+
+/**
+ * @brief Executes `solution_reset`.
+ * @param s Function parameter.
  */
 void solution_reset(Solution *s) {
   for (int i = 0; i < s->K; ++i) {
@@ -101,14 +89,10 @@ void solution_reset(Solution *s) {
   }
 }
 
-/*
- * Function:  solution_free
- * ------------------------
- * frees contiguous route storage, route metadata, and solution header.
- *
- *  s: solution to free; NULL is accepted
- *
- *  returns: nothing
+
+/**
+ * @brief Executes `solution_free`.
+ * @param s Function parameter.
  */
 void solution_free(Solution *s) {
   if (!s) return;
@@ -117,15 +101,11 @@ void solution_free(Solution *s) {
   free(s);
 }
 
-/*
- * Function:  solution_copy
- * ------------------------
- * copies route lengths and node sequences from src to dst.
- *
- *  dst: destination solution
- *  src: source solution
- *
- *  returns: nothing
+
+/**
+ * @brief Executes `solution_copy`.
+ * @param dst Function parameter.
+ * @param src Function parameter.
  */
 void solution_copy(Solution *dst, const Solution *src) {
   for (int i = 0; i < src->K; ++i) {
@@ -136,15 +116,12 @@ void solution_copy(Solution *dst, const Solution *src) {
   }
 }
 
-/*
- * Function:  solution_cost
- * ------------------------
- * computes sum of arc costs over all consecutive node pairs in all routes.
- *
- *  s: solution to evaluate
- *  c: cost matrix
- *
- *  returns: total route traversal cost
+
+/**
+ * @brief Executes `solution_cost`.
+ * @param s Function parameter.
+ * @param c Function parameter.
+ * @return Function result.
  */
 double solution_cost(const Solution *s, double **c) {
   double cost = 0.0;
@@ -159,39 +136,27 @@ double solution_cost(const Solution *s, double **c) {
   return cost;
 }
 
-/*
- * Function:  set_err
- * ------------------
- * writes an error message into the output buffer if it is valid.
- *
- *  err: destination buffer
- *  err_len: buffer size in bytes
- *  msg: message to write
- *
- *  returns: nothing
+
+/**
+ * @brief Executes `set_err`.
+ * @param err Function parameter.
+ * @param err_len Function parameter.
+ * @param msg Function parameter.
  */
 static void set_err(char *err, size_t err_len, const char *msg) {
   if (!err || err_len == 0) return;
   snprintf(err, err_len, "%s", msg);
 }
 
-/*
- * Function:  solution_validate
- * ----------------------------
- * checks structural validity of a VRP solution:
- * 1) solution metadata and route pointers are coherent
- * 2) each route starts/ends at depot and never uses depot internally
- * 3) node ids are in range
- * 4) each customer is visited exactly once globally
- *
- *  s: solution to validate
- *  n: number of customers
- *  K: expected route count
- *  err: optional buffer for validation error text
- *  err_len: size of err buffer
- *
- *  returns: true when solution is valid
- *           false when any constraint is violated or on allocation failure
+
+/**
+ * @brief Executes `solution_validate`.
+ * @param s Function parameter.
+ * @param n Function parameter.
+ * @param K Function parameter.
+ * @param err Function parameter.
+ * @param err_len Function parameter.
+ * @return Function result.
  */
 bool solution_validate(const Solution *s, int n, int K, char *err,
                        size_t err_len) {
