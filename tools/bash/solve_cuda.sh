@@ -10,7 +10,8 @@ limit="${SOLVE_LIMIT:-0}"
 repeats="${SOLVE_CUDA_REPEATS:-1}"
 runtime_s="${SOLVE_SEQ_RUNTIME_EFFECTIVE:-0}"
 stag_iters="${SOLVE_SEQ_STAGNATION_EPOCHS:-0}"
-improve_eps="${SOLVE_SEQ_MIN_REL_IMPROVEMENT:-0.001}"
+improve_rel_raw="${SOLVE_SEQ_MIN_REL_IMPROVEMENT:-0.001}"
+cuda_profile="${SOLVE_CUDA_PROFILE:-0}"
 
 # Prefer CUDA-specific controls when provided; keep seq vars as compatibility fallback.
 if [ -n "${SOLVE_CUDA_RUNTIME_S:-}" ]; then
@@ -20,12 +21,13 @@ if [ -n "${SOLVE_CUDA_STAGNATION_EPOCHS:-}" ]; then
   stag_iters="${SOLVE_CUDA_STAGNATION_EPOCHS}"
 fi
 if [ -n "${SOLVE_CUDA_MIN_REL_IMPROVEMENT:-}" ]; then
-  improve_eps="${SOLVE_CUDA_MIN_REL_IMPROVEMENT}"
+  improve_rel_raw="${SOLVE_CUDA_MIN_REL_IMPROVEMENT}"
 fi
 
 if [ "$repeats" -lt 1 ]; then
   repeats=1
 fi
+improve_rel="$(awk "BEGIN { v=${improve_rel_raw}; if (v > 1.0) v/=100.0; printf \"%.12g\", v }")"
 
 header="name,profile,instance_path,n,K,m,solver_seed,instance_seed,layout_id,run_id,status,elapsed_s,best_cost,error"
 
@@ -97,8 +99,11 @@ tail -n +2 "$manifest" \
 
         out=$(/usr/bin/time -f "%e,%M" -o "$time_file" env \
           ACO_SOLVER_TIMEOUT_SECONDS="$runtime_s" \
+          ACO_SOLVER_STAGNATION_EPOCHS="$stag_iters" \
           ACO_SOLVER_STAGNATION_ITERS="$stag_iters" \
-          ACO_SOLVER_IMPROVE_EPS="$improve_eps" \
+          ACO_SOLVER_MIN_REL_IMPROVEMENT="$improve_rel" \
+          ACO_SOLVER_IMPROVE_EPS="$improve_rel" \
+          ACO_CUDA_PROFILE="$cuda_profile" \
           ./aco_vrp_cuda.out "$instance_path" "$K" "$m" "$seed_run" 2>&1)
         rc=$?
 

@@ -272,3 +272,32 @@ exp_cuda_all: exp_cuda_scaling_input exp_cuda_scaling_ants exp_seq_for_cuda
 	@echo "  $(RESULTS_ROOT)/solve_manifest/csv/exp_cuda_scaling_input"
 	@echo "  $(RESULTS_ROOT)/solve_manifest/csv/exp_cuda_scaling_ants"
 	@echo "  $(RESULTS_ROOT)/solve_manifest/csv/exp_cuda_vs_seq"
+
+# Practical campaign entry-points (batch-friendly)
+exp_practical_cpu:
+	@tag="$${PRACTICAL_TAG:-$$(date +%Y%m%d_%H%M%S)}"; \
+	root="$(RESULTS_ROOT)/practical_campaign/$${tag}/cpu"; \
+	echo "[exp_practical_cpu] root=$$root"; \
+	$(PYTHON_BIN) scripts/run_practical_experiments.py \
+		--launcher srun \
+		--skip-cuda \
+		--results-root "$$root" \
+		$(PRACTICAL_COMMON_ARGS) \
+		$(PRACTICAL_CPU_ARGS)
+
+exp_practical_gpu:
+	@tag="$${PRACTICAL_TAG:-$$(date +%Y%m%d_%H%M%S)}"; \
+	root="$(RESULTS_ROOT)/practical_campaign/$${tag}/gpu"; \
+	echo "[exp_practical_gpu] root=$$root"; \
+	$(PYTHON_BIN) scripts/run_practical_experiments.py \
+		--launcher srun \
+		--only-cuda-sections \
+		--openmp-threads 32 \
+		--mpi-ranks 1 \
+		--hybrid-pairs 1x32 \
+		--quality-mpi-ranks 1 \
+		--quality-mpi-threads 32 \
+		--quality-hybrid 1x32 \
+		--results-root "$$root" \
+		$(PRACTICAL_COMMON_ARGS) \
+		$(PRACTICAL_GPU_ARGS)

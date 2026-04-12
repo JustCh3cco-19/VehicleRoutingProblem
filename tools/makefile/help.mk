@@ -59,6 +59,8 @@ help:
 	@printf "  %-42s | %s\n" "exp_cuda_scaling_ants" "CUDA scaling su numero formiche m (64/128/256)"
 	@printf "  %-42s | %s\n" "exp_seq_for_cuda" "Test sequenziale (non scaling) per confronto CUDA"
 	@printf "  %-42s | %s\n" "exp_cuda_all" "Esegue: exp_cuda_scaling_input, exp_cuda_scaling_ants, exp_seq_for_cuda"
+	@printf "  %-42s | %s\n" "exp_practical_cpu" "Campagna pratica completa lato CPU (skip CUDA), pronta per job batch"
+	@printf "  %-42s | %s\n" "exp_practical_gpu" "Campagna pratica lato GPU (solo sezioni CUDA), pronta per job batch"
 	@printf "  %-42s | %s\n\n" "exp_all" "Esegue in sequenza: exp_strong_openmp, exp_weak_openmp, exp_strong_mpi, exp_strong_hybrid, exp_weak_mpi, exp_weak_hybrid"
 	@printf "VARIABILI PER solve_*:\n"
 	@printf "  %-60s | %s\n" "RESULTS_ROOT=results" "Root unica risultati (solve)"
