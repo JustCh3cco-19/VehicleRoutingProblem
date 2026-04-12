@@ -1,3 +1,4 @@
+#include "aco_v2.h"
 #include "aco.h"
 #include "matrix.h"
 #include "solution.h"
@@ -23,21 +24,13 @@
 #define V2_MAX_CANDS 512
 #define V2_EPS 1e-7f
 
-/* 
- * V2 ULTIMATE OFFICIAL VERSION
- * Features:
- * - Float Precision Matrices (Memory Wall Mitigation)
- * - Hierarchical Bitmask (O(N) Fallback Accelerator)
- * - Adaptive L3-Aware Candidate Tuning
- * - Asynchronous Sparse MPI Synchronization (SSP)
- * - Parallel Pheromone Deposit & Delta Packing
- */
-
+/* -- Sparse Sync Structure -- */
 typedef struct {
     uint32_t edge_idx;
     float increment;
 } SparseDelta;
 
+/* -- Matrices in FLOAT -- */
 typedef struct {
     int n;
     int stride;
@@ -130,6 +123,11 @@ typedef struct {
     float *eta_beta;
 } V2RankShared;
 
+static void v2_shared_free(V2RankShared *s) {
+    if (!s) return;
+    free(s->eta_beta); free(s->cand_idx);
+}
+
 static int v2_shared_init(V2RankShared *s, int n, int cand_k, const MatrixFloat *c_mat, double beta) {
     s->n = n; s->cand_k = cand_k;
     size_t row_bytes = (size_t)s->cand_k * sizeof(float);
@@ -175,11 +173,8 @@ typedef struct {
 
 static void v2_ws_free(HierarchicalWorkspace *ws) {
   if (!ws) return;
-  if (ws->route_loads) free(ws->route_loads);
-  if (ws->visited) free(ws->visited);
-  if (ws->meta_active) free(ws->meta_active);
-  if (ws->thread_best) solution_free(ws->thread_best);
-  if (ws->sol) solution_free(ws->sol);
+  free(ws->route_loads); free(ws->visited); free(ws->meta_active);
+  solution_free(ws->thread_best); solution_free(ws->sol);
 }
 
 static int v2_ws_init(HierarchicalWorkspace *ws, int K, int n, int words, int meta_words) {
@@ -274,6 +269,8 @@ static void async_sparse_init(AsyncSparseContext *ctx, int mpi_size) {
     ctx->req = MPI_REQUEST_NULL; ctx->recv_buf = NULL;
     ctx->counts = calloc((size_t)mpi_size, sizeof(int));
     ctx->displs = calloc((size_t)mpi_size, sizeof(int));
+    
+    // MPI Struct Type per portabilità
     int blocklengths[2] = {1, 1};
     MPI_Aint offsets[2];
     offsets[0] = offsetof(SparseDelta, edge_idx);
@@ -335,7 +332,7 @@ static int is_sig_imp(double prev_best, double new_best, double min_rel_improvem
   return rel_gain + (double)V2_EPS >= min_rel_improvement;
 }
 
-void aco_vrp_run(int n, int K, int cap, int m, double **c, double alpha, double beta, double rho, double tau0, double Q, unsigned int seed, Solution *best_sol, double *best_cost) {
+void aco_vrp_v2_run(int n, int K, int cap, int m, double **c, double alpha, double beta, double rho, double tau0, double Q, unsigned int seed, Solution *best_sol, double *best_cost) {
     int mpi_rank = 0, mpi_size = 1;
 #ifdef USE_MPI
     int mpi_init = 0; MPI_Initialized(&mpi_init);
@@ -437,11 +434,15 @@ void aco_vrp_run(int n, int K, int cap, int m, double **c, double alpha, double 
 #endif
         v2_ws_free(&ws);
     }
-    free(rank_deltas); if (mpi_rank == 0) printf("ACO Parallel V2 Ultimate Completion. Best: %.3f. Time: %.3fs\n", *best_cost, wall_time() - start_time);
+    free(rank_deltas); if (mpi_rank == 0) printf("V2 Ultimate Completion. Best: %.3f. Time: %.3fs\n", *best_cost, wall_time() - start_time);
     matrix_free_float(tau_mat); matrix_free_float(c_mat); free(score_mat); solution_free(iter_best); v2_shared_free(&shared);
 }
 
-void aco_vrp(int n, int K, int m, double **c, double alpha, double beta, double rho, double tau0, double Q, unsigned int seed, Solution *best_solution, double *best_cost) {
+void aco_vrp_v2(int n, int K, int m, double **c, double alpha, double beta, double rho, double tau0, double Q, unsigned int seed, Solution *best_solution, double *best_cost) {
     int cap = (K > 0) ? (int)(((long long)120 * n + 100 * K - 1) / (100 * K)) : n;
-    aco_vrp_run(n, K, cap, m, c, alpha, beta, rho, tau0, Q, seed, best_solution, best_cost);
+    aco_vrp_v2_with_capacity(n, K, cap, m, c, alpha, beta, rho, tau0, Q, seed, best_solution, best_cost);
+}
+
+void aco_vrp_v2_with_capacity(int n, int K, int vehicle_capacity_customers, int m, double **c, double alpha, double beta, double rho, double tau0, double Q, unsigned int seed, Solution *best_solution, double *best_cost) {
+    aco_vrp_v2_run(n, K, vehicle_capacity_customers, m, c, alpha, beta, rho, tau0, Q, seed, best_solution, best_cost);
 }
