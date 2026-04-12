@@ -1,7 +1,4 @@
 #include "aco.h"
-#ifdef ACO_VRP_V2
-#include "aco_v2.h"
-#endif
 #include "instance_parser.h"
 #include "matrix.h"
 #include "solution.h"

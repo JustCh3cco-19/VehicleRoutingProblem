@@ -23,16 +23,6 @@
 #define V2_MAX_CANDS 512
 #define V2_EPS 1e-7f
 
-/* 
- * V2 ULTIMATE OFFICIAL VERSION
- * Features:
- * - Float Precision Matrices (Memory Wall Mitigation)
- * - Hierarchical Bitmask (O(N) Fallback Accelerator)
- * - Adaptive L3-Aware Candidate Tuning
- * - Asynchronous Sparse MPI Synchronization (SSP)
- * - Parallel Pheromone Deposit & Delta Packing
- */
-
 typedef struct {
     uint32_t edge_idx;
     float increment;
@@ -129,6 +119,12 @@ typedef struct {
     int *cand_idx;
     float *eta_beta;
 } V2RankShared;
+
+static void v2_shared_free(V2RankShared *s) {
+    if (!s) return;
+    if (s->eta_beta) free(s->eta_beta);
+    if (s->cand_idx) free(s->cand_idx);
+}
 
 static int v2_shared_init(V2RankShared *s, int n, int cand_k, const MatrixFloat *c_mat, double beta) {
     s->n = n; s->cand_k = cand_k;
@@ -255,6 +251,7 @@ static double solution_cost_f(const Solution *s, float **c) {
     double total = 0.0;
     for (int i = 0; i < s->K; i++) {
         const Route *r = &s->routes[i];
+        if (r->len <= 2) continue; // Skip empty
         for (int t = 0; t + 1 < r->len; t++) total += (double)c[r->nodes[t]][r->nodes[t+1]];
     }
     return total;
@@ -323,7 +320,7 @@ static void load_v2_directives(double *max_runtime_sec, int *max_stagnation_epoc
   const char *s_stagnation = getenv("ACO_SOLVER_STAGNATION_EPOCHS");
   const char *s_rel = getenv("ACO_SOLVER_MIN_REL_IMPROVEMENT");
   *max_runtime_sec = (s_timeout && *s_timeout) ? atof(s_timeout) : 0.0;
-  *max_stagnation_epochs = (s_stagnation && *s_stagnation) ? atoi(s_stagnation) : 0;
+  *max_stagnation_epochs = (s_stagnation && *s_stagnation) ? atoi(s_stagnation) : 100; // Default 100
   *min_rel_improvement = (s_rel && *s_rel) ? atof(s_rel) : 1e-3;
 }
 
@@ -352,8 +349,8 @@ void aco_vrp_run(int n, int K, int cap, int m, double **c, double alpha, double 
     for (int i = 0; i <= n; i++) for (int j = 0; j <= n; j++) { c_mat->rows[i][j] = (float)c[i][j]; tau_mat->rows[i][j] = (i==j) ? 0.0f : (float)tau0; }
     V2RankShared shared; v2_shared_init(&shared, n, cand_k, c_mat, beta);
     float *score_mat = aligned_alloc(V2_ALIGNMENT, (size_t)(n + 1) * (size_t)shared.stride * sizeof(float));
-    Solution *iter_best = solution_create(K, n); double iter_best_cost_g = DBL_MAX; *best_cost = DBL_MAX; double start_time = wall_time();
-    const char *s_fixed = getenv("ACO_SOLVER_FIXED_EPOCHS"); int fixed_epochs = (s_fixed && *s_fixed) ? atoi(s_fixed) : 100;
+    Solution *iter_best_sol_rank = solution_create(K, n); double iter_best_cost_g = DBL_MAX; *best_cost = DBL_MAX; double start_time = wall_time();
+    const char *s_fixed = getenv("ACO_SOLVER_FIXED_EPOCHS"); int fixed_epochs = (s_fixed && *s_fixed) ? atoi(s_fixed) : 0;
 #ifdef USE_MPI
     AsyncSparseContext async_ctx; async_sparse_init(&async_ctx, mpi_size);
 #endif
@@ -361,8 +358,9 @@ void aco_vrp_run(int n, int K, int cap, int m, double **c, double alpha, double 
     #pragma omp parallel default(shared) proc_bind(close)
     {
         HierarchicalWorkspace ws; v2_ws_init(&ws, K, n, shared.visited_words, shared.meta_words);
+        if (mpi_rank == 0 && omp_get_thread_num() == 0) printf("ACO Parallel Starting with %d threads. N=%d K=%d Cap=%d\n", omp_get_num_threads(), n, K, cap);
         float tau_max = (float)tau0, tau_min = (float)tau0*0.05f;
-        for (int iter = 0; iter < fixed_epochs; iter++) {
+        for (int iter = 0; (fixed_epochs > 0 && iter < fixed_epochs) || (fixed_epochs <= 0 && iter_since_best < max_stagnation_epochs); iter++) {
 #ifdef USE_MPI
             #pragma omp master
             async_sparse_wait_and_apply(&async_ctx, tau_mat, mpi_rank, mpi_size);
@@ -384,7 +382,7 @@ void aco_vrp_run(int n, int K, int cap, int m, double **c, double alpha, double 
                 if (cost < t_best_c) { t_best_c = cost; solution_copy(ws.thread_best, ws.sol); }
             }
             #pragma omp critical
-            { if (t_best_c < iter_best_cost_g) { iter_best_cost_g = t_best_c; solution_copy(iter_best, ws.thread_best); } }
+            { if (t_best_c < iter_best_cost_g) { iter_best_cost_g = t_best_c; solution_copy(iter_best_sol_rank, ws.thread_best); } }
             #pragma omp barrier
             #pragma omp master
             {
@@ -393,9 +391,9 @@ void aco_vrp_run(int n, int K, int cap, int m, double **c, double alpha, double 
                 if (mpi_size > 1) MPI_Allreduce(MPI_IN_PLACE, &g_min, 1, MPI_DOUBLE, MPI_MIN, MPI_COMM_WORLD);
 #endif
                 if (is_sig_imp(*best_cost, g_min, min_rel_improvement)) iter_since_best = 0; else iter_since_best++;
-                if (g_min < *best_cost) { *best_cost = g_min; solution_copy(best_sol, iter_best);
+                if (g_min < *best_cost) { *best_cost = g_min; solution_copy(best_sol, iter_best_sol_rank);
                     tau_max = (float)(1.0 / ((1.0 - rho) * (*best_cost))); tau_min = tau_max * 0.05f; }
-                if (mpi_rank == 0 && iter % 10 == 0) printf("Epoch %d: Best Cost = %.3f\n", iter, *best_cost);
+                if (mpi_rank == 0 && iter % 10 == 0) printf("Epoch %d: Best Cost = %.3f (Since Last Imp: %d)\n", iter, *best_cost, iter_since_best);
                 iter_best_cost_g = DBL_MAX; rank_delta_count = 0;
             }
             #pragma omp barrier
@@ -406,6 +404,7 @@ void aco_vrp_run(int n, int K, int cap, int m, double **c, double alpha, double 
             #pragma omp for schedule(static)
             for (int v = 0; v < K; v++) {
                 Route *r = &best_sol->routes[v];
+                if (r->len <= 2) continue;
                 for (int t = 0; t + 1 < r->len; t++) {
                     int from = r->nodes[t], to = r->nodes[t+1];
                     uint32_t idx1 = (uint32_t)((size_t)from * tau_mat->stride + to);
@@ -423,6 +422,7 @@ void aco_vrp_run(int n, int K, int cap, int m, double **c, double alpha, double 
                     rank_deltas[d_idx] = (SparseDelta){idx2, weighted_dep};
                 }
             }
+            #pragma omp barrier
             #pragma omp master
             {
 #ifdef USE_MPI
@@ -437,11 +437,24 @@ void aco_vrp_run(int n, int K, int cap, int m, double **c, double alpha, double 
 #endif
         v2_ws_free(&ws);
     }
-    free(rank_deltas); if (mpi_rank == 0) printf("ACO Parallel V2 Ultimate Completion. Best: %.3f. Time: %.3fs\n", *best_cost, wall_time() - start_time);
-    matrix_free_float(tau_mat); matrix_free_float(c_mat); free(score_mat); solution_free(iter_best); v2_shared_free(&shared);
+    free(rank_deltas); if (mpi_rank == 0) printf("ACO Parallel Ultimate Completion. Best: %.3f. Time: %.3fs\n", *best_cost, wall_time() - start_time);
+    matrix_free_float(tau_mat); matrix_free_float(c_mat); free(score_mat); solution_free(iter_best_sol_rank); v2_shared_free(&shared);
+}
+
+void aco_vrp_with_capacity(int n, int K, int vehicle_capacity_customers, int m, double **c, double alpha, double beta, double rho, double tau0, double Q, unsigned int seed, Solution *best_solution, double *best_cost) {
+    aco_vrp_run(n, K, vehicle_capacity_customers, m, c, alpha, beta, rho, tau0, Q, seed, best_solution, best_cost);
 }
 
 void aco_vrp(int n, int K, int m, double **c, double alpha, double beta, double rho, double tau0, double Q, unsigned int seed, Solution *best_solution, double *best_cost) {
     int cap = (K > 0) ? (int)(((long long)120 * n + 100 * K - 1) / (100 * K)) : n;
-    aco_vrp_run(n, K, cap, m, c, alpha, beta, rho, tau0, Q, seed, best_solution, best_cost);
+    aco_vrp_with_capacity(n, K, cap, m, c, alpha, beta, rho, tau0, Q, seed, best_solution, best_cost);
+}
+
+void aco_vrp_v2_with_capacity(int n, int K, int vehicle_capacity_customers, int m, double **c, double alpha, double beta, double rho, double tau0, double Q, unsigned int seed, Solution *best_solution, double *best_cost) {
+    aco_vrp_run(n, K, vehicle_capacity_customers, m, c, alpha, beta, rho, tau0, Q, seed, best_solution, best_cost);
+}
+
+void aco_vrp_v2(int n, int K, int m, double **c, double alpha, double beta, double rho, double tau0, double Q, unsigned int seed, Solution *best_solution, double *best_cost) {
+    int cap = (K > 0) ? (int)(((long long)120 * n + 100 * K - 1) / (100 * K)) : n;
+    aco_vrp_v2_with_capacity(n, K, cap, m, c, alpha, beta, rho, tau0, Q, seed, best_solution, best_cost);
 }
