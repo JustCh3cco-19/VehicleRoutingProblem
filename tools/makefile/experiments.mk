@@ -273,6 +273,94 @@ exp_cuda_all: exp_cuda_scaling_input exp_cuda_scaling_ants exp_seq_for_cuda
 	@echo "  $(RESULTS_ROOT)/solve_manifest/csv/exp_cuda_scaling_ants"
 	@echo "  $(RESULTS_ROOT)/solve_manifest/csv/exp_cuda_vs_seq"
 
+# Requested campaign entry-points
+exp_req_strong_openmp:
+	@for t in $(REQ_OPENMP_THREADS); do \
+		echo "[exp_req_strong_openmp] omp_threads=$$t clients=$(REQ_CLIENTS_SERIES)"; \
+		$(MAKE) solve_mpi \
+			SOLVE_CSV_DIR="$(RESULTS_ROOT)/solve_manifest/csv/exp_req_strong_openmp" \
+			SOLVE_SOLUTIONS_DIR="$(RESULTS_ROOT)/solve_manifest/solutions/exp_req_strong_openmp" \
+			SOLVE_BATCH_ID="req_strong_openmp_t$$t" \
+			SOLVE_CLIENTS="$(REQ_CLIENTS_SERIES)" \
+			SOLVE_MPI_RANKS=1 \
+			SOLVE_MPI_OMP_THREADS="$$t" \
+			SOLVE_MPI_LAUNCHER="$(EXP_MPI_LAUNCHER)" \
+			SOLVE_MPI_REPEATS="$(REQ_REPEATS)" \
+			SOLVE_MPI_RUNTIME_S=0 \
+			SOLVE_MPI_STAGNATION_EPOCHS="$(EXP_STAGNATION_EPOCHS)" \
+			SOLVE_MPI_MIN_REL_IMPROVEMENT="$(EXP_MIN_REL_IMPROVEMENT)"; \
+	done
+
+exp_req_strong_mpi:
+	@for r in $(REQ_MPI_STRONG_RANKS); do \
+		echo "[exp_req_strong_mpi] mpi_ranks=$$r omp_threads=$(REQ_MPI_STRONG_OMP_THREADS) clients=$(REQ_CLIENTS_SERIES)"; \
+		$(MAKE) solve_mpi \
+			SOLVE_CSV_DIR="$(RESULTS_ROOT)/solve_manifest/csv/exp_req_strong_mpi" \
+			SOLVE_SOLUTIONS_DIR="$(RESULTS_ROOT)/solve_manifest/solutions/exp_req_strong_mpi" \
+			SOLVE_BATCH_ID="req_strong_mpi_r$$r_t$(REQ_MPI_STRONG_OMP_THREADS)" \
+			SOLVE_CLIENTS="$(REQ_CLIENTS_SERIES)" \
+			SOLVE_MPI_RANKS="$$r" \
+			SOLVE_MPI_OMP_THREADS="$(REQ_MPI_STRONG_OMP_THREADS)" \
+			SOLVE_MPI_LAUNCHER="$(EXP_MPI_LAUNCHER)" \
+			SOLVE_MPI_REPEATS="$(REQ_REPEATS)" \
+			SOLVE_MPI_RUNTIME_S=0 \
+			SOLVE_MPI_STAGNATION_EPOCHS="$(EXP_STAGNATION_EPOCHS)" \
+			SOLVE_MPI_MIN_REL_IMPROVEMENT="$(EXP_MIN_REL_IMPROVEMENT)"; \
+	done
+
+exp_req_hybrid_cores:
+	@for c in $(REQ_HYBRID_CORE_TARGETS); do \
+		for r in $(REQ_HYBRID_RANKS); do \
+			if [ $$((c % r)) -ne 0 ]; then \
+				continue; \
+			fi; \
+			t=$$((c / r)); \
+			echo "[exp_req_hybrid_cores] total_cores=$$c mpi_ranks=$$r omp_threads=$$t clients=$(REQ_CLIENTS_SERIES)"; \
+			$(MAKE) solve_mpi \
+				SOLVE_CSV_DIR="$(RESULTS_ROOT)/solve_manifest/csv/exp_req_hybrid_cores" \
+				SOLVE_SOLUTIONS_DIR="$(RESULTS_ROOT)/solve_manifest/solutions/exp_req_hybrid_cores" \
+				SOLVE_BATCH_ID="req_hybrid_c$$c_r$$r_t$$t" \
+				SOLVE_CLIENTS="$(REQ_CLIENTS_SERIES)" \
+				SOLVE_MPI_RANKS="$$r" \
+				SOLVE_MPI_OMP_THREADS="$$t" \
+				SOLVE_MPI_LAUNCHER="$(EXP_MPI_LAUNCHER)" \
+				SOLVE_MPI_REPEATS="$(REQ_REPEATS)" \
+				SOLVE_MPI_RUNTIME_S=0 \
+				SOLVE_MPI_STAGNATION_EPOCHS="$(EXP_STAGNATION_EPOCHS)" \
+				SOLVE_MPI_MIN_REL_IMPROVEMENT="$(EXP_MIN_REL_IMPROVEMENT)"; \
+		done; \
+	done
+
+exp_req_seq_vs_cuda:
+	@echo "[exp_req_seq_vs_cuda] seq clients=$(REQ_SEQ_CUDA_CLIENTS)"
+	$(MAKE) solve_seq \
+		SOLVE_CSV_DIR="$(RESULTS_ROOT)/solve_manifest/csv/exp_req_seq_vs_cuda" \
+		SOLVE_SOLUTIONS_DIR="$(RESULTS_ROOT)/solve_manifest/solutions/exp_req_seq_vs_cuda" \
+		SOLVE_CLIENTS="$(REQ_SEQ_CUDA_CLIENTS)" \
+		SOLVE_SEQ_REPEATS="$(REQ_REPEATS)" \
+		SOLVE_SEQ_RUNTIME_S=0 \
+		SOLVE_SEQ_STAGNATION_EPOCHS="$(EXP_STAGNATION_EPOCHS)" \
+		SOLVE_SEQ_MIN_REL_IMPROVEMENT="$(EXP_MIN_REL_IMPROVEMENT)" \
+		SOLVE_BATCH_ID="req_seq_vs_cuda_seq"
+	@echo "[exp_req_seq_vs_cuda] cuda clients=$(REQ_SEQ_CUDA_CLIENTS)"
+	$(MAKE) solve_cuda \
+		SOLVE_CSV_DIR="$(RESULTS_ROOT)/solve_manifest/csv/exp_req_seq_vs_cuda" \
+		SOLVE_SOLUTIONS_DIR="$(RESULTS_ROOT)/solve_manifest/solutions/exp_req_seq_vs_cuda" \
+		SOLVE_CLIENTS="$(REQ_SEQ_CUDA_CLIENTS)" \
+		SOLVE_CUDA_REPEATS="$(REQ_REPEATS)" \
+		SOLVE_CUDA_RUNTIME_S=0 \
+		SOLVE_CUDA_STAGNATION_EPOCHS="$(EXP_STAGNATION_EPOCHS)" \
+		SOLVE_CUDA_MIN_REL_IMPROVEMENT="$(EXP_MIN_REL_IMPROVEMENT)" \
+		SOLVE_BATCH_ID="req_seq_vs_cuda_cuda"
+
+exp_req_all: exp_req_strong_openmp exp_req_strong_mpi exp_req_hybrid_cores exp_req_seq_vs_cuda
+	@echo "Requested campaign completed."
+	@echo "CSV dirs:"
+	@echo "  $(RESULTS_ROOT)/solve_manifest/csv/exp_req_strong_openmp"
+	@echo "  $(RESULTS_ROOT)/solve_manifest/csv/exp_req_strong_mpi"
+	@echo "  $(RESULTS_ROOT)/solve_manifest/csv/exp_req_hybrid_cores"
+	@echo "  $(RESULTS_ROOT)/solve_manifest/csv/exp_req_seq_vs_cuda"
+
 # Practical campaign entry-points (batch-friendly)
 exp_practical_cpu:
 	@tag="$${PRACTICAL_TAG:-$$(date +%Y%m%d_%H%M%S)}"; \
