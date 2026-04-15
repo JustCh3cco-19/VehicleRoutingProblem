@@ -1,0 +1,15 @@
+n2000_k8_s19002,generated_mpi,instances/test_aligned/n2000_k8_s19002.vrp,2000,8,64,1234,19002,grid100,1,ok,75.81,0.205181,5579.427,,1,32,req_strong_mpi_r
+n4000_k8_s19003,generated_mpi,instances/test_aligned/n4000_k8_s19003.vrp,4000,8,32,1234,19003,grid100,1,ok,51.08,0.388771,8224.951,,1,32,req_strong_mpi_r
+n8000_k8_s19004,generated_mpi,instances/test_aligned/n8000_k8_s19004.vrp,8000,8,32,1234,19004,grid100,1,ok,74.39,1.112896,10633.079,,1,32,req_strong_mpi_r
+n16000_k16_s19005,generated_mpi,instances/test_aligned/n16000_k16_s19005.vrp,16000,16,16,1234,19005,grid100,1,ok,141.96,4.022568,13144.600,,1,32,req_strong_mpi_r
+n32000_k32_s19006,generated_mpi,instances/test_aligned/n32000_k32_s19006.vrp,32000,32,8,1234,19006,grid100,1,ok,433.17,15.662338,14625.831,,1,32,req_strong_mpi_r
+n2000_k8_s19002,generated_mpi,instances/test_aligned/n2000_k8_s19002.vrp,2000,8,64,1234,19002,grid100,1,ok,63.20,0.205956,4745.815,,2,32,req_strong_mpi_r
+n4000_k8_s19003,generated_mpi,instances/test_aligned/n4000_k8_s19003.vrp,4000,8,32,1234,19003,grid100,1,ok,46.91,0.389545,6552.391,,2,32,req_strong_mpi_r
+n8000_k8_s19004,generated_mpi,instances/test_aligned/n8000_k8_s19004.vrp,8000,8,32,1234,19004,grid100,1,ok,71.43,1.124130,8898.610,,2,32,req_strong_mpi_r
+n16000_k16_s19005,generated_mpi,instances/test_aligned/n16000_k16_s19005.vrp,16000,16,16,1234,19005,grid100,1,ok,142.57,4.033958,11912.907,,2,32,req_strong_mpi_r
+n32000_k32_s19006,generated_mpi,instances/test_aligned/n32000_k32_s19006.vrp,32000,32,8,1234,19006,grid100,1,ok,504.18,15.674675,14660.524,,2,32,req_strong_mpi_r
+n2000_k8_s19002,generated_mpi,instances/test_aligned/n2000_k8_s19002.vrp,2000,8,64,1234,19002,grid100,1,ok,17.04,0.212234,4287.938,,4,32,req_strong_mpi_r
+n4000_k8_s19003,generated_mpi,instances/test_aligned/n4000_k8_s19003.vrp,4000,8,32,1234,19003,grid100,1,ok,17.02,0.396526,6241.894,,4,32,req_strong_mpi_r
+n8000_k8_s19004,generated_mpi,instances/test_aligned/n8000_k8_s19004.vrp,8000,8,32,1234,19004,grid100,1,ok,35.54,1.120434,8421.425,,4,32,req_strong_mpi_r
+n16000_k16_s19005,generated_mpi,instances/test_aligned/n16000_k16_s19005.vrp,16000,16,16,1234,19005,grid100,1,ok,100.33,4.031185,11792.255,,4,32,req_strong_mpi_r
+n32000_k32_s19006,generated_mpi,instances/test_aligned/n32000_k32_s19006.vrp,32000,32,8,1234,19006,grid100,1,ok,377.36,15.671463,14684.281,,4,32,req_strong_mpi_r
