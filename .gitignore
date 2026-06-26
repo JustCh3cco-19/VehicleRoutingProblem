@@ -91,3 +91,4 @@ merged_manifests_clean/
 
 # Extra local caches
 *.log
+/reports/

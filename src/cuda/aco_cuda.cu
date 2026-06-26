@@ -148,6 +148,7 @@ AcoStatus aco_vrp_cuda_with_capacity(int n, int K,
   double min_rel_improvement = 1e-3;
   double progress_interval_sec = 0.0;
   int iter = 0;
+  CudaIterStats accumulated_stats = {0};
   int iter_since_best = 0;
   double start_time = 0.0;
   double next_progress_time = 0.0;
@@ -315,6 +316,19 @@ AcoStatus aco_vrp_cuda_with_capacity(int n, int K,
     CHECK_CUDA(cudaMemcpy(h_ant_summary, d_ant_summary,
                           m * sizeof(CudaAntSummary), cudaMemcpyDeviceToHost));
 
+    CudaIterStats host_stats;
+    if (cudaMemcpy(&host_stats, d_iter_stats, sizeof(CudaIterStats), cudaMemcpyDeviceToHost) == cudaSuccess) {
+      accumulated_stats.candidate_moves += host_stats.candidate_moves;
+      accumulated_stats.fallback_calls += host_stats.fallback_calls;
+      accumulated_stats.fallback_moves += host_stats.fallback_moves;
+      accumulated_stats.depot_offer_calls += host_stats.depot_offer_calls;
+      accumulated_stats.depot_close_moves += host_stats.depot_close_moves;
+      accumulated_stats.customer_moves += host_stats.customer_moves;
+      accumulated_stats.nonempty_routes += host_stats.nonempty_routes;
+      accumulated_stats.fallback_word_groups_scanned += host_stats.fallback_word_groups_scanned;
+      accumulated_stats.fallback_nodes_scored += host_stats.fallback_nodes_scored;
+    }
+
     int best_idx = -1;
     float best_iter_cost = FLT_MAX;
     int found = select_iter_best_host(h_ant_summary, m, &best_idx, &best_iter_cost);
@@ -393,6 +407,19 @@ AcoStatus aco_vrp_cuda_with_capacity(int n, int K,
     }
 
     iter++;
+  }
+
+  if (config.log_level > ACO_LOG_SILENT) {
+    fprintf(stderr, "\n[cuda] Iteration statistics summary (accumulated over %d iterations):\n", iter);
+    fprintf(stderr, "[cuda]   Customer moves:      %llu\n", accumulated_stats.customer_moves);
+    fprintf(stderr, "[cuda]   Candidate moves:     %llu\n", accumulated_stats.candidate_moves);
+    fprintf(stderr, "[cuda]   Fallback calls:      %llu\n", accumulated_stats.fallback_calls);
+    fprintf(stderr, "[cuda]   Fallback moves:      %llu\n", accumulated_stats.fallback_moves);
+    fprintf(stderr, "[cuda]   Depot offer calls:   %llu\n", accumulated_stats.depot_offer_calls);
+    fprintf(stderr, "[cuda]   Depot close moves:   %llu\n", accumulated_stats.depot_close_moves);
+    fprintf(stderr, "[cuda]   Non-empty routes:    %llu\n", accumulated_stats.nonempty_routes);
+    fprintf(stderr, "[cuda]   Fallback groups scn: %llu\n", accumulated_stats.fallback_word_groups_scanned);
+    fprintf(stderr, "[cuda]   Fallback nodes scd:  %llu\n", accumulated_stats.fallback_nodes_scored);
   }
 
   status = (*best_cost < DBL_MAX) ? ACO_OK : ACO_ERR_NO_SOLUTION;

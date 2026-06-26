@@ -13,19 +13,13 @@ leggere e seguire anche `docs/engineering/cuda_style_guide.md`.
 
 ## Miglioramenti Specifici Per Benchmark
 
-### 1. Profilazione Guidata
-
-Prima di ottimizzare ancora, conviene produrre dati stabili.
-
-Strumenti consigliati:
-
-- `perf`/`gprof` per CPU;
-- MPI profiling per tempo in comunicazione;
-- Nsight Systems/Compute per CUDA;
-- contatori interni gia' presenti in `CudaIterStats`;
-- metriche cache per candidate list e fallback.
+*Tutti gli interventi elencati sono stati implementati:*
+- **Punto 1 (Registrazione Metadata)**: Automatizzato nei CSV dei risultati di seq, openmp_mpi e cuda.
+- **Punto 2 (Test di Regressione)**: Aggiunta suite di test in `tools/python/regression_tests.py` ed esposta via `make regression`.
+- **Punto 3 (Profilazione Guidata)**: Automatizzato lo script in `tools/bash/profile_guided.sh` ed esposto via `make profile`.
 
 ## Roadmap Suggerita
 
-1. Profilazione e tracciamento delle performance.
+Nessun intervento aperto.
+
 

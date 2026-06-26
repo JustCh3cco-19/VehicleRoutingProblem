@@ -114,3 +114,6 @@ solve_memory_growth_non_cuda:
 
 regression:
 	@$(PYTHON_BIN) tools/python/regression_tests.py
+
+profile:
+	@bash tools/bash/profile_guided.sh
