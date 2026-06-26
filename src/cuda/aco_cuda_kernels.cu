@@ -260,10 +260,18 @@ __device__ static int select_global_fallback(int current,
                                                 const uint64_t *visited_l2,
                                                 unsigned int *rng_state,
                                                 CudaParams params,
+                                                CudaIterStats *d_iter_stats,
                                                 float *total_score_out) {
   int lane = threadIdx.x & (CUDA_WARP_SIZE - 1);
   float local_sum = 0.0f;
   int local_selected_node = -1;
+
+  if (lane == 0 && d_iter_stats) {
+    atomicAdd(&(d_iter_stats->fallback_calls), 1ULL);
+  }
+
+  int groups_scanned = 0;
+  int nodes_scored = 0;
 
   int word_chunks = (params.visited_l1_words + CUDA_WARP_SIZE - 1) / CUDA_WARP_SIZE;
   float2 p_curr = d_coords[current];
@@ -279,6 +287,7 @@ __device__ static int select_global_fallback(int current,
       uint64_t l2_mask = 1ull << l2_bit;
 
       if ((visited_l2[l2_word] & l2_mask) == 0) {
+        groups_scanned++;
         uint64_t relevant_mask = cuda_relevant_mask_for_word(word_idx, params.n);
         free_mask = (~visited_l1[word_idx]) & relevant_mask;
       }
@@ -295,6 +304,7 @@ __device__ static int select_global_fallback(int current,
       while (scan_mask != 0ull) {
         int bit = __ffsll((long long)scan_mask) - 1;
         int node = base_node + bit;
+        nodes_scored++;
 
         float dx = p_curr.x - d_coords[node].x;
         float dy = p_curr.y - d_coords[node].y;
@@ -345,6 +355,18 @@ __device__ static int select_global_fallback(int current,
   float total_sum = __shfl_sync(0xFFFFFFFFu, current_sum, 0);
   if (total_score_out) {
     *total_score_out = total_sum;
+  }
+
+  int total_groups = groups_scanned;
+  int total_nodes = nodes_scored;
+  for (int offset = 16; offset > 0; offset /= 2) {
+    total_groups += __shfl_down_sync(0xFFFFFFFFu, total_groups, offset);
+    total_nodes += __shfl_down_sync(0xFFFFFFFFu, total_nodes, offset);
+  }
+
+  if (lane == 0 && d_iter_stats) {
+    atomicAdd(&(d_iter_stats->fallback_word_groups_scanned), (unsigned long long)total_groups);
+    atomicAdd(&(d_iter_stats->fallback_nodes_scored), (unsigned long long)total_nodes);
   }
 
   int global_selected = __shfl_sync(0xFFFFFFFFu, current_node, 0);
@@ -406,14 +428,20 @@ __global__ void kernel_construct_solutions(const float2 *d_coords,
         break;
       }
 
+      int chosen_from_fallback = 0;
       float score_cand = 0.0f;
       int move = select_from_candidates(current_b, d_tau, d_candidate_idx, d_eta_beta, l1_row, &rng_state, params, &score_cand);
 
       if (move <= 0) {
-        move = select_global_fallback(current_b, d_coords, d_tau, l1_row, l2_row, &rng_state, params, &score_cand);
+        move = select_global_fallback(current_b, d_coords, d_tau, l1_row, l2_row, &rng_state, params, d_iter_stats, &score_cand);
+        chosen_from_fallback = 1;
       }
 
       int close_allowed = (remaining_b <= (params.K - vehicle - 1) * params.cap);
+      if (close_allowed && lane == 0 && d_iter_stats) {
+        atomicAdd(&(d_iter_stats->depot_offer_calls), 1ULL);
+      }
+
       float depot_score = 0.0f;
       if (close_allowed) {
         float d = calc_dist(d_coords[current_b], d_coords[0]);
@@ -446,6 +474,15 @@ __global__ void kernel_construct_solutions(const float2 *d_coords,
         route_len++;
         route_load++;
 
+        if (d_iter_stats) {
+          atomicAdd(&(d_iter_stats->customer_moves), 1ULL);
+          if (chosen_from_fallback) {
+            atomicAdd(&(d_iter_stats->fallback_moves), 1ULL);
+          } else {
+            atomicAdd(&(d_iter_stats->candidate_moves), 1ULL);
+          }
+        }
+
         int word_idx = move >> 6;
         int bit_idx = move & 63;
         l1_row[word_idx] |= (1ull << bit_idx);
@@ -469,7 +506,14 @@ __global__ void kernel_construct_solutions(const float2 *d_coords,
       d_routes[global_step * params.m + ant] = 0;
       total_cost += calc_dist(d_coords[current], d_coords[0]);
       d_route_lengths[ant * params.K + vehicle] = route_len + 1;
+      if (d_iter_stats) {
+        atomicAdd(&(d_iter_stats->depot_close_moves), 1ULL);
+        if (route_len > 1) {
+          atomicAdd(&(d_iter_stats->nonempty_routes), 1ULL);
+        }
+      }
     }
+
     __syncwarp();
   }
 
