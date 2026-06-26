@@ -22,12 +22,6 @@ const char *aco_status_string(AcoStatus status) {
   }
 }
 
-/**
- * @brief Executes `fast_pow_nonneg`.
- * @param base Function parameter.
- * @param exponent Function parameter.
- * @return Function result.
- */
 static double fast_pow_nonneg(double base, double exponent) {
   if (exponent == 1.0) {
     return base;
@@ -42,27 +36,11 @@ static double fast_pow_nonneg(double base, double exponent) {
 }
 
 
-/**
- * @brief Executes `score_cache_line_copy`.
- * @param dst Function parameter.
- * @param src Function parameter.
- * @param line_len Function parameter.
- */
 static void score_cache_line_copy(double *dst, const double *src, int line_len) {
   memcpy(dst, src, (size_t)line_len * sizeof(double));
 }
 
 
-/**
- * @brief Executes `score_cache_compute_row`.
- * @param dst Function parameter.
- * @param current Function parameter.
- * @param n Function parameter.
- * @param tau Function parameter.
- * @param eta Function parameter.
- * @param alpha Function parameter.
- * @param beta Function parameter.
- */
 static void score_cache_compute_row(double *dst, int current, int n,
                                     double **tau, double **eta, double alpha,
                                     double beta) {
@@ -81,38 +59,16 @@ static void score_cache_compute_row(double *dst, int current, int n,
 }
 
 
-/**
- * @brief Executes `score_cache_get_l1_line`.
- * @param cache Function parameter.
- * @param idx Function parameter.
- * @return Function result.
- */
 static double *score_cache_get_l1_line(AcoScoreCache *cache, int idx) {
   return cache->l1_rows + (size_t)idx * (size_t)cache->line_len;
 }
 
 
-/**
- * @brief Executes `score_cache_get_l2_line`.
- * @param cache Function parameter.
- * @param idx Function parameter.
- * @return Function result.
- */
 static double *score_cache_get_l2_line(AcoScoreCache *cache, int idx) {
   return cache->l2_rows + (size_t)idx * (size_t)cache->line_len;
 }
 
 
-/**
- * @brief Executes `score_cache_get_row`.
- * @param cache Function parameter.
- * @param current Function parameter.
- * @param tau Function parameter.
- * @param eta Function parameter.
- * @param alpha Function parameter.
- * @param beta Function parameter.
- * @return Function result.
- */
 static const double *score_cache_get_row(AcoScoreCache *cache, int current,
                                          double **tau, double **eta,
                                          double alpha, double beta) {
@@ -153,13 +109,6 @@ static const double *score_cache_get_row(AcoScoreCache *cache, int current,
 }
 
 
-/**
- * @brief Executes `aco_score_cache_create`.
- * @param n Function parameter.
- * @param l1_lines Function parameter.
- * @param l2_lines Function parameter.
- * @return Function result.
- */
 AcoScoreCache *aco_score_cache_create(int n, int l1_lines, int l2_lines) {
   if (n < 0) {
     return NULL;
@@ -205,10 +154,6 @@ AcoScoreCache *aco_score_cache_create(int n, int l1_lines, int l2_lines) {
 }
 
 
-/**
- * @brief Executes `aco_score_cache_invalidate`.
- * @param cache Function parameter.
- */
 void aco_score_cache_invalidate(AcoScoreCache *cache) {
   if (!cache) {
     return;
@@ -223,10 +168,6 @@ void aco_score_cache_invalidate(AcoScoreCache *cache) {
 }
 
 
-/**
- * @brief Executes `aco_score_cache_reset_stats`.
- * @param cache Function parameter.
- */
 void aco_score_cache_reset_stats(AcoScoreCache *cache) {
   if (!cache) {
     return;
@@ -237,11 +178,6 @@ void aco_score_cache_reset_stats(AcoScoreCache *cache) {
 }
 
 
-/**
- * @brief Executes `aco_score_cache_get_stats`.
- * @param cache Function parameter.
- * @param out Function parameter.
- */
 void aco_score_cache_get_stats(const AcoScoreCache *cache, AcoCacheStats *out) {
   if (!out) {
     return;
@@ -260,10 +196,6 @@ void aco_score_cache_get_stats(const AcoScoreCache *cache, AcoCacheStats *out) {
 }
 
 
-/**
- * @brief Executes `aco_score_cache_free`.
- * @param cache Function parameter.
- */
 void aco_score_cache_free(AcoScoreCache *cache) {
   if (!cache) {
     return;
@@ -277,20 +209,11 @@ void aco_score_cache_free(AcoScoreCache *cache) {
 }
 
 
-/**
- * @brief Executes `rand01`.
- * @return Function result.
- */
 static double rand01(void) {
   return (double)rand() / (double)RAND_MAX;
 }
 
 
-/**
- * @brief Executes `aco_rand01_state`.
- * @param state Function parameter.
- * @return Function result.
- */
 double aco_rand01_state(unsigned int *state) {
   if (!state) {
     return rand01();
@@ -310,13 +233,6 @@ double aco_rand01_state(unsigned int *state) {
 }
 
 
-/**
- * @brief Executes `aco_make_ant_seed`.
- * @param base_seed Function parameter.
- * @param iter Function parameter.
- * @param ant_index Function parameter.
- * @return Function result.
- */
 unsigned int aco_make_ant_seed(unsigned int base_seed, int iter,
                                int ant_index) {
   unsigned int x = base_seed ? base_seed : 1u;
@@ -327,21 +243,6 @@ unsigned int aco_make_ant_seed(unsigned int base_seed, int iter,
 }
 
 
-/**
- * @brief Executes `aco_select_next`.
- * @param current Function parameter.
- * @param unvisited_nodes Function parameter.
- * @param unvisited_count Function parameter.
- * @param tau Function parameter.
- * @param eta Function parameter.
- * @param alpha Function parameter.
- * @param beta Function parameter.
- * @param roulette_r Function parameter.
- * @param candidate_scores Function parameter.
- * @param selected_index Function parameter.
- * @param score_cache Function parameter.
- * @return Function result.
- */
 int aco_select_next(int current, const int *unvisited_nodes,
                     int unvisited_count, double **tau, double **eta,
                     double alpha, double beta, double roulette_r,
@@ -392,23 +293,7 @@ int aco_select_next(int current, const int *unvisited_nodes,
 }
 
 
-/**
- * @brief Executes `aco_build_ant_solution`.
- * @param sol Function parameter.
- * @param n Function parameter.
- * @param K Function parameter.
- * @param tau Function parameter.
- * @param eta Function parameter.
- * @param alpha Function parameter.
- * @param beta Function parameter.
- * @param vehicle_capacity_customers Function parameter.
- * @param score_cache Function parameter.
- * @param rng_state Function parameter.
- * @param unvisited_nodes Function parameter.
- * @param candidate_scores Function parameter.
- * @param random_draws Function parameter.
- */
-void aco_build_ant_solution(
+bool aco_build_ant_solution(
     Solution *sol, int n, int K, double **tau, double **eta, double alpha,
     double beta, int vehicle_capacity_customers, AcoScoreCache *score_cache,
     unsigned int *rng_state, int *unvisited_nodes, double *candidate_scores,
@@ -430,7 +315,9 @@ void aco_build_ant_solution(
 
   for (int vehicle = 1; vehicle <= K; ++vehicle) {
     Route *r = &sol->routes[vehicle - 1];
-    route_append(r, 0);
+    if (!route_append(r, 0)) {
+      return false;
+    }
     int current = 0;
     int assigned_customers = 0;
     int remaining_vehicles = K - vehicle;
@@ -447,14 +334,18 @@ void aco_build_ant_solution(
         break;
       }
 
-      route_append(r, next);
+      if (!route_append(r, next)) {
+        return false;
+      }
       ++assigned_customers;
       --unvisited_count;
       unvisited_nodes[selected_idx] = unvisited_nodes[unvisited_count];
       current = next;
     }
 
-    route_append(r, 0);
+    if (!route_append(r, 0)) {
+      return false;
+    }
   }
 
   if (unvisited_count > 0) {
@@ -466,10 +357,16 @@ void aco_build_ant_solution(
     int last_customers = last->len > 0 ? (last->len - 1) : 0;
 
     while (unvisited_count > 0 && last_customers < route_customer_cap) {
-      route_append(last, unvisited_nodes[--unvisited_count]);
+      if (!route_append(last, unvisited_nodes[--unvisited_count])) {
+        return false;
+      }
       ++last_customers;
     }
 
-    route_append(last, 0);
+    if (!route_append(last, 0)) {
+      return false;
+    }
   }
+
+  return true;
 }

@@ -31,7 +31,7 @@ $(BIN): $(OBJ)
 
 openmp_mpi: $(OPENMP_MPI_BIN)
 
-$(OPENMP_MPI_BIN): $(OPENMP_MPI_SRC) include/aco.h include/aco_config.h include/instance_parser.h include/matrix.h include/solution.h
+$(OPENMP_MPI_BIN): $(OPENMP_MPI_SRC) include/aco.h include/aco_config.h include/aco_mpi_internal.h include/instance_parser.h include/matrix.h include/solution.h
 	$(MPICC) $(EXTRA_FLAGS) $(FLAGS) $(FORCE_OPT) $(PERF_FLAGS) $(OMPFLAG) -DUSE_MPI $(OPENMP_MPI_SRC) $(LIBS) -o $@
 
 cuda: $(CUDA_BIN)

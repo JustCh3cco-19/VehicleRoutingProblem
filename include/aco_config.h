@@ -10,7 +10,19 @@ typedef struct {
   int ants;
   unsigned int seed;
   double progress_interval_seconds;
+  int log_level;
+  int reproducibility_mode;
 } AcoRuntimeConfig;
+
+enum {
+  ACO_LOG_SILENT = 0,
+  ACO_LOG_PROGRESS = 1,
+};
+
+enum {
+  ACO_REPRO_STATISTICAL = 0,
+  ACO_REPRO_DETERMINISTIC_BENCHMARK = 1,
+};
 
 void aco_runtime_config_defaults(AcoRuntimeConfig *config);
 void aco_runtime_config_load_env(AcoRuntimeConfig *config);

@@ -11,13 +11,15 @@ repeats="${SOLVE_SEQ_REPEATS:-1}"
 runtime_s="${SOLVE_SEQ_RUNTIME_EFFECTIVE:-0}"
 stag_iters="${SOLVE_SEQ_STAGNATION_EPOCHS:-0}"
 improve_rel_pct="${SOLVE_SEQ_MIN_REL_IMPROVEMENT:-0.1}"
+candidate_k="${SOLVE_CANDIDATE_K:-0}"
+repro_mode="${SOLVE_REPRODUCIBILITY_MODE:-0}"
 
 if [ "$repeats" -lt 1 ]; then
   repeats=1
 fi
 improve_rel="$improve_rel_pct"
 
-header="name,profile,instance_path,n,K,m,solver_seed,instance_seed,layout_id,run_id,status,elapsed_s,max_rss_gb,best_cost,error"
+header="name,profile,instance_path,n,K,m,candidate_k,solver_seed,reproducibility_mode,instance_seed,layout_id,run_id,status,elapsed_s,max_rss_gb,best_cost,error"
 
 # Prepare output CSV in advance, keeping existing rows for n values that are
 # not part of the current execution. New rows are then appended live.
@@ -94,6 +96,8 @@ tail -n +2 "$manifest" \
           ACO_SOLVER_TIMEOUT_SECONDS="$runtime_s" \
           ACO_SOLVER_STAGNATION_EPOCHS="$stag_iters" \
           ACO_SOLVER_MIN_REL_IMPROVEMENT="$improve_rel" \
+          ACO_SOLVER_CANDIDATE_K="$candidate_k" \
+          ACO_SOLVER_REPRODUCIBILITY_MODE="$repro_mode" \
           ./aco_vrp_seq.out "$instance_path" "$K" "$m_run" "$seed_run" 2>&1)
         rc=$?
 
@@ -122,10 +126,10 @@ tail -n +2 "$manifest" \
         printf '%s\n' "$out" > "$sol_file"
         if [ "$rc" -eq 0 ]; then
           cost="$(printf '%s\n' "$out" | sed -n 's/^best cost: //p' | tail -n1)"
-          echo "$name,$profile,$instance_path,$n,$K,$m_run,$seed_run,$instance_seed,$layout_id,$run_id,ok,$elapsed,$rss_gb,$cost," >> "$csv"
+          echo "$name,$profile,$instance_path,$n,$K,$m_run,$candidate_k,$seed_run,$repro_mode,$instance_seed,$layout_id,$run_id,ok,$elapsed,$rss_gb,$cost," >> "$csv"
         else
           err="$(printf '%s' "$out" | tr '\n' ' ' | tr ',' ';')"
-          echo "$name,$profile,$instance_path,$n,$K,$m_run,$seed_run,$instance_seed,$layout_id,$run_id,error,$elapsed,$rss_gb,,$err" >> "$csv"
+          echo "$name,$profile,$instance_path,$n,$K,$m_run,$candidate_k,$seed_run,$repro_mode,$instance_seed,$layout_id,$run_id,error,$elapsed,$rss_gb,,$err" >> "$csv"
         fi
         echo "[seq] run_effettiva: elapsed_s=${elapsed:-n/a} mem_gb=${rss_gb:-n/a} status=$([ "$rc" -eq 0 ] && echo ok || echo error)"
         echo

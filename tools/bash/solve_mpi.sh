@@ -13,6 +13,8 @@ improve_rel_pct="${SOLVE_MPI_MIN_REL_IMPROVEMENT:-0.1}"
 mpi_ranks="${SOLVE_MPI_RANKS:-2}"
 omp_threads="${SOLVE_MPI_OMP_THREADS:-2}"
 launcher_pref="${SOLVE_MPI_LAUNCHER:-auto}"
+candidate_k="${SOLVE_CANDIDATE_K:-0}"
+repro_mode="${SOLVE_REPRODUCIBILITY_MODE:-0}"
 
 if [ "$repeats" -lt 1 ]; then
   repeats=1
@@ -32,7 +34,7 @@ elif [ "$launcher_pref" = "auto" ]; then
 fi
 echo "[mpi] launcher=${launcher_kind}"
 
-header="name,profile,instance_path,n,K,m,solver_seed,instance_seed,layout_id,run_id,status,elapsed_s,max_rss_gb,best_cost,error"
+header="name,profile,instance_path,n,K,m,candidate_k,solver_seed,reproducibility_mode,instance_seed,layout_id,run_id,status,elapsed_s,max_rss_gb,best_cost,error"
 header_v2="${header},mpi_ranks,omp_threads,batch_id"
 batch_id="${SOLVE_BATCH_ID:-$(date +%Y%m%d_%H%M%S)}"
 
@@ -44,7 +46,7 @@ else
   if [ "$first_line" = "$header" ]; then
     tmp_csv="$(mktemp)"
     echo "$header_v2" > "$tmp_csv"
-    tail -n +2 "$csv" | awk 'NF > 0 { print $0 ",,," }' >> "$tmp_csv"
+    tail -n +2 "$csv" | awk 'NF > 0 { print $0 ",,,,,," }' >> "$tmp_csv"
     mv "$tmp_csv" "$csv"
   fi
 fi
@@ -96,6 +98,8 @@ tail -n +2 "$manifest" \
           ACO_SOLVER_TIMEOUT_SECONDS="$runtime_s" \
           ACO_SOLVER_STAGNATION_EPOCHS="$stag_iters" \
           ACO_SOLVER_MIN_REL_IMPROVEMENT="$improve_rel" \
+          ACO_SOLVER_CANDIDATE_K="$candidate_k" \
+          ACO_SOLVER_REPRODUCIBILITY_MODE="$repro_mode" \
           OMP_NUM_THREADS="$omp_threads" \
           "${launcher_cmd[@]}" ./aco_vrp_openmp_mpi.out "$instance_path" "$K" "$m" "$seed_run" </dev/null 2>&1)
         rc=$?
@@ -125,10 +129,10 @@ tail -n +2 "$manifest" \
         printf '%s\n' "$out" > "$sol_file"
         if [ "$rc" -eq 0 ]; then
           cost="$(printf '%s\n' "$out" | sed -n 's/^best cost: //p' | tail -n1)"
-          echo "$name,$profile,$instance_path,$n,$K,$m,$seed_run,$instance_seed,$layout_id,$run_id,ok,$elapsed,$rss_gb,$cost,,$mpi_ranks,$omp_threads,$batch_id" >> "$csv"
+          echo "$name,$profile,$instance_path,$n,$K,$m,$candidate_k,$seed_run,$repro_mode,$instance_seed,$layout_id,$run_id,ok,$elapsed,$rss_gb,$cost,,$mpi_ranks,$omp_threads,$batch_id" >> "$csv"
         else
           err="$(printf '%s' "$out" | tr '\n' ' ' | tr ',' ';')"
-          echo "$name,$profile,$instance_path,$n,$K,$m,$seed_run,$instance_seed,$layout_id,$run_id,error,$elapsed,$rss_gb,,$err,$mpi_ranks,$omp_threads,$batch_id" >> "$csv"
+          echo "$name,$profile,$instance_path,$n,$K,$m,$candidate_k,$seed_run,$repro_mode,$instance_seed,$layout_id,$run_id,error,$elapsed,$rss_gb,,$err,$mpi_ranks,$omp_threads,$batch_id" >> "$csv"
         fi
         echo "[mpi] run_effettiva: elapsed_s=${elapsed:-n/a} mem_gb=${rss_gb:-n/a} status=$([ "$rc" -eq 0 ] && echo ok || echo error)"
         echo

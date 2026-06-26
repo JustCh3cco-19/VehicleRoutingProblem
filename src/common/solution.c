@@ -8,12 +8,6 @@
 #define SOLUTION_ALIGNMENT 64u
 
 
-/**
- * @brief Executes `align_up_size`.
- * @param value Function parameter.
- * @param alignment Function parameter.
- * @return Function result.
- */
 static size_t align_up_size(size_t value, size_t alignment) {
   size_t rem = value % alignment;
   if (rem == 0u) {
@@ -23,32 +17,24 @@ static size_t align_up_size(size_t value, size_t alignment) {
 }
 
 
-/**
- * @brief Executes `route_append`.
- * @param r Function parameter.
- * @param node Function parameter.
- */
-void route_append(Route *r, int node) {
+bool route_append(Route *r, int node) {
   if (r->len >= r->cap) {
-    return;
+    return false;
   }
   r->nodes[r->len++] = node;
+  return true;
 }
 
 
-/**
- * @brief Executes `solution_create`.
- * @param K Function parameter.
- * @param n Function parameter.
- * @return Function result.
- */
 Solution *solution_create(int K, int n) {
   if (K <= 0 || n < 0) {
     return NULL;
   }
 
   Solution *s = calloc(1, sizeof(*s));
-  if (!s) return NULL;
+  if (!s) {
+    return NULL;
+  }
   s->K = K;
   s->route_cap = n + 2;
   s->routes = calloc((size_t)K, sizeof(Route));
@@ -79,10 +65,6 @@ Solution *solution_create(int K, int n) {
 }
 
 
-/**
- * @brief Executes `solution_reset`.
- * @param s Function parameter.
- */
 void solution_reset(Solution *s) {
   for (int i = 0; i < s->K; ++i) {
     s->routes[i].len = 0;
@@ -90,23 +72,16 @@ void solution_reset(Solution *s) {
 }
 
 
-/**
- * @brief Executes `solution_free`.
- * @param s Function parameter.
- */
 void solution_free(Solution *s) {
-  if (!s) return;
+  if (!s) {
+    return;
+  }
   free(s->nodes_storage);
   free(s->routes);
   free(s);
 }
 
 
-/**
- * @brief Executes `solution_copy`.
- * @param dst Function parameter.
- * @param src Function parameter.
- */
 void solution_copy(Solution *dst, const Solution *src) {
   for (int i = 0; i < src->K; ++i) {
     const Route *r_src = &src->routes[i];
@@ -117,12 +92,6 @@ void solution_copy(Solution *dst, const Solution *src) {
 }
 
 
-/**
- * @brief Executes `solution_cost`.
- * @param s Function parameter.
- * @param c Function parameter.
- * @return Function result.
- */
 double solution_cost(const Solution *s, double **c) {
   double cost = 0.0;
   for (int i = 0; i < s->K; ++i) {
@@ -137,27 +106,14 @@ double solution_cost(const Solution *s, double **c) {
 }
 
 
-/**
- * @brief Executes `set_err`.
- * @param err Function parameter.
- * @param err_len Function parameter.
- * @param msg Function parameter.
- */
 static void set_err(char *err, size_t err_len, const char *msg) {
-  if (!err || err_len == 0) return;
+  if (!err || err_len == 0) {
+    return;
+  }
   snprintf(err, err_len, "%s", msg);
 }
 
 
-/**
- * @brief Executes `solution_validate`.
- * @param s Function parameter.
- * @param n Function parameter.
- * @param K Function parameter.
- * @param err Function parameter.
- * @param err_len Function parameter.
- * @return Function result.
- */
 bool solution_validate(const Solution *s, int n, int K, char *err,
                        size_t err_len) {
   if (!s) {

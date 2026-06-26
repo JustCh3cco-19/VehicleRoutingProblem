@@ -37,11 +37,14 @@ static void fill_example_costs(double **c, int n) {
  */
 int main(int argc, char **argv) {
   int status = 0;
-  unsigned int seed = 1234u;
-  int use_instance_file = 0;
-  const char *instance_path = NULL;
+  AcoCliOptions options;
   VrpInstance instance;
+  double **c = NULL;
+  Solution *best = NULL;
+  double best_cost = 0.0;
+  AcoStatus solver_status = ACO_OK;
   vrp_instance_init(&instance);
+  cli_options_defaults(&options);
 
 #ifdef USE_MPI
   int mpi_rank = 0;
@@ -53,74 +56,60 @@ int main(int argc, char **argv) {
   MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
 #endif
 
-  int n = 5, K = 2, m = 10;
-  if (argc == 5 && cli_parse_int_arg(argv[1], &n)) {
-    int ok = 1;
-    ok = ok && cli_parse_int_arg(argv[2], &K);
-    ok = ok && cli_parse_int_arg(argv[3], &m);
-    seed = cli_parse_uint_arg(argv[4], &ok);
-    if (!ok || n <= 0 || K <= 0 || m < 0) {
-#ifdef USE_MPI
-      if (mpi_rank == 0)
-#endif
-        fprintf(stderr, "usage: %s [n K m seed]\n", argv[0]);
-      status = 1; goto cleanup_mpi;
-    }
-  } else if ((argc == 4 || argc == 5) && argv[1] != NULL) {
-    int ok = 1; instance_path = argv[1];
-    ok = ok && cli_parse_int_arg(argv[2], &K);
-    ok = ok && cli_parse_int_arg(argv[3], &m);
-    if (argc == 5) seed = cli_parse_uint_arg(argv[4], &ok);
-    if (!ok || K <= 0 || m < 0) {
-#ifdef USE_MPI
-      if (mpi_rank == 0)
-#endif
-        fprintf(stderr, "usage: %s <instance.vrp> <K> <m> [seed]\n", argv[0]);
-      status = 1; goto cleanup_mpi;
-    }
-    use_instance_file = 1;
-  } else if (argc != 1) {
+  if (!cli_parse_solver_options(argc, argv, &options)) {
 #ifdef USE_MPI
     if (mpi_rank == 0)
 #endif
-      fprintf(stderr, "usage: %s [options]\n", argv[0]);
-    status = 1; goto cleanup_mpi;
+    {
+      cli_print_usage(argv[0]);
+    }
+    status = 1;
+    goto cleanup;
   }
 
-  double alpha = 1.0, beta = 2.0, rho = 0.5, tau0 = 1.0, Q = 1.0;
-  double **c = NULL;
-  if (use_instance_file) {
-    if (vrp_load_tsplib_instance(instance_path, &instance) != 0 ||
+  if (options.mode == ACO_CLI_MODE_INSTANCE) {
+    if (vrp_load_tsplib_instance(options.instance_path, &instance) != 0 ||
         vrp_instance_create_euc2d_matrix(&instance, &c) != 0) {
 #ifdef USE_MPI
       if (mpi_rank == 0)
 #endif
-        fprintf(stderr, "failed to load instance: %s\n", instance_path);
-      status = 1; goto cleanup_mpi;
+        fprintf(stderr, "failed to load instance: %s\n", options.instance_path);
+      status = 1;
+      goto cleanup;
     }
-    n = instance.n;
+    options.n = instance.n;
   } else {
-    c = matrix_alloc(n);
-    if (!c) { fprintf(stderr, "failed to allocate cost matrix\n"); status = 1; goto cleanup_mpi; }
-    fill_example_costs(c, n);
+    c = matrix_alloc(options.n);
+    if (!c) {
+      fprintf(stderr, "failed to allocate cost matrix\n");
+      status = 1;
+      goto cleanup;
+    }
+    fill_example_costs(c, options.n);
   }
 
-  Solution *best = solution_create(K, n);
-  if (!best) { fprintf(stderr, "failed to allocate solution\n"); status = 1; matrix_free(c); goto cleanup_mpi; }
+  best = solution_create(options.K, options.n);
+  if (!best) {
+    fprintf(stderr, "failed to allocate solution\n");
+    status = 1;
+    goto cleanup;
+  }
 
-  double best_cost = 0.0;
-  AcoStatus solver_status;
-  if (use_instance_file) {
-    if (instance.vehicles > 0 && instance.vehicles != K) {
-      fprintf(stderr, "instance VEHICLES mismatch: CLI K=%d, file VEHICLES=%d\n", K, instance.vehicles);
-      status = 1; solution_free(best); matrix_free(c); goto cleanup_mpi;
+  if (options.mode == ACO_CLI_MODE_INSTANCE) {
+    if (instance.vehicles > 0 && instance.vehicles != options.K) {
+      fprintf(stderr, "instance VEHICLES mismatch: CLI K=%d, file VEHICLES=%d\n",
+              options.K, instance.vehicles);
+      status = 1;
+      goto cleanup;
     }
-    solver_status = aco_vrp_with_capacity(n, K, instance.capacity, m, c,
-                                          alpha, beta, rho, tau0, Q, seed,
-                                          best, &best_cost);
+    solver_status = aco_vrp_with_capacity(
+        options.n, options.K, instance.capacity, options.m, c, options.alpha,
+        options.beta, options.rho, options.tau0, options.Q, options.seed, best,
+        &best_cost);
   } else {
-    solver_status = aco_vrp(n, K, m, c, alpha, beta, rho, tau0, Q, seed, best,
-                            &best_cost);
+    solver_status = aco_vrp(options.n, options.K, options.m, c, options.alpha,
+                            options.beta, options.rho, options.tau0, options.Q,
+                            options.seed, best, &best_cost);
   }
 
 #ifdef USE_MPI
@@ -131,23 +120,24 @@ int main(int argc, char **argv) {
       fprintf(stderr, "solver failed: %s\n", aco_status_string(solver_status));
       status = 1;
     } else if (!cli_validate_solution_or_report(
-                   best, n, K, use_instance_file ? instance.demands : NULL,
-                   use_instance_file ? instance.capacity : 0, best_cost)) {
+                   best, options.n, options.K,
+                   options.mode == ACO_CLI_MODE_INSTANCE ? instance.demands
+                                                         : NULL,
+                   options.mode == ACO_CLI_MODE_INSTANCE ? instance.capacity
+                                                         : 0,
+                   best_cost)) {
       status = 1;
     } else {
-      cli_print_solution_routes(best, K);
+      cli_print_solution_routes(best, options.K);
       cli_print_solution_cost(best_cost);
     }
   }
 
+cleanup:
   solution_free(best);
   matrix_free(c);
   vrp_instance_free(&instance);
 
-cleanup_mpi:
-  if (status != 0) {
-    vrp_instance_free(&instance);
-  }
 #ifdef USE_MPI
   MPI_Finalize();
 #endif

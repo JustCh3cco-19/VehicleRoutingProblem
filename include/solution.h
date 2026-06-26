@@ -59,11 +59,12 @@ void solution_copy(Solution *dst, const Solution *src);
 double solution_cost(const Solution *s, double **c);
 
 /**
- * @brief Appends a node to a route if capacity allows it.
+ * @brief Appends a node to a route.
  * @param r Route handle.
  * @param node Node id to append.
+ * @return true if the node was appended, false if the route is full.
  */
-void route_append(Route *r, int node);
+bool route_append(Route *r, int node);
 
 /**
  * @brief Validates core VRP structural constraints for a solution.

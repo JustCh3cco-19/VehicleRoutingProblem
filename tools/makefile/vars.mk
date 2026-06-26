@@ -27,6 +27,8 @@ COMMON_DIR=src/common
 
 SEQ_SRC=$(SEQ_DIR)/aco_sequential.c
 PAR_SRC=$(PAR_DIR)/aco_parallel.c
+PAR_CANDIDATES_SRC=$(PAR_DIR)/aco_mpi_candidates.c
+PAR_SYNC_SRC=$(PAR_DIR)/aco_mpi_sync.c
 ACO_SHARED_SRC=$(COMMON_DIR)/aco_shared.c
 ACO_CONFIG_SRC=$(COMMON_DIR)/aco_config.c
 SOLUTION_SRC=$(COMMON_DIR)/solution.c
@@ -44,12 +46,12 @@ CLI_COMMON_OBJ=$(COMMON_DIR)/cli_common.o
 OBJ=src/main.o $(SEQ_OBJ) $(ACO_SHARED_OBJ) $(ACO_CONFIG_OBJ) $(SOLUTION_OBJ) $(MATRIX_OBJ) $(INSTANCE_PARSER_OBJ) $(CLI_COMMON_OBJ)
 
 OPENMP_MPI_BIN=aco_vrp_openmp_mpi.out
-OPENMP_MPI_SRC=src/main.c $(PAR_SRC) $(ACO_SHARED_SRC) $(ACO_CONFIG_SRC) $(SOLUTION_SRC) $(MATRIX_SRC) $(INSTANCE_PARSER_SRC) $(CLI_COMMON_SRC)
+OPENMP_MPI_SRC=src/main.c $(PAR_SRC) $(PAR_CANDIDATES_SRC) $(PAR_SYNC_SRC) $(ACO_SHARED_SRC) $(ACO_CONFIG_SRC) $(SOLUTION_SRC) $(MATRIX_SRC) $(INSTANCE_PARSER_SRC) $(CLI_COMMON_SRC)
 CUDA_BIN=aco_vrp_cuda.out
-CUDA_MAIN_SRC=src/cuda/main_vrp.cu
+CUDA_MAIN_SRC=src/main_cuda.cu
 CUDA_ACO_SRC=src/cuda/aco_cuda.cu
 CUDA_KERNELS_SRC=src/cuda/aco_cuda_kernels.cu
-CUDA_MAIN_OBJ=src/cuda/main_vrp.o
+CUDA_MAIN_OBJ=src/main_cuda.o
 CUDA_ACO_OBJ=src/cuda/aco_cuda.o
 CUDA_KERNELS_OBJ=src/cuda/aco_cuda_kernels.o
 CUDA_COMMON_OBJ=$(SOLUTION_OBJ) $(MATRIX_OBJ) $(CLI_COMMON_OBJ) $(ACO_CONFIG_OBJ) $(ACO_SHARED_OBJ)

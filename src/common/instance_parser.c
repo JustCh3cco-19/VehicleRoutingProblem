@@ -6,14 +6,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-/**
- * @brief Executes `euc_2d`.
- * @param x1 Function parameter.
- * @param y1 Function parameter.
- * @param x2 Function parameter.
- * @param y2 Function parameter.
- * @return Function result.
- */
 static double euc_2d(double x1, double y1, double x2, double y2) {
     return sqrt(pow(x1 - x2, 2) + pow(y1 - y2, 2));
 }
@@ -31,12 +23,6 @@ void vrp_instance_free(VrpInstance *instance) {
     vrp_instance_init(instance);
 }
 
-/**
- * @brief Executes `vrp_load_tsplib_instance`.
- * @param path Input instance path.
- * @param instance Output instance.
- * @return Function result.
- */
 int vrp_load_tsplib_instance(const char *path, VrpInstance *instance) {
     if (!path || !instance) {
         return 1;

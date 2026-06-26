@@ -4,99 +4,127 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define MATRIX_ALIGNMENT 64u
+int matrix_mul_size(size_t a, size_t b, size_t *out) {
+  if (!out) {
+    return 0;
+  }
+  if (a != 0u && b > SIZE_MAX / a) {
+    return 0;
+  }
+  *out = a * b;
+  return 1;
+}
 
-
-/**
- * @brief Executes `align_up_size`.
- * @param value Function parameter.
- * @param alignment Function parameter.
- * @return Function result.
- */
-static size_t align_up_size(size_t value, size_t alignment) {
+int matrix_align_up(size_t value, size_t alignment, size_t *out) {
+  if (!out || alignment == 0u) {
+    return 0;
+  }
   size_t rem = value % alignment;
   if (rem == 0u) {
-    return value;
+    *out = value;
+    return 1;
   }
-  return value + (alignment - rem);
+
+  size_t padding = alignment - rem;
+  if (value > SIZE_MAX - padding) {
+    return 0;
+  }
+  *out = value + padding;
+  return 1;
+}
+
+void *matrix_aligned_calloc(size_t bytes, size_t alignment) {
+  size_t alloc_bytes = 0;
+  if (!matrix_align_up(bytes, alignment, &alloc_bytes)) {
+    return NULL;
+  }
+
+  void *ptr = aligned_alloc(alignment, alloc_bytes);
+  if (!ptr) {
+    return NULL;
+  }
+  memset(ptr, 0, alloc_bytes);
+  return ptr;
 }
 
 
-/**
- * @brief Executes `matrix_create`.
- * @param n Function parameter.
- * @return Function result.
- */
 Matrix *matrix_create(int n) {
-  if (n < 0) return NULL;
+  if (n < 0) {
+    return NULL;
+  }
 
-  Matrix *m = malloc(sizeof(Matrix));
-  if (!m) return NULL;
+  size_t size = (size_t)n + 1u;
+  if (size > (size_t)INT32_MAX) {
+    return NULL;
+  }
 
-  int size = n + 1;
-  size_t row_bytes = (size_t)size * sizeof(double);
-  size_t padded_row_bytes = align_up_size(row_bytes, MATRIX_ALIGNMENT);
-  m->stride = (int)(padded_row_bytes / sizeof(double));
+  size_t row_bytes = 0;
+  size_t padded_row_bytes = 0;
+  size_t total_elems = 0;
+  size_t total_bytes = 0;
+  if (!matrix_mul_size(size, sizeof(double), &row_bytes) ||
+      !matrix_align_up(row_bytes, kMatrixDefaultAlignment,
+                       &padded_row_bytes)) {
+    return NULL;
+  }
+  size_t stride = padded_row_bytes / sizeof(double);
+  if (stride > (size_t)INT32_MAX ||
+      !matrix_mul_size(size, stride, &total_elems) ||
+      !matrix_mul_size(total_elems, sizeof(double), &total_bytes)) {
+    return NULL;
+  }
+
+  Matrix *m = malloc(sizeof(*m));
+  if (!m) {
+    return NULL;
+  }
+
+  m->stride = (int)stride;
   m->n = n;
-
-  size_t total_elems = (size_t)size * (size_t)m->stride;
-  size_t total_bytes = total_elems * sizeof(double);
-  size_t aligned_total_bytes = align_up_size(total_bytes, MATRIX_ALIGNMENT);
-
-  m->data = aligned_alloc(MATRIX_ALIGNMENT, aligned_total_bytes);
+  m->data = matrix_aligned_calloc(total_bytes, kMatrixDefaultAlignment);
   if (!m->data) {
     free(m);
     return NULL;
   }
-  memset(m->data, 0, aligned_total_bytes);
 
-  m->rows = malloc((size_t)size * sizeof(double *));
+  m->rows = malloc(size * sizeof(double *));
   if (!m->rows) {
     free(m->data);
     free(m);
     return NULL;
   }
 
-  for (int i = 0; i < size; ++i) {
+  for (int i = 0; i < (int)size; ++i) {
     m->rows[i] = m->data + (size_t)i * (size_t)m->stride;
   }
 
   return m;
 }
 
-/**
- * @brief Executes `matrix_free_handle`.
- * @param m Function parameter.
- */
 void matrix_free_handle(Matrix *m) {
-  if (!m) return;
+  if (!m) {
+    return;
+  }
   free(m->rows);
   free(m->data);
   free(m);
 }
 
-/**
- * @brief Executes `matrix_alloc`.
- * @param n Function parameter.
- * @return Function result.
- */
 double **matrix_alloc(int n) {
   Matrix *m = matrix_create(n);
-  if (!m) return NULL;
+  if (!m) {
+    return NULL;
+  }
   double **rows = m->rows;
-
-
 
   free(m);
   return rows;
 }
 
-/**
- * @brief Executes `matrix_free`.
- * @param m Function parameter.
- */
 void matrix_free(double **m) {
-  if (!m) return;
+  if (!m) {
+    return;
+  }
   free(m[0]);
   free(m);
 }

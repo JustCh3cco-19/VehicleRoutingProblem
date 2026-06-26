@@ -25,15 +25,11 @@
 
 enum {
   kAcoAlignment = 64,
+  kSeqDefaultSparseCandidateCount = 64,
+  kSeqDenseCandidateLimit = 512,
 };
 
 
-/**
- * @brief Executes `align_up_size`.
- * @param value Function parameter.
- * @param alignment Function parameter.
- * @return Function result.
- */
 static size_t align_up_size(size_t value, size_t alignment) {
   size_t rem = value % alignment;
   if (rem == 0u) {
@@ -43,11 +39,6 @@ static size_t align_up_size(size_t value, size_t alignment) {
 }
 
 
-/**
- * @brief Executes `aligned_calloc_bytes`.
- * @param bytes Function parameter.
- * @return Function result.
- */
 static void *aligned_calloc_bytes(size_t bytes) {
   size_t alloc_bytes = align_up_size(bytes, kAcoAlignment);
   void *ptr = aligned_alloc(kAcoAlignment, alloc_bytes);
@@ -59,13 +50,6 @@ static void *aligned_calloc_bytes(size_t bytes) {
 }
 
 
-/**
- * @brief Executes `clamp_int`.
- * @param x Function parameter.
- * @param lo Function parameter.
- * @param hi Function parameter.
- * @return Function result.
- */
 static int clamp_int(int x, int lo, int hi) {
   if (x < lo) {
     return lo;
@@ -77,11 +61,6 @@ static int clamp_int(int x, int lo, int hi) {
 }
 
 
-/**
- * @brief Executes `choose_auto_total_ants`.
- * @param n Function parameter.
- * @return Function result.
- */
 static int choose_auto_total_ants(int n) {
   int workers = 1;
 #ifdef _OPENMP
@@ -107,12 +86,6 @@ static int choose_auto_total_ants(int n) {
 }
 
 
-/**
- * @brief Executes `fast_pow_nonneg`.
- * @param base Function parameter.
- * @param exponent Function parameter.
- * @return Function result.
- */
 static double fast_pow_nonneg(double base, double exponent) {
   if (exponent == 1.0) {
     return base;
@@ -127,12 +100,6 @@ static double fast_pow_nonneg(double base, double exponent) {
 }
 
 
-/**
- * @brief Executes `aligned_row_stride`.
- * @param cols Function parameter.
- * @param elem_size Function parameter.
- * @return Function result.
- */
 static int aligned_row_stride(int cols, size_t elem_size) {
   size_t row_bytes = (size_t)cols * elem_size;
   size_t padded = align_up_size(row_bytes, kAcoAlignment);
@@ -140,17 +107,16 @@ static int aligned_row_stride(int cols, size_t elem_size) {
 }
 
 
-/**
- * @brief Executes `choose_candidate_count`.
- * @param n Function parameter.
- * @return Function result.
- */
-static int choose_candidate_count(int n) { return n; }
+static int choose_candidate_count(int n, int requested_candidate_k) {
+  if (requested_candidate_k > 0) {
+    return clamp_int(requested_candidate_k, 1, n);
+  }
+  if (n <= kSeqDenseCandidateLimit) {
+    return n;
+  }
+  return clamp_int(kSeqDefaultSparseCandidateCount, 1, n);
+}
 
-/**
- * @brief Executes `wall_time_seconds`.
- * @return Function result.
- */
 static double wall_time_seconds(void) {
 #ifdef _OPENMP
   return omp_get_wtime();
@@ -161,13 +127,6 @@ static double wall_time_seconds(void) {
 #endif
 }
 
-/**
- * @brief Executes `is_significant_improvement`.
- * @param prev_best Function parameter.
- * @param new_best Function parameter.
- * @param min_rel_improvement Function parameter.
- * @return Function result.
- */
 static int is_significant_improvement(double prev_best, double new_best,
                                       double min_rel_improvement) {
   if (prev_best >= DBL_MAX || new_best >= DBL_MAX) {
@@ -182,10 +141,6 @@ static int is_significant_improvement(double prev_best, double new_best,
 }
 
 
-/**
- * @brief Executes `seq_shared_free`.
- * @param shared Function parameter.
- */
 static void seq_shared_free(SeqShared *shared) {
   if (!shared) {
     return;
@@ -197,20 +152,14 @@ static void seq_shared_free(SeqShared *shared) {
 }
 
 
-/**
- * @brief Executes `seq_shared_init`.
- * @param shared Function parameter.
- * @param n Function parameter.
- * @return Function result.
- */
-static int seq_shared_init(SeqShared *shared, int n) {
+static int seq_shared_init(SeqShared *shared, int n, int candidate_k) {
   if (!shared || n < 1) {
     return 0;
   }
 
   memset(shared, 0, sizeof(*shared));
   shared->n = n;
-  shared->candidate_k = choose_candidate_count(n);
+  shared->candidate_k = choose_candidate_count(n, candidate_k);
   shared->candidate_k = clamp_int(shared->candidate_k, 1, n);
   if (shared->candidate_k > n) {
     shared->candidate_k = n;
@@ -240,35 +189,48 @@ static int seq_shared_init(SeqShared *shared, int n) {
 }
 
 
-/**
- * @brief Executes `seq_shared_build_candidates`.
- * @param shared Function parameter.
- * @param c Function parameter.
- * @param beta Function parameter.
- */
 static void seq_shared_build_candidates(SeqShared *shared, double **c,
                                         double beta) {
   int n = shared->n;
+  int k = shared->candidate_k;
   int stride = shared->stride;
 
   for (int i = 0; i <= n; ++i) {
     int *cand_row = shared->candidate_idx + (size_t)i * (size_t)stride;
     float *eta_row = shared->eta_beta + (size_t)i * (size_t)stride;
-    int pos = 0;
+
+    for (int t = 0; t < k; ++t) {
+      cand_row[t] = 0;
+      eta_row[t] = 0.0f;
+    }
 
     for (int node = 1; node <= n; ++node) {
       if (node == i) {
         continue;
       }
-      cand_row[pos] = node;
-      {
-        double eta = 1.0 / (c[i][node] + ACO_EPS);
-        eta_row[pos] = (float)fast_pow_nonneg(eta, beta);
+      double dist = c[i][node];
+      int insert_at = -1;
+      for (int t = 0; t < k; ++t) {
+        if (cand_row[t] == 0 || dist < c[i][cand_row[t]]) {
+          insert_at = t;
+          break;
+        }
       }
-      ++pos;
+      if (insert_at < 0) {
+        continue;
+      }
+
+      for (int t = k - 1; t > insert_at; --t) {
+        cand_row[t] = cand_row[t - 1];
+        eta_row[t] = eta_row[t - 1];
+      }
+
+      cand_row[insert_at] = node;
+      double eta = 1.0 / (dist + ACO_EPS);
+      eta_row[insert_at] = (float)fast_pow_nonneg(eta, beta);
     }
 
-    for (int t = pos; t < stride; ++t) {
+    for (int t = k; t < stride; ++t) {
       cand_row[t] = 0;
       eta_row[t] = 0.0f;
     }
@@ -276,14 +238,6 @@ static void seq_shared_build_candidates(SeqShared *shared, double **c,
 }
 
 
-/**
- * @brief Executes `update_score_row_alpha1`.
- * @param cand_row Function parameter.
- * @param eta_row Function parameter.
- * @param score_row Function parameter.
- * @param tau_row Function parameter.
- * @param k Function parameter.
- */
 static void update_score_row_alpha1(const int *restrict cand_row,
                                     const float *restrict eta_row,
                                     float *restrict score_row,
@@ -306,14 +260,6 @@ static void update_score_row_alpha1(const int *restrict cand_row,
 }
 
 
-/**
- * @brief Executes `update_score_row_alpha2`.
- * @param cand_row Function parameter.
- * @param eta_row Function parameter.
- * @param score_row Function parameter.
- * @param tau_row Function parameter.
- * @param k Function parameter.
- */
 static void update_score_row_alpha2(const int *restrict cand_row,
                                     const float *restrict eta_row,
                                     float *restrict score_row,
@@ -342,12 +288,6 @@ static void update_score_row_alpha2(const int *restrict cand_row,
 }
 
 
-/**
- * @brief Executes `seq_shared_update_scores`.
- * @param shared Function parameter.
- * @param tau Function parameter.
- * @param alpha Function parameter.
- */
 static void seq_shared_update_scores(SeqShared *shared, double **restrict tau,
                                      double alpha) {
   int n = shared->n;
@@ -383,12 +323,6 @@ static void seq_shared_update_scores(SeqShared *shared, double **restrict tau,
 }
 
 
-/**
- * @brief Executes `visited_is_set`.
- * @param visited Function parameter.
- * @param node Function parameter.
- * @return Function result.
- */
 static inline int visited_is_set(const uint64_t *visited, int node) {
   return (int)((visited[(unsigned int)node >> 6] >>
                 ((unsigned int)node & 63u)) &
@@ -396,25 +330,12 @@ static inline int visited_is_set(const uint64_t *visited, int node) {
 }
 
 
-/**
- * @brief Executes `visited_set`.
- * @param visited Function parameter.
- * @param node Function parameter.
- */
 static inline void visited_set(uint64_t *visited, int node) {
   visited[(unsigned int)node >> 6] |= (uint64_t)1u
                                      << ((unsigned int)node & 63u);
 }
 
 
-/**
- * @brief Executes `find_nearest_unvisited`.
- * @param shared Function parameter.
- * @param current Function parameter.
- * @param visited Function parameter.
- * @param c Function parameter.
- * @return Function result.
- */
 static int find_nearest_unvisited(const SeqShared *shared, int current,
                                   const uint64_t *restrict visited,
                                   double **restrict c) {
@@ -434,15 +355,6 @@ static int find_nearest_unvisited(const SeqShared *shared, int current,
 }
 
 
-/**
- * @brief Executes `select_next_customer`.
- * @param shared Function parameter.
- * @param current Function parameter.
- * @param visited Function parameter.
- * @param c Function parameter.
- * @param rng_state Function parameter.
- * @return Function result.
- */
 static int select_next_customer(const SeqShared *shared, int current,
                                 const uint64_t *restrict visited,
                                 double **restrict c,
@@ -502,14 +414,6 @@ static int select_next_customer(const SeqShared *shared, int current,
 }
 
 
-/**
- * @brief Executes `seq_workspace_init`.
- * @param ws Function parameter.
- * @param K Function parameter.
- * @param n Function parameter.
- * @param visited_words Function parameter.
- * @return Function result.
- */
 static int seq_workspace_init(SeqWorkspace *ws, int K, int n,
                               int visited_words) {
   memset(ws, 0, sizeof(*ws));
@@ -531,10 +435,6 @@ static int seq_workspace_init(SeqWorkspace *ws, int K, int n,
 }
 
 
-/**
- * @brief Executes `seq_workspace_free`.
- * @param ws Function parameter.
- */
 static void seq_workspace_free(SeqWorkspace *ws) {
   if (!ws) {
     return;
@@ -546,15 +446,7 @@ static void seq_workspace_free(SeqWorkspace *ws) {
 }
 
 
-/**
- * @brief Executes `build_ant_solution`.
- * @param ws Function parameter.
- * @param shared Function parameter.
- * @param K Function parameter.
- * @param vehicle_capacity_customers Function parameter.
- * @param c Function parameter.
- */
-static void build_ant_solution(SeqWorkspace *ws, const SeqShared *shared, int K,
+static bool build_ant_solution(SeqWorkspace *ws, const SeqShared *shared, int K,
                                int vehicle_capacity_customers,
                                double **restrict c) {
   solution_reset(ws->sol);
@@ -570,7 +462,9 @@ static void build_ant_solution(SeqWorkspace *ws, const SeqShared *shared, int K,
 
   for (int vehicle = 0; vehicle < K; ++vehicle) {
     Route *r = &ws->sol->routes[vehicle];
-    route_append(r, 0);
+    if (!route_append(r, 0)) {
+      return false;
+    }
 
     int current = 0;
     int remaining_vehicles = K - vehicle - 1;
@@ -587,14 +481,18 @@ static void build_ant_solution(SeqWorkspace *ws, const SeqShared *shared, int K,
         break;
       }
 
-      route_append(r, next);
+      if (!route_append(r, next)) {
+        return false;
+      }
       visited_set(ws->visited, next);
       ++ws->route_loads[vehicle];
       --remaining;
       current = next;
     }
 
-    route_append(r, 0);
+    if (!route_append(r, 0)) {
+      return false;
+    }
   }
 
   if (remaining > 0) {
@@ -610,37 +508,24 @@ static void build_ant_solution(SeqWorkspace *ws, const SeqShared *shared, int K,
         if (next <= 0 || visited_is_set(ws->visited, next)) {
           break;
         }
-        route_append(r, next);
+        if (!route_append(r, next)) {
+          return false;
+        }
         visited_set(ws->visited, next);
         ++ws->route_loads[vehicle];
         --remaining;
       }
 
-      route_append(r, 0);
+      if (!route_append(r, 0)) {
+        return false;
+      }
     }
   }
+
+  return true;
 }
 
 
-/**
- * @brief Executes `aco_vrp_run_with_timer`.
- * @param n Function parameter.
- * @param K Function parameter.
- * @param vehicle_capacity_customers Function parameter.
- * @param m Function parameter.
- * @param c Function parameter.
- * @param alpha Function parameter.
- * @param beta Function parameter.
- * @param rho Function parameter.
- * @param tau0 Function parameter.
- * @param Q Function parameter.
- * @param seed Function parameter.
- * @param best_solution Function parameter.
- * @param best_cost Function parameter.
- * @param max_runtime_sec Function parameter.
- * @param max_stagnation_epochs Function parameter.
- * @param min_rel_improvement Function parameter.
- */
 static AcoStatus aco_vrp_run_with_config(int n, int K,
                                          int vehicle_capacity_customers, int m,
                                          double **c, double alpha, double beta,
@@ -656,6 +541,7 @@ static AcoStatus aco_vrp_run_with_config(int n, int K,
       config ? config->min_rel_improvement : 1e-3;
   double progress_interval_sec =
       config ? config->progress_interval_seconds : 10.0;
+  int log_level = config ? config->log_level : ACO_LOG_PROGRESS;
 
   if (n <= 0 || K <= 0 || !c || !best_solution || !best_cost) {
     return ACO_ERR_INVALID_INPUT;
@@ -672,7 +558,8 @@ static AcoStatus aco_vrp_run_with_config(int n, int K,
   double **tau = matrix_alloc(n);
   Solution *iter_best = solution_create(K, n);
   SeqShared shared = {0};
-  int shared_ok = seq_shared_init(&shared, n);
+  int candidate_k = config ? config->candidate_k : 0;
+  int shared_ok = seq_shared_init(&shared, n, candidate_k);
   SeqWorkspace ws;
   int ws_ok = 0;
   if (shared_ok) {
@@ -739,7 +626,9 @@ static AcoStatus aco_vrp_run_with_config(int n, int K,
     for (int ant = 0; ant < total_m; ++ant) {
       ws.rng_state = aco_make_ant_seed(seed, iter, ant);
 
-      build_ant_solution(&ws, &shared, K, vehicle_capacity_customers, c);
+      if (!build_ant_solution(&ws, &shared, K, vehicle_capacity_customers, c)) {
+        continue;
+      }
       double cost = solution_cost(ws.sol, c);
 
       if (cost < iter_best_cost ||
@@ -827,7 +716,8 @@ static AcoStatus aco_vrp_run_with_config(int n, int K,
     }
 
     double iter_end_wall = wall_time_seconds();
-    if (progress_interval_sec > 0.0 && iter_end_wall >= next_progress_wall) {
+    if (log_level > ACO_LOG_SILENT && progress_interval_sec > 0.0 &&
+        iter_end_wall >= next_progress_wall) {
       double elapsed = iter_end_wall - start_wall;
       if (max_runtime_sec > 0.0) {
         double remaining = max_runtime_sec - elapsed;

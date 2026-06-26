@@ -11,6 +11,8 @@ runtime_s="${SOLVE_SEQ_RUNTIME_EFFECTIVE:-0}"
 stag_iters="${SOLVE_SEQ_STAGNATION_EPOCHS:-0}"
 improve_rel_raw="${SOLVE_SEQ_MIN_REL_IMPROVEMENT:-0.1}"
 cuda_profile="${SOLVE_CUDA_PROFILE:-0}"
+candidate_k="${SOLVE_CANDIDATE_K:-0}"
+repro_mode="${SOLVE_REPRODUCIBILITY_MODE:-0}"
 
 # Prefer CUDA-specific controls when provided; keep seq vars as compatibility fallback.
 if [ -n "${SOLVE_CUDA_RUNTIME_S:-}" ]; then
@@ -28,7 +30,7 @@ if [ "$repeats" -lt 1 ]; then
 fi
 improve_rel="$improve_rel_raw"
 
-header="name,profile,instance_path,n,K,m,solver_seed,instance_seed,layout_id,run_id,status,elapsed_s,best_cost,error"
+header="name,profile,instance_path,n,K,m,candidate_k,solver_seed,reproducibility_mode,instance_seed,layout_id,run_id,status,elapsed_s,best_cost,error"
 
 # Prepare output CSV in advance, keeping existing rows for n values that are
 # not part of the current execution. New rows are then appended live.
@@ -101,6 +103,8 @@ tail -n +2 "$manifest" \
           ACO_SOLVER_STAGNATION_EPOCHS="$stag_iters" \
           ACO_SOLVER_STAGNATION_ITERS="$stag_iters" \
           ACO_SOLVER_MIN_REL_IMPROVEMENT="$improve_rel" \
+          ACO_SOLVER_CANDIDATE_K="$candidate_k" \
+          ACO_SOLVER_REPRODUCIBILITY_MODE="$repro_mode" \
           ACO_SOLVER_IMPROVE_EPS="$improve_rel" \
           ACO_CUDA_PROFILE="$cuda_profile" \
           ./aco_vrp_cuda.out "$instance_path" "$K" "$m" "$seed_run" 2>&1)
@@ -130,10 +134,10 @@ tail -n +2 "$manifest" \
         printf '%s\n' "$out" > "$sol_file"
         if [ "$rc" -eq 0 ]; then
           cost="$(printf '%s\n' "$out" | sed -n -e 's/^best cost: //p' -e 's/^Final Best Cost: //p' | tail -n1)"
-          echo "$name,$profile,$instance_path,$n,$K,$m,$seed_run,$instance_seed,$layout_id,$run_id,ok,$elapsed,$cost," >> "$csv"
+          echo "$name,$profile,$instance_path,$n,$K,$m,$candidate_k,$seed_run,$repro_mode,$instance_seed,$layout_id,$run_id,ok,$elapsed,$cost," >> "$csv"
         else
           err="$(printf '%s' "$out" | tr '\n' ' ' | tr ',' ';')"
-          echo "$name,$profile,$instance_path,$n,$K,$m,$seed_run,$instance_seed,$layout_id,$run_id,error,$elapsed,,$err" >> "$csv"
+          echo "$name,$profile,$instance_path,$n,$K,$m,$candidate_k,$seed_run,$repro_mode,$instance_seed,$layout_id,$run_id,error,$elapsed,,$err" >> "$csv"
         fi
         echo "[cuda] run_effettiva: elapsed_s=${elapsed:-n/a} mem_gb=${rss_gb:-n/a} status=$([ "$rc" -eq 0 ] && echo ok || echo error)"
         echo
