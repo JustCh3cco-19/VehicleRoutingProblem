@@ -13,13 +13,23 @@ leggere e seguire anche `docs/engineering/cuda_style_guide.md`.
 
 ## Miglioramenti Specifici Per Benchmark
 
-*Tutti gli interventi elencati sono stati implementati:*
-- **Punto 1 (Registrazione Metadata)**: Automatizzato nei CSV dei risultati di seq, openmp_mpi e cuda.
-- **Punto 2 (Test di Regressione)**: Aggiunta suite di test in `tools/python/regression_tests.py` ed esposta via `make regression`.
-- **Punto 3 (Profilazione Guidata)**: Automatizzato lo script in `tools/bash/profile_guided.sh` ed esposto via `make profile`.
+### 1. Implementare Incrementi dei Contatori `CudaIterStats` nei Kernel CUDA
+
+Dalle analisi del profiler emerge che i contatori diagnostici di `CudaIterStats` (es. `customer_moves`, `fallback_calls`, `fallback_moves`) sono attualmente azzerati ad ogni esecuzione. La struttura e la memoria device/host sono allocate e passate correttamente, ma il kernel `kernel_construct_solutions` in `src/cuda/aco_cuda_kernels.cu` non implementa le scritture atomiche per aggiornarne i valori.
+
+Azioni richieste:
+- Aggiungere gli incrementi (es. tramite `atomicAdd` o riduzioni a livello di warp/block) per i vari contatori diagnostici all'interno di `kernel_construct_solutions`.
+- Verificare che il riepilogo stampato a fine esecuzione riporti valori congruenti con le iterazioni eseguite.
+
+### 2. Ottimizzazione del Loop di Selezione in `aco_vrp_run_with_config` (CPU)
+
+La profilazione tramite `gprof` evidenzia che oltre il **93% del tempo di calcolo CPU** è speso all'interno della funzione `aco_vrp_run_with_config`.
+
+Azioni richieste:
+- Profilare con micro-metriche (cache-misses, branch mispredictions) il ciclo interno in cui le formiche calcolano le probabilità di transizione per scegliere il prossimo nodo.
+- Ottimizzare la pre-computazione o l'accesso a `eta^beta` e valutare la riduzione delle chiamate al generatore pseudo-casuale `aco_rand01_state`.
 
 ## Roadmap Suggerita
 
-Nessun intervento aperto.
-
-
+1. Implementare i contatori diagnostici CUDA in `aco_cuda_kernels.cu`.
+2. Ottimizzare il collo di bottiglia principale CPU in `aco_vrp_run_with_config`.
