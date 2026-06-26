@@ -1,4 +1,5 @@
 #include "aco.h"
+#include "aco_config.h"
 #include "matrix.h"
 #include "solution.h"
 
@@ -428,34 +429,6 @@ static void async_sparse_start(AsyncSparseContext *ctx, SparseDelta *local_delta
 #endif
 
 /**
- * @brief Parses a percentage threshold into a relative fraction.
- * @param s Input percentage string, e.g. "10" means 10%.
- * @param default_fraction Fallback relative fraction.
- * @return Relative fraction used internally, e.g. 0.10 for 10%.
- */
-static double parse_min_rel_improvement_percent(const char *s, double default_fraction) {
-  if (!s || !*s) return default_fraction;
-  double percent = atof(s);
-  if (percent <= 0.0) return default_fraction;
-  return percent / 100.0;
-}
-
-/**
- * @brief Executes `load_aco_mpi_directives`.
- * @param max_runtime_sec Function parameter.
- * @param max_stagnation_epochs Function parameter.
- * @param min_rel_improvement Function parameter.
- */
-static void load_aco_mpi_directives(double *max_runtime_sec, int *max_stagnation_epochs, double *min_rel_improvement) {
-  const char *s_timeout = getenv("ACO_SOLVER_TIMEOUT_SECONDS");
-  const char *s_stagnation = getenv("ACO_SOLVER_STAGNATION_EPOCHS");
-  const char *s_rel = getenv("ACO_SOLVER_MIN_REL_IMPROVEMENT");
-  *max_runtime_sec = (s_timeout && *s_timeout) ? atof(s_timeout) : 0.0;
-  *max_stagnation_epochs = (s_stagnation && *s_stagnation) ? atoi(s_stagnation) : 100;
-  *min_rel_improvement = parse_min_rel_improvement_percent(s_rel, 1e-3);
-}
-
-/**
  * @brief Executes `is_sig_imp`.
  * @param prev_best Function parameter.
  * @param new_best Function parameter.
@@ -486,34 +459,40 @@ static int is_sig_imp(double prev_best, double new_best, double min_rel_improvem
  * @param best_sol Output best solution.
  * @param best_cost Output best cost.
  */
-void aco_vrp_run(int n, int K, int cap, int m, double **c, double alpha, double beta, double rho, double tau0, double Q, unsigned int seed, Solution *best_sol, double *best_cost) {
+AcoStatus aco_vrp_run(int n, int K, int cap, int m, double **c, double alpha, double beta, double rho, double tau0, double Q, unsigned int seed, Solution *best_sol, double *best_cost, const AcoRuntimeConfig *config) {
+    if (n <= 0 || K <= 0 || !c || !best_sol || !best_cost) return ACO_ERR_INVALID_INPUT;
     int mpi_rank = 0, mpi_size = 1;
 #ifdef USE_MPI
     int mpi_init = 0; MPI_Initialized(&mpi_init);
     if (mpi_init) { MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank); MPI_Comm_size(MPI_COMM_WORLD, &mpi_size); }
 #endif
     long l3_size = get_l3_cache_size(); int cand_k = tune_candidate_k(n, l3_size);
-    int total_m = (m <= 0) ? (n / 2) * mpi_size : m;
+    int total_m = (m <= 0) ? ((config && config->ants > 0) ? config->ants : (n / 2) * mpi_size) : m;
     int ant_off = mpi_rank * (total_m / mpi_size) + ((mpi_rank < (total_m % mpi_size)) ? mpi_rank : (total_m % mpi_size));
     int local_m = total_m / mpi_size + (mpi_rank < (total_m % mpi_size));
-    double max_runtime_sec; int max_stagnation_epochs; double min_rel_improvement;
-    load_aco_mpi_directives(&max_runtime_sec, &max_stagnation_epochs, &min_rel_improvement);
+    double max_runtime_sec = config ? config->timeout_seconds : 0.0; int max_stagnation_epochs = config ? config->stagnation_epochs : 0; double min_rel_improvement = config ? config->min_rel_improvement : 1e-3; double progress_interval_sec = config ? config->progress_interval_seconds : 10.0;
+    if (max_stagnation_epochs <= 0) max_stagnation_epochs = 100;
     MatrixFloat *tau_mat = matrix_create_float(n); MatrixFloat *c_mat = matrix_create_float(n);
+    if (!tau_mat || !c_mat) { matrix_free_float(tau_mat); matrix_free_float(c_mat); return ACO_ERR_ALLOCATION; }
     #pragma omp parallel for schedule(static)
     for (int i = 0; i <= n; i++) for (int j = 0; j <= n; j++) { c_mat->rows[i][j] = (float)c[i][j]; tau_mat->rows[i][j] = (i==j) ? 0.0f : (float)tau0; }
-    AcoMpiRankShared shared; aco_mpi_shared_init(&shared, n, cand_k, c_mat, beta);
+    AcoMpiRankShared shared; if (!aco_mpi_shared_init(&shared, n, cand_k, c_mat, beta)) { matrix_free_float(tau_mat); matrix_free_float(c_mat); return ACO_ERR_ALLOCATION; }
     float *score_mat = aligned_alloc(ACO_MPI_ALIGNMENT, (size_t)(n + 1) * (size_t)shared.stride * sizeof(float));
     Solution *iter_best_sol_rank = solution_create(K, n); double iter_best_cost_g = DBL_MAX; *best_cost = DBL_MAX; double start_time = wall_time();
-    const char *s_fixed = getenv("ACO_SOLVER_FIXED_EPOCHS"); int fixed_epochs = (s_fixed && *s_fixed) ? atoi(s_fixed) : 0;
+    double next_progress_time = (progress_interval_sec > 0.0) ? start_time + progress_interval_sec : 0.0;
+    if (!score_mat || !iter_best_sol_rank) { free(score_mat); solution_free(iter_best_sol_rank); aco_mpi_shared_free(&shared); matrix_free_float(tau_mat); matrix_free_float(c_mat); return ACO_ERR_ALLOCATION; }
+    int fixed_epochs = config ? config->fixed_epochs : 0;
 #ifdef USE_MPI
     AsyncSparseContext async_ctx; async_sparse_init(&async_ctx, mpi_size);
 #endif
     int iter_since_best = 0; SparseDelta *rank_deltas = malloc((size_t)(n + K + 500) * 2 * sizeof(SparseDelta)); int rank_delta_count = 0;
+    if (!rank_deltas) { solution_free(iter_best_sol_rank); aco_mpi_shared_free(&shared); matrix_free_float(tau_mat); matrix_free_float(c_mat); free(score_mat); return ACO_ERR_ALLOCATION; }
     #pragma omp parallel default(shared) proc_bind(close)
     {
         HierarchicalWorkspace ws; aco_mpi_ws_init(&ws, K, n, shared.visited_words, shared.meta_words);
         if (mpi_rank == 0 && omp_get_thread_num() == 0) printf("ACO Parallel Starting with %d threads. N=%d K=%d Cap=%d\n", omp_get_num_threads(), n, K, cap);
         for (int iter = 0; (fixed_epochs > 0 && iter < fixed_epochs) || (fixed_epochs <= 0 && iter_since_best < max_stagnation_epochs); iter++) {
+            if (max_runtime_sec > 0.0 && (wall_time() - start_time) > max_runtime_sec) break;
 #ifdef USE_MPI
             #pragma omp master
             async_sparse_wait_and_apply(&async_ctx, tau_mat, mpi_rank, mpi_size);
@@ -546,7 +525,18 @@ void aco_vrp_run(int n, int K, int cap, int m, double **c, double alpha, double 
                 if (is_sig_imp(*best_cost, g_min, min_rel_improvement)) iter_since_best = 0; else iter_since_best++;
                 if (g_min < *best_cost) { *best_cost = g_min; solution_copy(best_sol, iter_best_sol_rank);
                 }
-                if (mpi_rank == 0 && iter % 10 == 0) printf("Epoch %d: Best Cost = %.3f (Since Last Imp: %d)\n", iter, *best_cost, iter_since_best);
+                double now = wall_time();
+                if (mpi_rank == 0 && progress_interval_sec > 0.0 && now >= next_progress_time) {
+                    double elapsed = now - start_time;
+                    if (max_runtime_sec > 0.0) {
+                        double remaining = max_runtime_sec - elapsed;
+                        if (remaining < 0.0) remaining = 0.0;
+                        fprintf(stderr, "[mpi] elapsed %.1fs, remaining %.1fs, iter %d, best %.3f\n", elapsed, remaining, iter + 1, *best_cost);
+                    } else {
+                        fprintf(stderr, "[mpi] elapsed %.1fs, iter %d, best %.3f\n", elapsed, iter + 1, *best_cost);
+                    }
+                    next_progress_time = now + progress_interval_sec;
+                }
                 iter_best_cost_g = DBL_MAX; rank_delta_count = 0;
             }
             #pragma omp barrier
@@ -592,19 +582,24 @@ void aco_vrp_run(int n, int K, int cap, int m, double **c, double alpha, double 
     }
     free(rank_deltas); if (mpi_rank == 0) printf("ACO Parallel Ultimate Completion. Best: %.3f. Time: %.3fs\n", *best_cost, wall_time() - start_time);
     matrix_free_float(tau_mat); matrix_free_float(c_mat); free(score_mat); solution_free(iter_best_sol_rank); aco_mpi_shared_free(&shared);
+    return (*best_cost < DBL_MAX) ? ACO_OK : ACO_ERR_NO_SOLUTION;
 }
 
 /**
  * @brief Runs the MPI/OpenMP ACO solver with explicit vehicle capacity.
  */
-void aco_vrp_with_capacity(int n, int K, int vehicle_capacity_customers, int m, double **c, double alpha, double beta, double rho, double tau0, double Q, unsigned int seed, Solution *best_solution, double *best_cost) {
-    aco_vrp_run(n, K, vehicle_capacity_customers, m, c, alpha, beta, rho, tau0, Q, seed, best_solution, best_cost);
+AcoStatus aco_vrp_with_capacity(int n, int K, int vehicle_capacity_customers, int m, double **c, double alpha, double beta, double rho, double tau0, double Q, unsigned int seed, Solution *best_solution, double *best_cost) {
+    AcoRuntimeConfig config;
+    aco_runtime_config_load_env(&config);
+    config.ants = m;
+    config.seed = seed;
+    return aco_vrp_run(n, K, vehicle_capacity_customers, m, c, alpha, beta, rho, tau0, Q, seed, best_solution, best_cost, &config);
 }
 
 /**
  * @brief Runs the MPI/OpenMP ACO solver with auto-derived vehicle capacity.
  */
-void aco_vrp(int n, int K, int m, double **c, double alpha, double beta, double rho, double tau0, double Q, unsigned int seed, Solution *best_solution, double *best_cost) {
+AcoStatus aco_vrp(int n, int K, int m, double **c, double alpha, double beta, double rho, double tau0, double Q, unsigned int seed, Solution *best_solution, double *best_cost) {
     int cap = (K > 0) ? (int)(((long long)120 * n + 100 * K - 1) / (100 * K)) : n;
-    aco_vrp_with_capacity(n, K, cap, m, c, alpha, beta, rho, tau0, Q, seed, best_solution, best_cost);
+    return aco_vrp_with_capacity(n, K, cap, m, c, alpha, beta, rho, tau0, Q, seed, best_solution, best_cost);
 }

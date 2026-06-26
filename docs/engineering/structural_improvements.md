@@ -19,6 +19,13 @@ docs/engineering/architecture.md
 - `results/` separata dagli artefatti versionati e documentata con
   `results/README.md`.
 - Documento di architettura corrente creato.
+- Layer comune per parsing CLI, output soluzione e validazione post-solver
+  aggiunto in `include/cli_common.h` e `src/common/cli_common.c`.
+- Smoke test ufficiali integrati nei target `make smoke`, `make smoke_seq`,
+  `make smoke_mpi` e `make smoke_cuda`.
+- Configurazione runtime consolidata in `include/aco_config.h` e
+  `src/common/aco_config.c`.
+- API backend uniformata con `AcoStatus` per CPU, MPI/OpenMP e CUDA.
 
 ## 1. Separare Meglio Core E Codice Sperimentale
 
@@ -40,92 +47,6 @@ Da implementare:
 - evitare nuove copie complete dei solver;
 - marcare chiaramente eventuali snapshot storici come legacy.
 
-## 2. Configurazione Runtime Unica
-
-Timeout, stagnation, soglia di miglioramento, seed, numero formiche e candidate
-list sono ancora letti in piu' punti.
-
-Struttura consigliata:
-
-```text
-include/aco_config.h
-src/common/aco_config.c
-```
-
-Esempio:
-
-```c
-typedef struct {
-  double timeout_seconds;
-  int stagnation_epochs;
-  double min_rel_improvement;
-  int fixed_epochs;
-  int candidate_k;
-  int ants;
-  unsigned int seed;
-} AcoRuntimeConfig;
-```
-
-## 3. API Uniforme Per I Backend
-
-Stato attuale:
-
-- backend CPU: funzioni `void`;
-- backend CUDA: funzione con ritorno `int`;
-- gestione errori non uniforme.
-
-Struttura consigliata:
-
-```c
-typedef enum {
-  ACO_OK = 0,
-  ACO_ERR_INVALID_INPUT = 1,
-  ACO_ERR_ALLOCATION = 2,
-  ACO_ERR_NO_SOLUTION = 3,
-  ACO_ERR_BACKEND = 4
-} AcoStatus;
-```
-
-## 4. Layer Comune Per CLI, Output E Validazione
-
-`src/main.c` e `src/cuda/main_vrp.cu` duplicano parsing argomenti, stampa route
-e parte della gestione errori.
-
-Struttura consigliata:
-
-```text
-include/cli_common.h
-src/common/cli_common.c
-```
-
-## 5. Smoke Test Ufficiali
-
-Esiste uno script smoke in `tools/bash/smoke_test.sh`, ma manca ancora una
-integrazione Make completa.
-
-Da implementare:
-
-```bash
-make smoke
-make smoke_seq
-make smoke_mpi
-make smoke_cuda
-```
-
-I test dovrebbero verificare:
-
-- generazione mini istanza;
-- esecuzione solver;
-- terminazione;
-- soluzione valida;
-- costo numerico presente;
-- exit code corretto.
-
 ## Ordine Di Implementazione Consigliato
 
-1. Introdurre `AcoRuntimeConfig`.
-2. Uniformare API backend con `AcoStatus`.
-3. Spostare parsing CLI/output in `cli_common`.
-4. Aggiungere validazione CVRP comune.
-5. Aggiungere target `make smoke`.
-6. Ridurre o archiviare meglio copie complete dei solver in `experiments/`.
+1. Ridurre o archiviare meglio copie complete dei solver in `experiments/`.

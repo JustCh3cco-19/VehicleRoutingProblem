@@ -1,5 +1,6 @@
 extern "C" {
 #include "aco.h"
+#include "aco_config.h"
 #include "instance_parser.h"
 #include "matrix.h"
 #include "solution.h"
@@ -21,7 +22,7 @@ extern "C" {
     if (err__ != cudaSuccess) {                                              \
       fprintf(stderr, "CUDA error at %s:%d: %s\n", __FILE__, __LINE__,       \
               cudaGetErrorString(err__));                                    \
-      return 1;                                                              \
+      return ACO_ERR_BACKEND;                                                \
     }                                                                        \
   } while (0)
 
@@ -33,51 +34,6 @@ static double wall_time_seconds(void) {
   struct timespec ts;
   timespec_get(&ts, TIME_UTC);
   return (double)ts.tv_sec + (double)ts.tv_nsec * 1e-9;
-}
-
-/**
- * @brief Parses a percentage threshold into a relative fraction.
- * @param s Input percentage string, e.g. "10" means 10%.
- * @param default_fraction Fallback relative fraction.
- * @return Relative fraction used internally, e.g. 0.10 for 10%.
- */
-static double parse_min_rel_improvement_percent(const char *s,
-                                                double default_fraction) {
-  if (!s || !*s) {
-    return default_fraction;
-  }
-
-  double percent = atof(s);
-  if (percent <= 0.0) {
-    return default_fraction;
-  }
-  return percent / 100.0;
-}
-
-/**
- * @brief Executes `load_timer_directives`.
- * @param max_runtime_sec Function parameter.
- * @param max_stagnation_epochs Function parameter.
- * @param min_rel_improvement Function parameter.
- */
-static void load_timer_directives(double *max_runtime_sec,
-                                  int *max_stagnation_epochs,
-                                  double *min_rel_improvement) {
-  const char *s_timeout = getenv("ACO_SOLVER_TIMEOUT_SECONDS");
-  const char *s_stagnation = getenv("ACO_SOLVER_STAGNATION_EPOCHS");
-  const char *s_rel = getenv("ACO_SOLVER_MIN_REL_IMPROVEMENT");
-
-  *max_runtime_sec = (s_timeout && *s_timeout) ? atof(s_timeout) : 0.0;
-  *max_stagnation_epochs =
-      (s_stagnation && *s_stagnation) ? atoi(s_stagnation) : 0;
-  *min_rel_improvement = parse_min_rel_improvement_percent(s_rel, 1e-3);
-
-  if (*max_stagnation_epochs < 0) {
-    *max_stagnation_epochs = 0;
-  }
-  if (*min_rel_improvement <= 0.0) {
-    *min_rel_improvement = 1e-3;
-  }
 }
 
 /**
@@ -192,16 +148,25 @@ static int copy_ant_to_solution(const int *routes, const int *route_lengths,
  * @param best_cost Output best cost.
  * @return 0 on success, non-zero on failure.
  */
-int aco_vrp_cuda_with_capacity(int n, int K, int vehicle_capacity_customers,
+AcoStatus aco_vrp_cuda_with_capacity(int n, int K, int vehicle_capacity_customers,
                                   int m, float *coords_x, float *coords_y,
                                   double alpha, double beta, double rho,
                                   double tau0, double Q, unsigned int seed,
                                   Solution *best_solution, double *best_cost) {
+  if (n <= 0 || K <= 0 || !coords_x || !coords_y || !best_solution ||
+      !best_cost) {
+    return ACO_ERR_INVALID_INPUT;
+  }
 
   int cand_k = 32;
   if (n <= 32) cand_k = n;
 
-  if (m == 0) m = 256;
+  AcoRuntimeConfig config;
+  aco_runtime_config_load_env(&config);
+  config.ants = m;
+  config.seed = seed;
+
+  if (m == 0) m = (config.ants > 0) ? config.ants : 256;
 
 
   float log_tau_min = logf(0.0001f);
@@ -241,6 +206,9 @@ int aco_vrp_cuda_with_capacity(int n, int K, int vehicle_capacity_customers,
 
 
   float2 *h_coords = (float2 *)malloc((n + 1) * sizeof(float2));
+  if (!h_coords) {
+    return ACO_ERR_ALLOCATION;
+  }
   for (int i = 0; i <= n; i++) {
       h_coords[i].x = coords_x[i];
       h_coords[i].y = coords_y[i];
@@ -296,17 +264,29 @@ int aco_vrp_cuda_with_capacity(int n, int K, int vehicle_capacity_customers,
   int *h_flat_lengths = (int *)malloc(K * sizeof(int));
   int *d_flat_routes = NULL;
   int *d_flat_lengths = NULL;
+  if (!h_ant_summary || !h_routes || !h_route_lengths || !h_flat_routes ||
+      !h_flat_lengths) {
+    free(h_coords);
+    free(h_ant_summary);
+    free(h_routes);
+    free(h_route_lengths);
+    free(h_flat_routes);
+    free(h_flat_lengths);
+    return ACO_ERR_ALLOCATION;
+  }
   CHECK_CUDA(cudaMalloc(&d_flat_routes, K * (n + 1) * sizeof(int)));
   CHECK_CUDA(cudaMalloc(&d_flat_lengths, K * sizeof(int)));
 
-  double max_runtime_sec = 0.0;
-  int max_stagnation_epochs = 0;
-  double min_rel_improvement = 1e-3;
-  load_timer_directives(&max_runtime_sec, &max_stagnation_epochs, &min_rel_improvement);
+  double max_runtime_sec = config.timeout_seconds;
+  int max_stagnation_epochs = config.stagnation_epochs;
+  double min_rel_improvement = config.min_rel_improvement;
+  double progress_interval_sec = config.progress_interval_seconds;
 
   int iter = 0;
   int iter_since_best = 0;
   double start_time = wall_time_seconds();
+  double next_progress_time =
+      (progress_interval_sec > 0.0) ? start_time + progress_interval_sec : 0.0;
   double global_best = DBL_MAX;
 
   printf("CUDA Solver starting... (N=%d, K=%d, M=%d)\n", n, K, m);
@@ -379,6 +359,24 @@ int aco_vrp_cuda_with_capacity(int n, int K, int vehicle_capacity_customers,
       iter_since_best++;
     }
 
+    double progress_time = wall_time_seconds();
+    if (progress_interval_sec > 0.0 && progress_time >= next_progress_time) {
+      double elapsed = progress_time - start_time;
+      if (max_runtime_sec > 0.0) {
+        double remaining = max_runtime_sec - elapsed;
+        if (remaining < 0.0) {
+          remaining = 0.0;
+        }
+        fprintf(stderr,
+                "[cuda] elapsed %.1fs, remaining %.1fs, iter %d, best %.3f\n",
+                elapsed, remaining, iter + 1, global_best);
+      } else {
+        fprintf(stderr, "[cuda] elapsed %.1fs, iter %d, best %.3f\n", elapsed,
+                iter + 1, global_best);
+      }
+      next_progress_time = progress_time + progress_interval_sec;
+    }
+
     iter++;
   }
 
@@ -404,5 +402,5 @@ int aco_vrp_cuda_with_capacity(int n, int K, int vehicle_capacity_customers,
   free(h_flat_routes);
   free(h_flat_lengths);
 
-  return 0;
+  return (*best_cost < DBL_MAX) ? ACO_OK : ACO_ERR_NO_SOLUTION;
 }

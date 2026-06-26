@@ -1,9 +1,9 @@
 #include "aco.h"
+#include "cli_common.h"
 #include "instance_parser.h"
 #include "matrix.h"
 #include "solution.h"
 
-#include <errno.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -30,61 +30,6 @@ static void fill_example_costs(double **c, int n) {
 }
 
 /**
- * @brief Prints routes from a solution in human-readable format.
- * @param best Best solution to print.
- * @param K Number of routes.
- */
-static void print_solution_routes(const Solution *best, int K) {
-  for (int i = 0; i < K; ++i) {
-    const Route *r = &best->routes[i];
-    int printed = 0;
-    printf("Route %d:", i + 1);
-    for (int t = 0; t < r->len; ++t) {
-      int node = r->nodes[t];
-      if (node != 0) {
-        printf("%s%d", printed ? " " : " ", node);
-        printed = 1;
-      }
-    }
-    printf("\n");
-  }
-}
-
-/**
- * @brief Parses a positive integer argument.
- * @param s Input string.
- * @param out Output parsed value.
- * @return 1 on success, 0 on parse/range error.
- */
-static int parse_int_arg(const char *s, int *out) {
-  char *end = NULL;
-  errno = 0;
-  long v = strtol(s, &end, 10);
-  if (errno != 0 || end == s || *end != '\0') return 0;
-  if (v < 0 || v > 100000000L) return 0;
-  *out = (int)v;
-  return 1;
-}
-
-/**
- * @brief Parses an unsigned integer argument.
- * @param s Input string.
- * @param ok Output parse status flag.
- * @return Parsed value if valid, 0 otherwise.
- */
-static unsigned int parse_uint_arg(const char *s, int *ok) {
-  char *end = NULL;
-  errno = 0;
-  unsigned long v = strtoul(s, &end, 10);
-  if (errno != 0 || end == s || *end != '\0' || v > 0xFFFFFFFFUL) {
-    *ok = 0;
-    return 0u;
-  }
-  *ok = 1;
-  return (unsigned int)v;
-}
-
-/**
  * @brief CLI entrypoint for sequential and MPI/OpenMP backends.
  * @param argc Argument count.
  * @param argv Argument vector.
@@ -108,11 +53,11 @@ int main(int argc, char **argv) {
 #endif
 
   int n = 5, K = 2, m = 10;
-  if (argc == 5 && parse_int_arg(argv[1], &n)) {
+  if (argc == 5 && cli_parse_int_arg(argv[1], &n)) {
     int ok = 1;
-    ok = ok && parse_int_arg(argv[2], &K);
-    ok = ok && parse_int_arg(argv[3], &m);
-    seed = parse_uint_arg(argv[4], &ok);
+    ok = ok && cli_parse_int_arg(argv[2], &K);
+    ok = ok && cli_parse_int_arg(argv[3], &m);
+    seed = cli_parse_uint_arg(argv[4], &ok);
     if (!ok || n <= 0 || K <= 0 || m < 0) {
 #ifdef USE_MPI
       if (mpi_rank == 0)
@@ -122,9 +67,9 @@ int main(int argc, char **argv) {
     }
   } else if ((argc == 4 || argc == 5) && argv[1] != NULL) {
     int ok = 1; instance_path = argv[1];
-    ok = ok && parse_int_arg(argv[2], &K);
-    ok = ok && parse_int_arg(argv[3], &m);
-    if (argc == 5) seed = parse_uint_arg(argv[4], &ok);
+    ok = ok && cli_parse_int_arg(argv[2], &K);
+    ok = ok && cli_parse_int_arg(argv[3], &m);
+    if (argc == 5) seed = cli_parse_uint_arg(argv[4], &ok);
     if (!ok || K <= 0 || m < 0) {
 #ifdef USE_MPI
       if (mpi_rank == 0)
@@ -161,22 +106,33 @@ int main(int argc, char **argv) {
   if (!best) { fprintf(stderr, "failed to allocate solution\n"); status = 1; matrix_free(c); goto cleanup_mpi; }
 
   double best_cost = 0.0;
+  AcoStatus solver_status;
   if (use_instance_file) {
     if (instance_meta.vehicles > 0 && instance_meta.vehicles != K) {
       fprintf(stderr, "instance VEHICLES mismatch: CLI K=%d, file VEHICLES=%d\n", K, instance_meta.vehicles);
       status = 1; solution_free(best); matrix_free(c); goto cleanup_mpi;
     }
-    aco_vrp_with_capacity(n, K, instance_meta.capacity, m, c, alpha, beta, rho, tau0, Q, seed, best, &best_cost);
+    solver_status = aco_vrp_with_capacity(n, K, instance_meta.capacity, m, c,
+                                          alpha, beta, rho, tau0, Q, seed,
+                                          best, &best_cost);
   } else {
-    aco_vrp(n, K, m, c, alpha, beta, rho, tau0, Q, seed, best, &best_cost);
+    solver_status = aco_vrp(n, K, m, c, alpha, beta, rho, tau0, Q, seed, best,
+                            &best_cost);
   }
 
 #ifdef USE_MPI
   if (mpi_rank == 0)
 #endif
   {
-    print_solution_routes(best, K);
-    printf("Cost: %.3f\nbest cost: %.3f\n", best_cost, best_cost);
+    if (solver_status != ACO_OK) {
+      fprintf(stderr, "solver failed: %s\n", aco_status_string(solver_status));
+      status = 1;
+    } else if (!cli_validate_solution_or_report(best, n, K, best_cost)) {
+      status = 1;
+    } else {
+      cli_print_solution_routes(best, K);
+      cli_print_solution_cost(best_cost);
+    }
   }
 
   solution_free(best);

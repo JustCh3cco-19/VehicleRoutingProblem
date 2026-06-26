@@ -1,12 +1,12 @@
 extern "C" {
 #include "aco.h"
+#include "cli_common.h"
 #include "instance_parser.h"
 #include "solution.h"
 }
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <errno.h>
 
 /**
  * @brief Runs the CUDA ACO backend with explicit vehicle capacity.
@@ -26,74 +26,13 @@ extern "C" {
  * @param best_cost Output best cost.
  * @return 0 on success, non-zero on failure.
  */
-int aco_vrp_cuda_with_capacity(int n, int K, int vehicle_capacity_customers,
-                               int m, float *coords_x, float *coords_y,
-                               double alpha, double beta, double rho,
-                               double tau0, double Q, unsigned int seed,
-                               Solution *best_solution, double *best_cost);
-
-/**
- * @brief Parses a positive integer argument.
- * @param s Input string.
- * @param out Output parsed value.
- * @return 1 on success, 0 on parse/range error.
- */
-static int parse_int_arg(const char *s, int *out) {
-    char *end = NULL;
-    long v;
-    errno = 0;
-    v = strtol(s, &end, 10);
-    if (errno != 0 || end == s || *end != '\0') {
-        return 0;
-    }
-    if (v < 0 || v > 100000000L) {
-        return 0;
-    }
-    *out = (int)v;
-    return 1;
-}
-
-/**
- * @brief Parses an unsigned integer argument.
- * @param s Input string.
- * @param ok Output parse status flag.
- * @return Parsed value if valid, 0 otherwise.
- */
-static unsigned int parse_uint_arg(const char *s, int *ok) {
-    char *end = NULL;
-    unsigned long v;
-    errno = 0;
-    v = strtoul(s, &end, 10);
-    if (errno != 0 || end == s || *end != '\0' || v > 0xFFFFFFFFUL) {
-        *ok = 0;
-        return 0u;
-    }
-    *ok = 1;
-    return (unsigned int)v;
-}
-
-/**
- * @brief Prints routes from a solution in human-readable format.
- * @param best Best solution to print.
- * @param K Number of routes.
- */
-static void print_solution_routes(const Solution *best, int K) {
-    int i;
-    for (i = 0; i < K; ++i) {
-        const Route *r = &best->routes[i];
-        int t;
-        int printed = 0;
-        printf("Route %d:", i + 1);
-        for (t = 0; t < r->len; ++t) {
-            int node = r->nodes[t];
-            if (node != 0) {
-                printf("%s%d", printed ? " " : " ", node);
-                printed = 1;
-            }
-        }
-        printf("\n");
-    }
-}
+AcoStatus aco_vrp_cuda_with_capacity(int n, int K,
+                                     int vehicle_capacity_customers, int m,
+                                     float *coords_x, float *coords_y,
+                                     double alpha, double beta, double rho,
+                                     double tau0, double Q, unsigned int seed,
+                                     Solution *best_solution,
+                                     double *best_cost);
 
 /**
  * @brief CLI entrypoint for the CUDA backend.
@@ -126,10 +65,10 @@ int main(int argc, char **argv) {
     }
 
     path = argv[1];
-    ok = ok && parse_int_arg(argv[2], &K);
-    ok = ok && parse_int_arg(argv[3], &m);
+    ok = ok && cli_parse_int_arg(argv[2], &K);
+    ok = ok && cli_parse_int_arg(argv[3], &m);
     if (argc == 5) {
-        seed = parse_uint_arg(argv[4], &ok);
+        seed = cli_parse_uint_arg(argv[4], &ok);
     }
 
     if (!ok || K <= 0 || m < 0) {
@@ -157,19 +96,26 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    if (aco_vrp_cuda_with_capacity(n, K, instance_meta.capacity, m, coords_x, coords_y, alpha,
+    AcoStatus solver_status = aco_vrp_cuda_with_capacity(n, K, instance_meta.capacity, m, coords_x, coords_y, alpha,
                                       beta, rho, tau0, Q, seed, best,
-                                      &best_cost) != 0) {
-        fprintf(stderr, "CUDA solver failed\n");
+                                      &best_cost);
+    if (solver_status != ACO_OK) {
+        fprintf(stderr, "CUDA solver failed: %s\n", aco_status_string(solver_status));
         solution_free(best);
         free(coords_x);
         free(coords_y);
         return 1;
     }
 
-    print_solution_routes(best, K);
-    printf("Cost: %.3f\n", best_cost);
-    printf("best cost: %.3f\n", best_cost);
+    if (!cli_validate_solution_or_report(best, n, K, best_cost)) {
+        solution_free(best);
+        free(coords_x);
+        free(coords_y);
+        return 1;
+    }
+
+    cli_print_solution_routes(best, K);
+    cli_print_solution_cost(best_cost);
 
     solution_free(best);
     free(coords_x);

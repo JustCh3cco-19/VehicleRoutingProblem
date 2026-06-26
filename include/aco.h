@@ -79,6 +79,16 @@ typedef struct {
   unsigned int rng_state;
 } SeqWorkspace;
 
+typedef enum {
+  ACO_OK = 0,
+  ACO_ERR_INVALID_INPUT = 1,
+  ACO_ERR_ALLOCATION = 2,
+  ACO_ERR_NO_SOLUTION = 3,
+  ACO_ERR_BACKEND = 4
+} AcoStatus;
+
+const char *aco_status_string(AcoStatus status);
+
 /**
  * @brief Runs the ACO solver with an auto-derived per-vehicle capacity.
  * @param n Number of customers.
@@ -94,9 +104,9 @@ typedef struct {
  * @param best_solution Output best solution.
  * @param best_cost Output best cost.
  */
-void aco_vrp(int n, int K, int m, double **c, double alpha,
-             double beta, double rho, double tau0, double Q,
-             unsigned int seed, Solution *best_solution, double *best_cost);
+AcoStatus aco_vrp(int n, int K, int m, double **c, double alpha, double beta,
+                  double rho, double tau0, double Q, unsigned int seed,
+                  Solution *best_solution, double *best_cost);
 
 /**
  * @brief Runs the ACO solver with an explicit per-vehicle customer capacity.
@@ -114,11 +124,11 @@ void aco_vrp(int n, int K, int m, double **c, double alpha,
  * @param best_solution Output best solution.
  * @param best_cost Output best cost.
  */
-void aco_vrp_with_capacity(int n, int K, int vehicle_capacity_customers, int m,
-                           double **c, double alpha, double beta,
-                           double rho, double tau0, double Q,
-                           unsigned int seed, Solution *best_solution,
-                           double *best_cost);
+AcoStatus aco_vrp_with_capacity(int n, int K, int vehicle_capacity_customers,
+                                int m, double **c, double alpha, double beta,
+                                double rho, double tau0, double Q,
+                                unsigned int seed, Solution *best_solution,
+                                double *best_cost);
 
 /**
  * @brief Returns a uniform random value in [0, 1) using the provided RNG state.
