@@ -73,6 +73,29 @@ static void aco_mpi_ws_free(aco_mpi_workspace_t *ws) {
   solution_free(ws->sol);
 }
 
+
+static double aco_mpi_rand01(unsigned int *state) {
+  unsigned int x = *state;
+  if (x == 0u) {
+    x = 1u;
+  }
+  x ^= x << 13;
+  x ^= x >> 17;
+  x ^= x << 5;
+  *state = x;
+  return (double)x / 4294967295.0;
+}
+
+
+static bool aco_mpi_route_append(Route *r, int node) {
+  if (r->len >= r->cap) {
+    return false;
+  }
+  r->nodes[r->len] = node;
+  r->len++;
+  return true;
+}
+
 static int aco_mpi_ws_init(aco_mpi_workspace_t *ws, int K, int n, int words,
                            int meta_words) {
   size_t visited_bytes = 0;
@@ -153,7 +176,7 @@ static bool build_ant_h(aco_mpi_workspace_t *ws,
 
   int rem = s->n;
   for (int v = 0; v < K; v++) {
-    if (!route_append(&ws->sol->routes[v], 0)) {
+    if (!aco_mpi_route_append(&ws->sol->routes[v], 0)) {
       return false;
     }
     int curr = 0;
@@ -164,31 +187,76 @@ static bool build_ant_h(aco_mpi_workspace_t *ws,
         break;
       }
 
+      enum { kMaxMpiLocalCandidates = 1024 };
       int next = 0;
-      float denom = 0.0f;
-      const int *cands = s->cand_idx + (size_t)curr * (size_t)s->stride;
-      const float *sc = scores + (size_t)curr * (size_t)s->stride;
-      for (int t = 0; t < s->cand_k; t++) {
-        int node = cands[t];
-        int word = (unsigned)node >> 6;
-        int bit = (unsigned)node & 63u;
-        if (node > 0 && !((ws->visited[word] >> bit) & 1u)) {
-          denom += sc[t];
-        }
-      }
+      if (s->cand_k <= kMaxMpiLocalCandidates) {
+        int active_nodes[kMaxMpiLocalCandidates];
+        float active_scores[kMaxMpiLocalCandidates];
+        int active_count = 0;
+        float denom = 0.0f;
 
-      if (denom > 0.0f) {
-        float thres = (float)aco_rand01_state(&ws->rng_state) * denom;
-        float cum = 0.0f;
+        const int *cands = s->cand_idx + (size_t)curr * (size_t)s->stride;
+        const float *sc = scores + (size_t)curr * (size_t)s->stride;
+
+        for (int t = 0; t < s->cand_k; t++) {
+          int node = cands[t];
+          if (node <= 0) {
+            continue;
+          }
+          int word = (unsigned)node >> 6;
+          int bit = (unsigned)node & 63u;
+          if (!((ws->visited[word] >> bit) & 1u)) {
+            float w = sc[t];
+            if (w > 0.0f) {
+              denom += w;
+              active_nodes[active_count] = node;
+              active_scores[active_count] = w;
+              active_count++;
+            }
+          }
+        }
+
+        if (denom > 0.0f) {
+          float thres = (float)aco_mpi_rand01(&ws->rng_state) * denom;
+          float cum = 0.0f;
+          for (int i = 0; i < active_count; i++) {
+            float w = active_scores[i];
+            cum += w;
+            if (cum >= thres) {
+              next = active_nodes[i];
+              break;
+            }
+          }
+          if (next <= 0 && active_count > 0) {
+            next = active_nodes[active_count - 1];
+          }
+        }
+      } else {
+        float denom = 0.0f;
+        const int *cands = s->cand_idx + (size_t)curr * (size_t)s->stride;
+        const float *sc = scores + (size_t)curr * (size_t)s->stride;
         for (int t = 0; t < s->cand_k; t++) {
           int node = cands[t];
           int word = (unsigned)node >> 6;
           int bit = (unsigned)node & 63u;
           if (node > 0 && !((ws->visited[word] >> bit) & 1u)) {
-            cum += sc[t];
-            if (cum >= thres) {
-              next = node;
-              break;
+            denom += sc[t];
+          }
+        }
+
+        if (denom > 0.0f) {
+          float thres = (float)aco_mpi_rand01(&ws->rng_state) * denom;
+          float cum = 0.0f;
+          for (int t = 0; t < s->cand_k; t++) {
+            int node = cands[t];
+            int word = (unsigned)node >> 6;
+            int bit = (unsigned)node & 63u;
+            if (node > 0 && !((ws->visited[word] >> bit) & 1u)) {
+              cum += sc[t];
+              if (cum >= thres) {
+                next = node;
+                break;
+              }
             }
           }
         }
@@ -201,7 +269,7 @@ static bool build_ant_h(aco_mpi_workspace_t *ws,
         break;
       }
 
-      if (!route_append(&ws->sol->routes[v], next)) {
+      if (!aco_mpi_route_append(&ws->sol->routes[v], next)) {
         return false;
       }
       int word_idx = (unsigned)next >> 6;
@@ -213,7 +281,7 @@ static bool build_ant_h(aco_mpi_workspace_t *ws,
       rem--;
       curr = next;
     }
-    if (!route_append(&ws->sol->routes[v], 0)) {
+    if (!aco_mpi_route_append(&ws->sol->routes[v], 0)) {
       return false;
     }
   }

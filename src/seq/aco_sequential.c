@@ -336,16 +336,41 @@ static inline void visited_set(uint64_t *visited, int node) {
 }
 
 
+static double seq_rand01(unsigned int *state) {
+  unsigned int x = *state;
+  if (x == 0u) {
+    x = 1u;
+  }
+  x ^= x << 13;
+  x ^= x >> 17;
+  x ^= x << 5;
+  *state = x;
+  return (double)x / 4294967295.0;
+}
+
+
+static bool seq_route_append(Route *r, int node) {
+  if (r->len >= r->cap) {
+    return false;
+  }
+  r->nodes[r->len] = node;
+  r->len++;
+  return true;
+}
+
+
 static int find_nearest_unvisited(const SeqShared *shared, int current,
                                   const uint64_t *restrict visited,
                                   double **restrict c) {
   int best = 0;
   double best_dist = DBL_MAX;
-  for (int node = 1; node <= shared->n; ++node) {
+  int n = shared->n;
+  const double *restrict c_row = c[current];
+  for (int node = 1; node <= n; ++node) {
     if (visited_is_set(visited, node)) {
       continue;
     }
-    double d = c[current][node];
+    double d = c_row[node];
     if (d < best_dist) {
       best_dist = d;
       best = node;
@@ -365,25 +390,12 @@ static int select_next_customer(const SeqShared *shared, int current,
       shared->score + (size_t)current * (size_t)shared->stride;
   int k = shared->candidate_k;
 
-  double denom = 0.0;
-  for (int t = 0; t < k; ++t) {
-    int node = cand_row[t];
-    if (node <= 0) {
-      continue;
-    }
-    if (visited_is_set(visited, node)) {
-      continue;
-    }
-    double w = (double)score_row[t];
-    if (w > 0.0) {
-      denom += w;
-    }
-  }
-
-  if (denom > 0.0) {
-    double threshold = aco_rand01_state(rng_state) * denom;
-    double cumulative = 0.0;
-    int last_valid = 0;
+  enum { kMaxLocalCandidates = 1024 };
+  if (k <= kMaxLocalCandidates) {
+    int active_nodes[kMaxLocalCandidates];
+    double active_scores[kMaxLocalCandidates];
+    int active_count = 0;
+    double denom = 0.0;
 
     for (int t = 0; t < k; ++t) {
       int node = cand_row[t];
@@ -394,19 +406,76 @@ static int select_next_customer(const SeqShared *shared, int current,
         continue;
       }
       double w = (double)score_row[t];
-      if (w <= 0.0) {
-        continue;
-      }
-
-      cumulative += w;
-      last_valid = node;
-      if (cumulative >= threshold) {
-        return node;
+      if (w > 0.0) {
+        denom += w;
+        active_nodes[active_count] = node;
+        active_scores[active_count] = w;
+        active_count++;
       }
     }
 
-    if (last_valid > 0) {
-      return last_valid;
+    if (denom > 0.0) {
+      double threshold = seq_rand01(rng_state) * denom;
+      double cumulative = 0.0;
+      int last_valid = 0;
+
+      for (int i = 0; i < active_count; ++i) {
+        double w = active_scores[i];
+        cumulative += w;
+        last_valid = active_nodes[i];
+        if (cumulative >= threshold) {
+          return active_nodes[i];
+        }
+      }
+
+      if (last_valid > 0) {
+        return last_valid;
+      }
+    }
+  } else {
+    double denom = 0.0;
+    for (int t = 0; t < k; ++t) {
+      int node = cand_row[t];
+      if (node <= 0) {
+        continue;
+      }
+      if (visited_is_set(visited, node)) {
+        continue;
+      }
+      double w = (double)score_row[t];
+      if (w > 0.0) {
+        denom += w;
+      }
+    }
+
+    if (denom > 0.0) {
+      double threshold = seq_rand01(rng_state) * denom;
+      double cumulative = 0.0;
+      int last_valid = 0;
+
+      for (int t = 0; t < k; ++t) {
+        int node = cand_row[t];
+        if (node <= 0) {
+          continue;
+        }
+        if (visited_is_set(visited, node)) {
+          continue;
+        }
+        double w = (double)score_row[t];
+        if (w <= 0.0) {
+          continue;
+        }
+
+        cumulative += w;
+        last_valid = node;
+        if (cumulative >= threshold) {
+          return node;
+        }
+      }
+
+      if (last_valid > 0) {
+        return last_valid;
+      }
     }
   }
 
@@ -462,7 +531,7 @@ static bool build_ant_solution(SeqWorkspace *ws, const SeqShared *shared, int K,
 
   for (int vehicle = 0; vehicle < K; ++vehicle) {
     Route *r = &ws->sol->routes[vehicle];
-    if (!route_append(r, 0)) {
+    if (!seq_route_append(r, 0)) {
       return false;
     }
 
@@ -474,14 +543,11 @@ static bool build_ant_solution(SeqWorkspace *ws, const SeqShared *shared, int K,
            ws->route_loads[vehicle] < route_customer_cap) {
       int next =
           select_next_customer(shared, current, ws->visited, c, &ws->rng_state);
-      if (next <= 0 || visited_is_set(ws->visited, next)) {
-        next = find_nearest_unvisited(shared, current, ws->visited, c);
-      }
-      if (next <= 0 || visited_is_set(ws->visited, next)) {
+      if (next <= 0) {
         break;
       }
 
-      if (!route_append(r, next)) {
+      if (!seq_route_append(r, next)) {
         return false;
       }
       visited_set(ws->visited, next);
@@ -490,7 +556,7 @@ static bool build_ant_solution(SeqWorkspace *ws, const SeqShared *shared, int K,
       current = next;
     }
 
-    if (!route_append(r, 0)) {
+    if (!seq_route_append(r, 0)) {
       return false;
     }
   }
@@ -505,10 +571,10 @@ static bool build_ant_solution(SeqWorkspace *ws, const SeqShared *shared, int K,
       while (remaining > 0 && ws->route_loads[vehicle] < route_customer_cap) {
         int current = (r->len > 0) ? r->nodes[r->len - 1] : 0;
         int next = find_nearest_unvisited(shared, current, ws->visited, c);
-        if (next <= 0 || visited_is_set(ws->visited, next)) {
+        if (next <= 0) {
           break;
         }
-        if (!route_append(r, next)) {
+        if (!seq_route_append(r, next)) {
           return false;
         }
         visited_set(ws->visited, next);
@@ -516,7 +582,7 @@ static bool build_ant_solution(SeqWorkspace *ws, const SeqShared *shared, int K,
         --remaining;
       }
 
-      if (!route_append(r, 0)) {
+      if (!seq_route_append(r, 0)) {
         return false;
       }
     }

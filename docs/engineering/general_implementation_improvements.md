@@ -13,14 +13,8 @@ leggere e seguire anche `docs/engineering/cuda_style_guide.md`.
 
 ## Miglioramenti Specifici Per Benchmark
 
-### 1. Ottimizzazione del Loop di Selezione in `aco_vrp_run_with_config` (CPU)
-
-La profilazione tramite `gprof` evidenzia che oltre il **93% del tempo di calcolo CPU** è speso all'interno della funzione `aco_vrp_run_with_config`.
-
-Azioni richieste:
-- Profilare con micro-metriche (cache-misses, branch mispredictions) il ciclo interno in cui le formiche calcolano le probabilità di transizione per scegliere il prossimo nodo.
-- Ottimizzare la pre-computazione o l'accesso a `eta^beta` e valutare la riduzione delle chiamate al generatore pseudo-casuale `aco_rand01_state`.
+Tutti i miglioramenti pianificati per questa sezione sono stati completati con successo (ottimizzazione CPU e GPU).
 
 ## Roadmap Suggerita
 
-1. Ottimizzare il collo di bottiglia principale CPU in `aco_vrp_run_with_config`.
+Non ci sono attività aperte nella roadmap al momento.
