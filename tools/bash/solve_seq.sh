@@ -17,9 +17,14 @@ repro_mode="${SOLVE_REPRODUCIBILITY_MODE:-0}"
 if [ "$repeats" -lt 1 ]; then
   repeats=1
 fi
-improve_rel="$improve_rel_pct"
+commit_hash="$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")"
+compiler="$(gcc -dumpversion 2>/dev/null || echo "gcc")"
+compiler_flags="-Wall -Wextra -std=c11 -Iinclude -O3"
+cpu_model="$(lscpu | grep "Model name:" | sed 's/Model name:[[:space:]]*//' | xargs || hostname)"
+gpu_model="n/a"
+host_gpu="${cpu_model} / ${gpu_model}"
 
-header="name,profile,instance_path,n,K,m,candidate_k,solver_seed,reproducibility_mode,instance_seed,layout_id,run_id,status,elapsed_s,max_rss_gb,best_cost,error"
+header="name,profile,instance_path,backend,commit_hash,compiler,compiler_flags,host_gpu,n,K,capacity,m,candidate_k,solver_seed,reproducibility_mode,instance_seed,layout_id,run_id,status,elapsed_s,max_rss_gb,best_cost,validation,exit_status,mpi_ranks,omp_threads,cuda_arch,timeout,stagnation,min_improvement,error"
 
 # Prepare output CSV in advance, keeping existing rows for n values that are
 # not part of the current execution. New rows are then appended live.
@@ -123,13 +128,30 @@ tail -n +2 "$manifest" \
           fi
         fi
 
+        capacity="0"
+        if [ -f "$instance_path" ]; then
+          capacity="$(grep -i "^CAPACITY" "$instance_path" | awk -F: '{print $2}' | tr -d '[:space:]' || echo "0")"
+        fi
+
+        cand_k_eff="$(printf '%s\n' "$out" | sed -n 's/.*candidate_k=\([0-9]\+\).*/\1/p' | tail -n1)"
+        if [ -z "$cand_k_eff" ]; then
+          cand_k_eff="$candidate_k"
+        fi
+
+        validation="n/a"
+        if [ "$rc" -eq 0 ]; then
+          validation="valid"
+        elif printf '%s\n' "$out" | grep -Eq "invalid solution|invalid cost|invalid solution cost"; then
+          validation="invalid"
+        fi
+
         printf '%s\n' "$out" > "$sol_file"
         if [ "$rc" -eq 0 ]; then
           cost="$(printf '%s\n' "$out" | sed -n 's/^best cost: //p' | tail -n1)"
-          echo "$name,$profile,$instance_path,$n,$K,$m_run,$candidate_k,$seed_run,$repro_mode,$instance_seed,$layout_id,$run_id,ok,$elapsed,$rss_gb,$cost," >> "$csv"
+          echo "$name,$profile,$instance_path,seq,$commit_hash,\"$compiler\",\"$compiler_flags\",\"$host_gpu\",$n,$K,$capacity,$m_run,$cand_k_eff,$seed_run,$repro_mode,$instance_seed,$layout_id,$run_id,ok,$elapsed,$rss_gb,$cost,$validation,$rc,1,1,n/a,$runtime_s,$stag_iters,$improve_rel," >> "$csv"
         else
           err="$(printf '%s' "$out" | tr '\n' ' ' | tr ',' ';')"
-          echo "$name,$profile,$instance_path,$n,$K,$m_run,$candidate_k,$seed_run,$repro_mode,$instance_seed,$layout_id,$run_id,error,$elapsed,$rss_gb,,$err" >> "$csv"
+          echo "$name,$profile,$instance_path,seq,$commit_hash,\"$compiler\",\"$compiler_flags\",\"$host_gpu\",$n,$K,$capacity,$m_run,$cand_k_eff,$seed_run,$repro_mode,$instance_seed,$layout_id,$run_id,error,$elapsed,$rss_gb,,$validation,$rc,1,1,n/a,$runtime_s,$stag_iters,$improve_rel,$err" >> "$csv"
         fi
         echo "[seq] run_effettiva: elapsed_s=${elapsed:-n/a} mem_gb=${rss_gb:-n/a} status=$([ "$rc" -eq 0 ] && echo ok || echo error)"
         echo

@@ -564,6 +564,12 @@ static AcoStatus aco_vrp_run_with_config(int n, int K,
   int ws_ok = 0;
   if (shared_ok) {
     ws_ok = seq_workspace_init(&ws, K, n, shared.visited_words);
+    if (ws_ok && config && config->log_level > ACO_LOG_SILENT) {
+      fprintf(stderr,
+              "Sequential Solver starting... (N=%d, K=%d, M=%d, candidate_k=%d, "
+              "seed=%u)\n",
+              n, K, total_m, shared.candidate_k, config->seed);
+    }
   }
 
   if (!tau || !iter_best || !shared_ok || !ws_ok) {

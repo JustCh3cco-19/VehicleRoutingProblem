@@ -34,20 +34,23 @@ elif [ "$launcher_pref" = "auto" ]; then
 fi
 echo "[mpi] launcher=${launcher_kind}"
 
-header="name,profile,instance_path,n,K,m,candidate_k,solver_seed,reproducibility_mode,instance_seed,layout_id,run_id,status,elapsed_s,max_rss_gb,best_cost,error"
-header_v2="${header},mpi_ranks,omp_threads,batch_id"
-batch_id="${SOLVE_BATCH_ID:-$(date +%Y%m%d_%H%M%S)}"
+commit_hash="$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")"
+compiler="$(mpicc --version | head -n1 2>/dev/null || echo "mpicc")"
+compiler_flags="-Wall -Wextra -std=c11 -Iinclude -O3 -fopenmp -DUSE_MPI"
+cpu_model="$(lscpu | grep "Model name:" | sed 's/Model name:[[:space:]]*//' | xargs || hostname)"
+gpu_model="n/a"
+host_gpu="${cpu_model} / ${gpu_model}"
 
-# Append-only behavior: keep all prior runs and append new rows.
+header="name,profile,instance_path,backend,commit_hash,compiler,compiler_flags,host_gpu,n,K,capacity,m,candidate_k,solver_seed,reproducibility_mode,instance_seed,layout_id,run_id,status,elapsed_s,max_rss_gb,best_cost,validation,exit_status,mpi_ranks,omp_threads,cuda_arch,timeout,stagnation,min_improvement,error"
+
+# Append-only behavior with header alignment: keep all prior runs and append new rows.
 if [ ! -f "$csv" ] || [ ! -s "$csv" ]; then
-  echo "$header_v2" > "$csv"
+  echo "$header" > "$csv"
 else
   first_line="$(head -n1 "$csv" 2>/dev/null || true)"
-  if [ "$first_line" = "$header" ]; then
-    tmp_csv="$(mktemp)"
-    echo "$header_v2" > "$tmp_csv"
-    tail -n +2 "$csv" | awk 'NF > 0 { print $0 ",,,,,," }' >> "$tmp_csv"
-    mv "$tmp_csv" "$csv"
+  if [ "$first_line" != "$header" ]; then
+    mv "$csv" "${csv}.bak"
+    echo "$header" > "$csv"
   fi
 fi
 
@@ -126,13 +129,30 @@ tail -n +2 "$manifest" \
           fi
         fi
 
+        capacity="0"
+        if [ -f "$instance_path" ]; then
+          capacity="$(grep -i "^CAPACITY" "$instance_path" | awk -F: '{print $2}' | tr -d '[:space:]' || echo "0")"
+        fi
+
+        cand_k_eff="$(printf '%s\n' "$out" | sed -n 's/.*candidate_k=\([0-9]\+\).*/\1/p' | tail -n1)"
+        if [ -z "$cand_k_eff" ]; then
+          cand_k_eff="$candidate_k"
+        fi
+
+        validation="n/a"
+        if [ "$rc" -eq 0 ]; then
+          validation="valid"
+        elif printf '%s\n' "$out" | grep -Eq "invalid solution|invalid cost|invalid solution cost"; then
+          validation="invalid"
+        fi
+
         printf '%s\n' "$out" > "$sol_file"
         if [ "$rc" -eq 0 ]; then
           cost="$(printf '%s\n' "$out" | sed -n 's/^best cost: //p' | tail -n1)"
-          echo "$name,$profile,$instance_path,$n,$K,$m,$candidate_k,$seed_run,$repro_mode,$instance_seed,$layout_id,$run_id,ok,$elapsed,$rss_gb,$cost,,$mpi_ranks,$omp_threads,$batch_id" >> "$csv"
+          echo "$name,$profile,$instance_path,openmp_mpi,$commit_hash,\"$compiler\",\"$compiler_flags\",\"$host_gpu\",$n,$K,$capacity,$m,$cand_k_eff,$seed_run,$repro_mode,$instance_seed,$layout_id,$run_id,ok,$elapsed,$rss_gb,$cost,$validation,$rc,$mpi_ranks,$omp_threads,n/a,$runtime_s,$stag_iters,$improve_rel," >> "$csv"
         else
           err="$(printf '%s' "$out" | tr '\n' ' ' | tr ',' ';')"
-          echo "$name,$profile,$instance_path,$n,$K,$m,$candidate_k,$seed_run,$repro_mode,$instance_seed,$layout_id,$run_id,error,$elapsed,$rss_gb,,$err,$mpi_ranks,$omp_threads,$batch_id" >> "$csv"
+          echo "$name,$profile,$instance_path,openmp_mpi,$commit_hash,\"$compiler\",\"$compiler_flags\",\"$host_gpu\",$n,$K,$capacity,$m,$cand_k_eff,$seed_run,$repro_mode,$instance_seed,$layout_id,$run_id,error,$elapsed,$rss_gb,,$validation,$rc,$mpi_ranks,$omp_threads,n/a,$runtime_s,$stag_iters,$improve_rel,$err" >> "$csv"
         fi
         echo "[mpi] run_effettiva: elapsed_s=${elapsed:-n/a} mem_gb=${rss_gb:-n/a} status=$([ "$rc" -eq 0 ] && echo ok || echo error)"
         echo
