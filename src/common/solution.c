@@ -232,3 +232,42 @@ bool solution_validate(const Solution *s, int n, int K, char *err,
   set_err(err, err_len, "");
   return true;
 }
+
+bool solution_validate_cvrp(const Solution *s, int n, int K, const int *demands,
+                            int vehicle_capacity, char *err, size_t err_len) {
+  if (!solution_validate(s, n, K, err, err_len)) {
+    return false;
+  }
+  if (!demands) {
+    set_err(err, err_len, "demands are NULL");
+    return false;
+  }
+  if (vehicle_capacity <= 0) {
+    set_err(err, err_len, "vehicle capacity must be positive");
+    return false;
+  }
+  if (demands[0] != 0) {
+    set_err(err, err_len, "depot demand must be 0");
+    return false;
+  }
+
+  for (int i = 0; i < s->K; ++i) {
+    const Route *r = &s->routes[i];
+    int load = 0;
+    for (int t = 1; t + 1 < r->len; ++t) {
+      int node = r->nodes[t];
+      if (demands[node] < 0) {
+        set_err(err, err_len, "route contains customer with negative demand");
+        return false;
+      }
+      load += demands[node];
+      if (load > vehicle_capacity) {
+        set_err(err, err_len, "route exceeds vehicle capacity");
+        return false;
+      }
+    }
+  }
+
+  set_err(err, err_len, "");
+  return true;
+}

@@ -1,6 +1,7 @@
 #include "aco.h"
 
 #include "aco_config.h"
+#include "aco_internal.h"
 #include "matrix.h"
 #include "solution.h"
 
@@ -22,8 +23,9 @@
 #include <omp.h>
 #endif
 
-#define ACO_ALIGNMENT 64u
-#define ACO_MAX_CANDIDATES 64
+enum {
+  kAcoAlignment = 64,
+};
 
 
 /**
@@ -47,8 +49,8 @@ static size_t align_up_size(size_t value, size_t alignment) {
  * @return Function result.
  */
 static void *aligned_calloc_bytes(size_t bytes) {
-  size_t alloc_bytes = align_up_size(bytes, ACO_ALIGNMENT);
-  void *ptr = aligned_alloc(ACO_ALIGNMENT, alloc_bytes);
+  size_t alloc_bytes = align_up_size(bytes, kAcoAlignment);
+  void *ptr = aligned_alloc(kAcoAlignment, alloc_bytes);
   if (!ptr) {
     return NULL;
   }
@@ -133,7 +135,7 @@ static double fast_pow_nonneg(double base, double exponent) {
  */
 static int aligned_row_stride(int cols, size_t elem_size) {
   size_t row_bytes = (size_t)cols * elem_size;
-  size_t padded = align_up_size(row_bytes, ACO_ALIGNMENT);
+  size_t padded = align_up_size(row_bytes, kAcoAlignment);
   return (int)(padded / elem_size);
 }
 

@@ -1,46 +1,22 @@
 #ifndef INSTANCE_PARSER_H
 #define INSTANCE_PARSER_H
 
-/**
- * @brief Metadata extracted from a TSPLIB CVRP instance.
- */
 typedef struct {
+  int n;
   int vehicles;
   int capacity;
-} VrpInstanceMeta;
+  double *coords_x;
+  double *coords_y;
+  int *demands;
+} VrpInstance;
 
-/**
- * @brief Loads an EUC_2D TSPLIB instance into a full symmetric distance matrix.
- * @param path Input file path.
- * @param n_out Output number of customers.
- * @param c_out Output distance matrix.
- * @return 0 on success, non-zero on error.
- */
-int vrp_load_tsplib_euc2d_matrix(const char *path, int *n_out, double ***c_out);
-
-/**
- * @brief Loads an EUC_2D TSPLIB instance with additional metadata.
- * @param path Input file path.
- * @param n_out Output number of customers.
- * @param c_out Output distance matrix.
- * @param meta_out Output metadata (vehicles/capacity).
- * @return 0 on success, non-zero on error.
- */
-int vrp_load_tsplib_euc2d_matrix_ex(const char *path, int *n_out,
-                                    double ***c_out,
-                                    VrpInstanceMeta *meta_out);
-
-/**
- * @brief Loads an EUC_2D TSPLIB instance as coordinate arrays.
- * @param path Input file path.
- * @param n_out Output number of customers.
- * @param coords_x_out Output x coordinates.
- * @param coords_y_out Output y coordinates.
- * @param meta_out Output metadata (vehicles/capacity).
- * @return 0 on success, non-zero on error.
- */
-int vrp_load_tsplib_euc2d_coords(const char *path, int *n_out,
-                                 float **coords_x_out, float **coords_y_out,
-                                 VrpInstanceMeta *meta_out);
+void vrp_instance_init(VrpInstance *instance);
+void vrp_instance_free(VrpInstance *instance);
+int vrp_load_tsplib_instance(const char *path, VrpInstance *instance);
+int vrp_instance_create_euc2d_matrix(const VrpInstance *instance,
+                                     double ***c_out);
+int vrp_instance_create_float_coords(const VrpInstance *instance,
+                                     float **coords_x_out,
+                                     float **coords_y_out);
 
 #endif

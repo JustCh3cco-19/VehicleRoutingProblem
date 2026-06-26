@@ -22,9 +22,12 @@ extern "C" {
     if (err__ != cudaSuccess) {                                              \
       fprintf(stderr, "CUDA error at %s:%d: %s\n", __FILE__, __LINE__,       \
               cudaGetErrorString(err__));                                    \
-      return ACO_ERR_BACKEND;                                                \
+      status = ACO_ERR_BACKEND;                                              \
+      goto cleanup;                                                          \
     }                                                                        \
   } while (0)
+
+#define CHECK_CUDA_KERNEL() CHECK_CUDA(cudaGetLastError())
 
 /**
  * @brief Executes `wall_time_seconds`.
@@ -153,6 +156,37 @@ AcoStatus aco_vrp_cuda_with_capacity(int n, int K, int vehicle_capacity_customer
                                   double alpha, double beta, double rho,
                                   double tau0, double Q, unsigned int seed,
                                   Solution *best_solution, double *best_cost) {
+  AcoStatus status = ACO_OK;
+  float2 *h_coords = NULL;
+  CudaAntSummary *h_ant_summary = NULL;
+  int *h_routes = NULL;
+  int *h_route_lengths = NULL;
+  int *h_flat_routes = NULL;
+  int *h_flat_lengths = NULL;
+  float2 *d_coords = NULL;
+  uint8_t *d_tau = NULL;
+  int *d_candidate_idx = NULL;
+  float *d_eta_beta = NULL;
+  int *d_routes = NULL;
+  int *d_route_lengths = NULL;
+  uint64_t *d_visited_l1 = NULL;
+  uint64_t *d_visited_l2 = NULL;
+  unsigned int *d_rng_states = NULL;
+  CudaAntSummary *d_ant_summary = NULL;
+  CudaIterStats *d_iter_stats = NULL;
+  int *d_flat_routes = NULL;
+  int *d_flat_lengths = NULL;
+  int max_steps = 0;
+  double max_runtime_sec = 0.0;
+  int max_stagnation_epochs = 0;
+  double min_rel_improvement = 1e-3;
+  double progress_interval_sec = 0.0;
+  int iter = 0;
+  int iter_since_best = 0;
+  double start_time = 0.0;
+  double next_progress_time = 0.0;
+  double global_best = DBL_MAX;
+
   if (n <= 0 || K <= 0 || !coords_x || !coords_y || !best_solution ||
       !best_cost) {
     return ACO_ERR_INVALID_INPUT;
@@ -205,7 +239,7 @@ AcoStatus aco_vrp_cuda_with_capacity(int n, int K, int vehicle_capacity_customer
   uint8_t q_tau0 = (uint8_t)fmaxf((float)q_tau_min, fminf((float)q_tau_max, roundf((logf(params.tau0) - log_tau_min) / log_tau_step)));
 
 
-  float2 *h_coords = (float2 *)malloc((n + 1) * sizeof(float2));
+  h_coords = (float2 *)malloc((n + 1) * sizeof(float2));
   if (!h_coords) {
     return ACO_ERR_ALLOCATION;
   }
@@ -213,19 +247,6 @@ AcoStatus aco_vrp_cuda_with_capacity(int n, int K, int vehicle_capacity_customer
       h_coords[i].x = coords_x[i];
       h_coords[i].y = coords_y[i];
   }
-
-
-  float2 *d_coords = NULL;
-  uint8_t *d_tau = NULL;
-  int *d_candidate_idx = NULL;
-  float *d_eta_beta = NULL;
-  int *d_routes = NULL;
-  int *d_route_lengths = NULL;
-  uint64_t *d_visited_l1 = NULL;
-  uint64_t *d_visited_l2 = NULL;
-  unsigned int *d_rng_states = NULL;
-  CudaAntSummary *d_ant_summary = NULL;
-  CudaIterStats *d_iter_stats = NULL;
 
   size_t total_elements = (size_t)(n + 1) * (size_t)(n + 1);
   size_t tau_alloc_elements = (total_elements + 3) & ~3ull;
@@ -236,7 +257,7 @@ AcoStatus aco_vrp_cuda_with_capacity(int n, int K, int vehicle_capacity_customer
   CHECK_CUDA(cudaMalloc(&d_eta_beta, (n + 1) * cand_k * sizeof(float)));
 
 
-  int max_steps = params.route_max_len + 1;
+  max_steps = params.route_max_len + 1;
   CHECK_CUDA(cudaMalloc(&d_routes, max_steps * m * sizeof(int)));
   CHECK_CUDA(cudaMalloc(&d_route_lengths, m * K * sizeof(int)));
 
@@ -250,44 +271,36 @@ AcoStatus aco_vrp_cuda_with_capacity(int n, int K, int vehicle_capacity_customer
 
 
   launch_init_tau(d_tau, n, q_tau0);
+  CHECK_CUDA_KERNEL();
   CHECK_CUDA(cudaDeviceSynchronize());
   launch_build_candidate_lists(d_coords, d_candidate_idx, d_eta_beta, params);
+  CHECK_CUDA_KERNEL();
   CHECK_CUDA(cudaDeviceSynchronize());
 
 
-  CudaAntSummary *h_ant_summary = (CudaAntSummary *)malloc(m * sizeof(CudaAntSummary));
-  int *h_routes = (int *)malloc(max_steps * m * sizeof(int));
-  int *h_route_lengths = (int *)malloc(m * K * sizeof(int));
+  h_ant_summary = (CudaAntSummary *)malloc(m * sizeof(CudaAntSummary));
+  h_routes = (int *)malloc(max_steps * m * sizeof(int));
+  h_route_lengths = (int *)malloc(m * K * sizeof(int));
 
 
-  int *h_flat_routes = (int *)malloc(K * (n + 1) * sizeof(int));
-  int *h_flat_lengths = (int *)malloc(K * sizeof(int));
-  int *d_flat_routes = NULL;
-  int *d_flat_lengths = NULL;
+  h_flat_routes = (int *)malloc(K * (n + 1) * sizeof(int));
+  h_flat_lengths = (int *)malloc(K * sizeof(int));
   if (!h_ant_summary || !h_routes || !h_route_lengths || !h_flat_routes ||
       !h_flat_lengths) {
-    free(h_coords);
-    free(h_ant_summary);
-    free(h_routes);
-    free(h_route_lengths);
-    free(h_flat_routes);
-    free(h_flat_lengths);
-    return ACO_ERR_ALLOCATION;
+    status = ACO_ERR_ALLOCATION;
+    goto cleanup;
   }
   CHECK_CUDA(cudaMalloc(&d_flat_routes, K * (n + 1) * sizeof(int)));
   CHECK_CUDA(cudaMalloc(&d_flat_lengths, K * sizeof(int)));
 
-  double max_runtime_sec = config.timeout_seconds;
-  int max_stagnation_epochs = config.stagnation_epochs;
-  double min_rel_improvement = config.min_rel_improvement;
-  double progress_interval_sec = config.progress_interval_seconds;
+  max_runtime_sec = config.timeout_seconds;
+  max_stagnation_epochs = config.stagnation_epochs;
+  min_rel_improvement = config.min_rel_improvement;
+  progress_interval_sec = config.progress_interval_seconds;
 
-  int iter = 0;
-  int iter_since_best = 0;
-  double start_time = wall_time_seconds();
-  double next_progress_time =
+  start_time = wall_time_seconds();
+  next_progress_time =
       (progress_interval_sec > 0.0) ? start_time + progress_interval_sec : 0.0;
-  double global_best = DBL_MAX;
 
   printf("CUDA Solver starting... (N=%d, K=%d, M=%d)\n", n, K, m);
 
@@ -301,11 +314,13 @@ AcoStatus aco_vrp_cuda_with_capacity(int n, int K, int vehicle_capacity_customer
     }
 
     launch_reset_ant_state(d_routes, d_route_lengths, d_visited_l1, d_visited_l2, d_rng_states, d_ant_summary, params, seed + iter);
+    CHECK_CUDA_KERNEL();
     CHECK_CUDA(cudaDeviceSynchronize());
 
     CHECK_CUDA(cudaMemset(d_iter_stats, 0, sizeof(CudaIterStats)));
 
     launch_construct_solutions(d_coords, d_tau, d_candidate_idx, d_eta_beta, d_routes, d_route_lengths, d_visited_l1, d_visited_l2, d_rng_states, d_ant_summary, d_iter_stats, params);
+    CHECK_CUDA_KERNEL();
     CHECK_CUDA(cudaDeviceSynchronize());
 
     CHECK_CUDA(cudaMemcpy(h_ant_summary, d_ant_summary, m * sizeof(CudaAntSummary), cudaMemcpyDeviceToHost));
@@ -344,15 +359,18 @@ AcoStatus aco_vrp_cuda_with_capacity(int n, int K, int vehicle_capacity_customer
       }
 
       launch_evaporate_tau(d_tau, n, params.q_evap_delta, params.q_tau_min);
+      CHECK_CUDA_KERNEL();
       CHECK_CUDA(cudaDeviceSynchronize());
 
 
       float iter_deposit = (0.3f * params.Q) / best_iter_cost;
       launch_deposit_solution(d_tau, d_routes, d_route_lengths, iter_deposit, best_idx, params);
+      CHECK_CUDA_KERNEL();
 
 
       float global_deposit = (0.7f * params.Q) / (float)global_best;
       launch_deposit_flat_solution(d_tau, d_flat_routes, d_flat_lengths, global_deposit, params);
+      CHECK_CUDA_KERNEL();
 
       CHECK_CUDA(cudaDeviceSynchronize());
     } else {
@@ -380,7 +398,9 @@ AcoStatus aco_vrp_cuda_with_capacity(int n, int K, int vehicle_capacity_customer
     iter++;
   }
 
+  status = (*best_cost < DBL_MAX) ? ACO_OK : ACO_ERR_NO_SOLUTION;
 
+cleanup:
   cudaFree(d_coords);
   cudaFree(d_tau);
   cudaFree(d_candidate_idx);
@@ -402,5 +422,5 @@ AcoStatus aco_vrp_cuda_with_capacity(int n, int K, int vehicle_capacity_customer
   free(h_flat_routes);
   free(h_flat_lengths);
 
-  return (*best_cost < DBL_MAX) ? ACO_OK : ACO_ERR_NO_SOLUTION;
+  return status;
 }

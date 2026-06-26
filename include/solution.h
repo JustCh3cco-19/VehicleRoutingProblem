@@ -76,4 +76,7 @@ void route_append(Route *r, int node);
  */
 bool solution_validate(const Solution *s, int n, int K, char *err, size_t err_len);
 
+bool solution_validate_cvrp(const Solution *s, int n, int K, const int *demands,
+                            int vehicle_capacity, char *err, size_t err_len);
+
 #endif

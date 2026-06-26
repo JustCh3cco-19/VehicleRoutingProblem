@@ -68,6 +68,7 @@ void cli_print_solution_cost(double best_cost) {
 }
 
 int cli_validate_solution_or_report(const Solution *best, int n, int K,
+                                    const int *demands, int vehicle_capacity,
                                     double best_cost) {
   char err[160];
 
@@ -76,7 +77,11 @@ int cli_validate_solution_or_report(const Solution *best, int n, int K,
     return 0;
   }
 
-  if (!solution_validate(best, n, K, err, sizeof(err))) {
+  int valid = demands ? solution_validate_cvrp(best, n, K, demands,
+                                              vehicle_capacity, err,
+                                              sizeof(err))
+                      : solution_validate(best, n, K, err, sizeof(err));
+  if (!valid) {
     fprintf(stderr, "invalid solution: %s\n", err);
     return 0;
   }

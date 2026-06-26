@@ -1,4 +1,4 @@
-#include "aco.h"
+#include "aco_internal.h"
 
 #include <limits.h>
 #include <math.h>

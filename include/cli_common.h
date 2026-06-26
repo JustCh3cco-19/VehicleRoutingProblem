@@ -12,6 +12,7 @@ unsigned int cli_parse_uint_arg(const char *s, int *ok);
 void cli_print_solution_routes(const Solution *best, int K);
 void cli_print_solution_cost(double best_cost);
 int cli_validate_solution_or_report(const Solution *best, int n, int K,
+                                    const int *demands, int vehicle_capacity,
                                     double best_cost);
 
 #ifdef __cplusplus

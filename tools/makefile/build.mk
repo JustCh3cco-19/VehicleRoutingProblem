@@ -5,10 +5,10 @@ seq: $(BIN)
 src/main.o: src/main.c include/aco.h include/cli_common.h include/instance_parser.h include/matrix.h include/solution.h
 	$(CC) $(EXTRA_FLAGS) $(FLAGS) $(FORCE_OPT) $(PERF_FLAGS) -c $< -o $@
 
-$(SEQ_OBJ): $(SEQ_SRC) include/aco.h include/aco_config.h include/matrix.h include/solution.h
+$(SEQ_OBJ): $(SEQ_SRC) include/aco.h include/aco_config.h include/aco_internal.h include/matrix.h include/solution.h
 	$(CC) $(EXTRA_FLAGS) $(FLAGS) $(FORCE_OPT) $(PERF_FLAGS) -c $< -o $@
 
-$(ACO_SHARED_OBJ): $(ACO_SHARED_SRC) include/aco.h include/solution.h
+$(ACO_SHARED_OBJ): $(ACO_SHARED_SRC) include/aco.h include/aco_internal.h include/solution.h
 	$(CC) $(EXTRA_FLAGS) $(FLAGS) $(FORCE_OPT) $(PERF_FLAGS) -c $< -o $@
 
 $(ACO_CONFIG_OBJ): $(ACO_CONFIG_SRC) include/aco_config.h
@@ -31,7 +31,7 @@ $(BIN): $(OBJ)
 
 openmp_mpi: $(OPENMP_MPI_BIN)
 
-$(OPENMP_MPI_BIN): $(OPENMP_MPI_SRC) include/aco.h include/aco_config.h include/matrix.h include/solution.h
+$(OPENMP_MPI_BIN): $(OPENMP_MPI_SRC) include/aco.h include/aco_config.h include/instance_parser.h include/matrix.h include/solution.h
 	$(MPICC) $(EXTRA_FLAGS) $(FLAGS) $(FORCE_OPT) $(PERF_FLAGS) $(OMPFLAG) -DUSE_MPI $(OPENMP_MPI_SRC) $(LIBS) -o $@
 
 cuda: $(CUDA_BIN)

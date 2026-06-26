@@ -40,7 +40,8 @@ int main(int argc, char **argv) {
   unsigned int seed = 1234u;
   int use_instance_file = 0;
   const char *instance_path = NULL;
-  VrpInstanceMeta instance_meta = {0};
+  VrpInstance instance;
+  vrp_instance_init(&instance);
 
 #ifdef USE_MPI
   int mpi_rank = 0;
@@ -89,13 +90,15 @@ int main(int argc, char **argv) {
   double alpha = 1.0, beta = 2.0, rho = 0.5, tau0 = 1.0, Q = 1.0;
   double **c = NULL;
   if (use_instance_file) {
-    if (vrp_load_tsplib_euc2d_matrix_ex(instance_path, &n, &c, &instance_meta) != 0) {
+    if (vrp_load_tsplib_instance(instance_path, &instance) != 0 ||
+        vrp_instance_create_euc2d_matrix(&instance, &c) != 0) {
 #ifdef USE_MPI
       if (mpi_rank == 0)
 #endif
         fprintf(stderr, "failed to load instance: %s\n", instance_path);
       status = 1; goto cleanup_mpi;
     }
+    n = instance.n;
   } else {
     c = matrix_alloc(n);
     if (!c) { fprintf(stderr, "failed to allocate cost matrix\n"); status = 1; goto cleanup_mpi; }
@@ -108,11 +111,11 @@ int main(int argc, char **argv) {
   double best_cost = 0.0;
   AcoStatus solver_status;
   if (use_instance_file) {
-    if (instance_meta.vehicles > 0 && instance_meta.vehicles != K) {
-      fprintf(stderr, "instance VEHICLES mismatch: CLI K=%d, file VEHICLES=%d\n", K, instance_meta.vehicles);
+    if (instance.vehicles > 0 && instance.vehicles != K) {
+      fprintf(stderr, "instance VEHICLES mismatch: CLI K=%d, file VEHICLES=%d\n", K, instance.vehicles);
       status = 1; solution_free(best); matrix_free(c); goto cleanup_mpi;
     }
-    solver_status = aco_vrp_with_capacity(n, K, instance_meta.capacity, m, c,
+    solver_status = aco_vrp_with_capacity(n, K, instance.capacity, m, c,
                                           alpha, beta, rho, tau0, Q, seed,
                                           best, &best_cost);
   } else {
@@ -127,7 +130,9 @@ int main(int argc, char **argv) {
     if (solver_status != ACO_OK) {
       fprintf(stderr, "solver failed: %s\n", aco_status_string(solver_status));
       status = 1;
-    } else if (!cli_validate_solution_or_report(best, n, K, best_cost)) {
+    } else if (!cli_validate_solution_or_report(
+                   best, n, K, use_instance_file ? instance.demands : NULL,
+                   use_instance_file ? instance.capacity : 0, best_cost)) {
       status = 1;
     } else {
       cli_print_solution_routes(best, K);
@@ -137,8 +142,12 @@ int main(int argc, char **argv) {
 
   solution_free(best);
   matrix_free(c);
+  vrp_instance_free(&instance);
 
 cleanup_mpi:
+  if (status != 0) {
+    vrp_instance_free(&instance);
+  }
 #ifdef USE_MPI
   MPI_Finalize();
 #endif
