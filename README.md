@@ -14,7 +14,7 @@ Given a depot and `n` customers with unit demand, CVRP requires building `K` rou
 - satisfy vehicle capacity constraints,
 - minimize total travel cost.
 
-Instances are provided in `.vrp` (TSPLIB-like) format and generated/filtered in `instances/test_aligned`.
+Instances are provided in `.vrp` (TSPLIB-like) format and generated/filtered in `instances/generated_benchmark`.
 
 ## 2. Algorithmic Approach
 
@@ -25,8 +25,8 @@ Main architectural choices (aligned with internal technical docs):
 - **V3 excluded** from main runs: collaborative intra-ant parallelism introduces synchronization overhead that is not beneficial on general-purpose CPUs.
 
 Internal references:
-- [RoadmapOpenMP_MPI.md](docs/RoadmapOpenMP_MPI.md)
-- [v3_failure_analysis.md](docs/v3_failure_analysis.md)
+- [RoadmapOpenMP_MPI.md](docs/engineering/RoadmapOpenMP_MPI.md)
+- [v3_failure_analysis.md](docs/engineering/v3_failure_analysis.md)
 
 ## 3. Repository Structure
 
@@ -46,7 +46,11 @@ Operational tooling:
 - `tools/batch/` Slurm job scripts
 
 Technical documentation:
-- `docs/`
+- [architecture.md](docs/engineering/architecture.md)
+- [instance_generation.md](docs/usage/instance_generation.md)
+- [practical_experiment_campaign.md](docs/usage/practical_experiment_campaign.md)
+- [implementation_improvements.md](docs/engineering/implementation_improvements.md)
+- [structural_improvements.md](docs/engineering/structural_improvements.md)
 
 ## 4. Requirements
 
@@ -81,10 +85,13 @@ make generate_problems
 ```
 
 Main outputs:
-- `instances/test_aligned/*.vrp`
-- `instances/test_aligned/manifest.csv`
-- `instances/test_aligned/manifest_openmp_mpi.csv`
-- `instances/test_aligned/manifest_cuda.csv`
+- `instances/generated_benchmark/*.vrp`
+- `instances/generated_benchmark/manifest.csv`
+- `instances/generated_benchmark/manifest_openmp_mpi.csv`
+- `instances/generated_benchmark/manifest_cuda.csv`
+
+Detailed generation guide:
+- [instance_generation.md](docs/usage/instance_generation.md)
 
 ## 7. Solver Execution
 
@@ -101,7 +108,7 @@ Useful variables (passed via `--make-args` in batch jobs):
 - `SOLVE_*_REPEATS`
 - `SOLVE_*_RUNTIME_S`
 - `SOLVE_*_STAGNATION_EPOCHS`
-- `SOLVE_*_MIN_REL_IMPROVEMENT`
+- `SOLVE_*_MIN_REL_IMPROVEMENT` (percentuale: `0.1` = 0.1%, `10` = 10%)
 
 ## 8. Experiments (Strong/Weak/Quality)
 
@@ -117,40 +124,19 @@ make exp_weak_hybrid
 ```
 
 Practical campaign pipeline:
-- details: [practical_experiment_campaign.md](docs/practical_experiment_campaign.md)
-- aggregated data: `merged_by_run_backend/*.csv`
-- summary report: [REPORT.md](merged_by_run_backend/REPORT.md)
+- details: [practical_experiment_campaign.md](docs/usage/practical_experiment_campaign.md)
+- generated data: `results/practical_campaign/<tag>/...`
+- generated summaries: produced by `tools/python/summarize_practical_experiments.py`
 
-## 9. Results Summary (Current Campaign)
+## 9. Results And Reports
 
-Source: [merged_by_run_backend/REPORT.md](merged_by_run_backend/REPORT.md)
+Generated benchmark outputs should go under `results/`, which is ignored by git
+except for [results/README.md](results/README.md).
 
-Coverage (`status=ok` rows):
-- `seq_performance`: 7
-- `cuda_performance`: 10
-- `openmp_strong`: 14
-- `mpi_strong`: 12
-- `hybrid_strong`: 13
-- `openmp_weak`: 6
-- `mpi_weak`: 6
-- `hybrid_weak`: 3
-- `seq_quality`: 11
-- `mpi_quality`: 16
-- `cuda_quality`: 30
+Versioned reports live under:
+- [docs/reports/](docs/reports/)
 
-Key findings:
-- **OpenMP strong:** best average tradeoff at `4` threads (with variation at largest size).
-- **MPI strong:** best average configuration at `2` ranks.
-- **Hybrid strong:** best average configuration `4x4` (ranks x threads) on available data.
-- **CUDA vs SEQ:** CUDA is faster on all overlapping sizes, observed speedup ~`2.87x`–`111.21x`.
-
-Generated plots:
-- `merged_by_run_backend/plots/strong_*`
-- `merged_by_run_backend/plots/weak_*`
-- `merged_by_run_backend/plots/seq_vs_cuda_elapsed.png`
-- `merged_by_run_backend/plots/quality_*`
-
-## 10. Report/Plot Reproduction
+## 10. Plot Reproduction
 
 Regenerate plots from aggregated CSV files:
 
@@ -158,9 +144,7 @@ Regenerate plots from aggregated CSV files:
 python3 tools/python/plot_merged_by_run_backend.py
 ```
 
-Output:
-- `merged_by_run_backend/plots/*.png`
-- `merged_by_run_backend/plots/README.md`
+Typical generated output should be stored under `results/`.
 
 ## 11. Methodological Notes
 

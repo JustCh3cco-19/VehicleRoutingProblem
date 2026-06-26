@@ -3,7 +3,7 @@
 # Hierarchical Bitmask Experiment
 BIN_BASELINE="./prefetch.out"
 BIN_H_MASK="./hierarchical.out"
-INSTANCE="instances/test_aligned/n16000_k16_s19005.vrp"
+INSTANCE="instances/generated_benchmark/n16000_k16_s19005.vrp"
 K=16
 M=1536
 SEED=1234

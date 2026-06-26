@@ -30,7 +30,7 @@ exp_strong_openmp_n8000_m256:
 	for t in $$threads_list; do \
 		echo "[exp_strong_openmp_n8000_m256] mpi_ranks=1 omp_threads=$$t n=8000 m=256"; \
 		$(MAKE) solve_mpi \
-			SOLVE_MANIFEST_MPI="instances/test_aligned/manifest_openmp_mpi_n8000_m256.csv" \
+			SOLVE_MANIFEST_MPI="instances/generated_benchmark/manifest_openmp_mpi_n8000_m256.csv" \
 			SOLVE_CSV_DIR="$(RESULTS_ROOT)/solve_manifest/csv/exp_strong_openmp_n8000_m256" \
 			SOLVE_SOLUTIONS_DIR="$(RESULTS_ROOT)/solve_manifest/solutions/exp_strong_openmp_n8000_m256" \
 			SOLVE_BATCH_ID="strong_openmp_n8000_m256_t$$t" \
@@ -271,12 +271,17 @@ exp_cuda_all: exp_cuda_scaling_input exp_cuda_scaling_ants exp_seq_for_cuda
 	@echo "  $(RESULTS_ROOT)/solve_manifest/csv/exp_cuda_scaling_ants"
 	@echo "  $(RESULTS_ROOT)/solve_manifest/csv/exp_cuda_vs_seq"
 
+run_scaling_tests: cuda
+	@echo "[run_scaling_tests] CUDA scaling/profiling manuale"
+	@echo "[run_scaling_tests] output: $(RESULTS_ROOT)/scaling_tests"
+	@RESULTS_ROOT="$(RESULTS_ROOT)" tools/bash/run_scaling_tests.sh
+
 # Practical campaign entry-points (batch-friendly)
 exp_practical_cpu:
 	@tag="$${PRACTICAL_TAG:-$$(date +%Y%m%d_%H%M%S)}"; \
 	root="$(RESULTS_ROOT)/practical_campaign/$${tag}/cpu"; \
 	echo "[exp_practical_cpu] root=$$root"; \
-	$(PYTHON_BIN) scripts/run_practical_experiments.py \
+	$(PYTHON_BIN) tools/python/run_practical_experiments.py \
 		--launcher srun \
 		--skip-cuda \
 		--results-root "$$root" \
@@ -287,7 +292,7 @@ exp_practical_gpu:
 	@tag="$${PRACTICAL_TAG:-$$(date +%Y%m%d_%H%M%S)}"; \
 	root="$(RESULTS_ROOT)/practical_campaign/$${tag}/gpu"; \
 	echo "[exp_practical_gpu] root=$$root"; \
-	$(PYTHON_BIN) scripts/run_practical_experiments.py \
+	$(PYTHON_BIN) tools/python/run_practical_experiments.py \
 		--launcher srun \
 		--only-cuda-sections \
 		--openmp-threads 32 \

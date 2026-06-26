@@ -10,12 +10,12 @@ seq_m="${SOLVE_SEQ_M:-0}"
 repeats="${SOLVE_SEQ_REPEATS:-1}"
 runtime_s="${SOLVE_SEQ_RUNTIME_EFFECTIVE:-0}"
 stag_iters="${SOLVE_SEQ_STAGNATION_EPOCHS:-0}"
-improve_rel_pct="${SOLVE_SEQ_MIN_REL_IMPROVEMENT:-0.001}"
+improve_rel_pct="${SOLVE_SEQ_MIN_REL_IMPROVEMENT:-0.1}"
 
 if [ "$repeats" -lt 1 ]; then
   repeats=1
 fi
-improve_rel="$(awk "BEGIN { printf \"%.12g\", (${improve_rel_pct}) / 100.0 }")"
+improve_rel="$improve_rel_pct"
 
 header="name,profile,instance_path,n,K,m,solver_seed,instance_seed,layout_id,run_id,status,elapsed_s,max_rss_gb,best_cost,error"
 

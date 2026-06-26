@@ -36,6 +36,25 @@ static double wall_time_seconds(void) {
 }
 
 /**
+ * @brief Parses a percentage threshold into a relative fraction.
+ * @param s Input percentage string, e.g. "10" means 10%.
+ * @param default_fraction Fallback relative fraction.
+ * @return Relative fraction used internally, e.g. 0.10 for 10%.
+ */
+static double parse_min_rel_improvement_percent(const char *s,
+                                                double default_fraction) {
+  if (!s || !*s) {
+    return default_fraction;
+  }
+
+  double percent = atof(s);
+  if (percent <= 0.0) {
+    return default_fraction;
+  }
+  return percent / 100.0;
+}
+
+/**
  * @brief Executes `load_timer_directives`.
  * @param max_runtime_sec Function parameter.
  * @param max_stagnation_epochs Function parameter.
@@ -51,7 +70,7 @@ static void load_timer_directives(double *max_runtime_sec,
   *max_runtime_sec = (s_timeout && *s_timeout) ? atof(s_timeout) : 0.0;
   *max_stagnation_epochs =
       (s_stagnation && *s_stagnation) ? atoi(s_stagnation) : 0;
-  *min_rel_improvement = (s_rel && *s_rel) ? atof(s_rel) : 1e-3;
+  *min_rel_improvement = parse_min_rel_improvement_percent(s_rel, 1e-3);
 
   if (*max_stagnation_epochs < 0) {
     *max_stagnation_epochs = 0;

@@ -65,7 +65,9 @@ dkms.conf
 
 report/
 
-results/
+/results/*
+!/results/
+!/results/README.md
 
 __pycache__/
 

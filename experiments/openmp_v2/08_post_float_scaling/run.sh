@@ -2,7 +2,7 @@
 
 # Post-Float Strong Scaling Experiment
 BIN="./aco_vrp_v2_openmp_mpi.out"
-INSTANCE="instances/test_aligned/n16000_k16_s19005.vrp"
+INSTANCE="instances/generated_benchmark/n16000_k16_s19005.vrp"
 K=16
 M=1536 # 64 ants/core
 SEED=1234

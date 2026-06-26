@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Configuration
-INSTANCE="instances/test_aligned/n8000_k8_s19004.vrp"
+INSTANCE="instances/generated_benchmark/n8000_k8_s19004.vrp"
 BIN="./aco_vrp_v2_openmp_mpi.out"
 K=8
 M=768

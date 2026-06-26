@@ -82,8 +82,8 @@ def read_manifest(path: Path):
 
 def main():
     ap = argparse.ArgumentParser(description="Plot memory growth by data structure (seq/openmp).")
-    ap.add_argument("--manifest-seq", default="instances/test_aligned/manifest.csv")
-    ap.add_argument("--manifest-openmp", default="instances/test_aligned/manifest_openmp_mpi.csv")
+    ap.add_argument("--manifest-seq", default="instances/generated_benchmark/manifest.csv")
+    ap.add_argument("--manifest-openmp", default="instances/generated_benchmark/manifest_openmp_mpi.csv")
     ap.add_argument("--openmp-threads", type=int, default=32)
     ap.add_argument("--out-csv", default="results/analysis/memory_structures_seq_openmp.csv")
     ap.add_argument("--out-png", default="results/analysis/memory_structures_seq_openmp_stacked.png")

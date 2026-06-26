@@ -23,7 +23,7 @@ def main() -> int:
     p.add_argument("--repeats", type=int, default=3)
     p.add_argument("--warmups", type=int, default=1)
     p.add_argument("--timeout-s", type=int, default=600)
-    p.add_argument("--output-dir", default="reports")
+    p.add_argument("--output-dir", default="results/benchmark_pipeline")
     p.add_argument("--n", type=int, default=100)
     p.add_argument("--k", type=int, default=8)
     p.add_argument("--m", type=int, default=256)
@@ -41,7 +41,7 @@ def main() -> int:
 
     bench_cmd = [
         sys.executable,
-        "scripts/benchmark_scaling.py",
+        "tools/python/benchmark_scaling.py",
         "--repeats",
         str(args.repeats),
         "--warmups",
@@ -84,7 +84,7 @@ def main() -> int:
     run(
         [
             sys.executable,
-            "scripts/plot_scaling_results.py",
+            "tools/python/plot_scaling_results.py",
             "--summary",
             f"{args.output_dir}/scaling_summary.csv",
             "--raw",

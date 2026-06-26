@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Configuration
-INSTANCE="instances/test_aligned/n2000_k8_s19002.vrp"
+INSTANCE="instances/generated_benchmark/n2000_k8_s19002.vrp"
 K=8
 M=768
 SEED=1234
@@ -25,7 +25,7 @@ echo "----------------------------------------------------"
 
 # Paths relative to project root
 BIN="./aco_vrp_v2_openmp_mpi.out"
-INSTANCE="instances/test_aligned/n2000_k8_s19002.vrp"
+INSTANCE="instances/generated_benchmark/n2000_k8_s19002.vrp"
 
 for sched in "${STRATEGIES[@]}"; do
     export OMP_SCHEDULE="$sched"

@@ -10,12 +10,12 @@ senza modificare le implementazioni dei solver (`seq`, `openmp-mpi`, `cuda`), ma
 
 ## Perché questa baseline
 
-- `docs/RoadmapOpenMP_MPI.md`: conferma che la baseline da usare è la pipeline V2 con solver MPI+OpenMP e sincronizzazione sparsa.
-- `docs/v3_failure_analysis.md`: conferma che non conviene introdurre varianti collaborative V3 per gli esperimenti principali.
+- `docs/engineering/RoadmapOpenMP_MPI.md`: conferma che la baseline da usare è la pipeline V2 con solver MPI+OpenMP e sincronizzazione sparsa.
+- `docs/engineering/v3_failure_analysis.md`: conferma che non conviene introdurre varianti collaborative V3 per gli esperimenti principali.
 
 ## Cosa esegue
 
-Script: `scripts/run_practical_experiments.py`
+Script: `tools/python/run_practical_experiments.py`
 
 1. Baseline sequenziale (`solve_seq`)
 2. Strong scaling OpenMP: `1,2,4,8,16,32` thread
@@ -30,7 +30,7 @@ Output: directory dedicata `results/practical_campaign/<timestamp>/...`
 ## Esecuzione rapida
 
 ```bash
-python3 scripts/run_practical_experiments.py
+python3 tools/python/run_practical_experiments.py
 python3 tools/python/summarize_practical_experiments.py --root results/practical_campaign/<timestamp>
 ```
 
@@ -63,7 +63,7 @@ Lo script sottomette automaticamente:
 ## Esempio allineato ai tuoi vincoli
 
 ```bash
-python3 scripts/run_practical_experiments.py \
+python3 tools/python/run_practical_experiments.py \
   --launcher mpirun \
   --strong-n 16000 \
   --weak-base-n 2000 \

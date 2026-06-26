@@ -121,7 +121,7 @@ int main(int argc, char **argv) {
 
     if (argc < 4 || argc > 5) {
         fprintf(stderr, "usage: %s <instance.vrp> <K> <m> [seed]\n", argv[0]);
-        fprintf(stderr, "example: %s instances/test_aligned/n500_k8_s19000.vrp 8 0 1234\n", argv[0]);
+        fprintf(stderr, "example: %s instances/generated_benchmark/n500_k8_s19000.vrp 8 0 1234\n", argv[0]);
         return 1;
     }
 
