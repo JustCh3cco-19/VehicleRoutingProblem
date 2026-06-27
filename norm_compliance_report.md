@@ -57,8 +57,8 @@ Several previously listed violations have already been addressed:
 1. Re-scan `src/seq`, `src/openmp-mpi`, and `src/common` for functions over 25
    lines. Current core C hits include:
    * `src/common/instance_parser.c`: parser helpers require final verification
-   * `src/seq`: `init_ctx`, `run_epoch`, `aco_vrp_run_with_config`,
-     `build_vehicle_route`, `fill_remaining`
+   * `src/seq`: primary runner/epoch/context/tour functions have been split
+     and no longer appear in the >25-line scan
    * `src/openmp-mpi`: `par_solver_init`, `par_solver_scores`,
      `par_solver_reduce_best`, `par_build_vehicle_route`,
      `par_get_l3_cache_size`, `par_choose_candidate_count`

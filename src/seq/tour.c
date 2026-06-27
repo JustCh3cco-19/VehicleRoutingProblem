@@ -14,11 +14,15 @@ struct s_tour_ctx
 	double				**c;
 };
 
+static bool	can_extend_route(struct s_tour_ctx *ctx, int vehicle, int fut_cap);
+static bool	append_selected_customer(struct s_tour_ctx *ctx, int vehicle,
+		int *current);
+static bool	fill_route_remainder(struct s_tour_ctx *ctx, int v, t_route *r);
+
 static bool	build_vehicle_route(struct s_tour_ctx *ctx, int vehicle)
 {
 	t_route	*r;
 	int		current;
-	int		next;
 	int		fut_cap;
 
 	r = &ctx->ws->sol->routes[vehicle];
@@ -26,30 +30,56 @@ static bool	build_vehicle_route(struct s_tour_ctx *ctx, int vehicle)
 		return (false);
 	current = 0;
 	fut_cap = (ctx->k - vehicle - 1) * ctx->cap;
-	while (ctx->remaining > 0 && ctx->remaining > fut_cap
-		&& ctx->ws->route_loads[vehicle] < ctx->cap)
+	while (can_extend_route(ctx, vehicle, fut_cap))
 	{
-		next = select_next_customer(ctx->shared, current, ctx->ws->visited,
-				ctx->c, &ctx->ws->rng_state);
-		if (next <= 0)
+		if (!append_selected_customer(ctx, vehicle, &current))
 			break ;
-		if (!route_append(r, next))
-			return (false);
-		visited_set(ctx->ws->visited, next);
-		ctx->ws->route_loads[vehicle]++;
-		ctx->remaining--;
-		current = next;
 	}
 	if (!route_append(r, 0))
 		return (false);
 	return (true);
 }
 
+static bool	can_extend_route(struct s_tour_ctx *ctx, int vehicle, int fut_cap)
+{
+	if (ctx->remaining <= 0)
+		return (false);
+	if (ctx->remaining <= fut_cap)
+		return (false);
+	return (ctx->ws->route_loads[vehicle] < ctx->cap);
+}
+
+static bool	append_customer(struct s_tour_ctx *ctx, int vehicle, t_route *r,
+		int next)
+{
+	if (!route_append(r, next))
+		return (false);
+	visited_set(ctx->ws->visited, next);
+	ctx->ws->route_loads[vehicle]++;
+	ctx->remaining--;
+	return (true);
+}
+
+static bool	append_selected_customer(struct s_tour_ctx *ctx, int vehicle,
+		int *current)
+{
+	t_route	*r;
+	int		next;
+
+	r = &ctx->ws->sol->routes[vehicle];
+	next = select_next_customer(ctx->shared, *current, ctx->ws->visited,
+			ctx->c, &ctx->ws->rng_state);
+	if (next <= 0)
+		return (false);
+	if (!append_customer(ctx, vehicle, r, next))
+		return (false);
+	*current = next;
+	return (true);
+}
+
 static bool	fill_remaining(struct s_tour_ctx *ctx)
 {
 	int		v;
-	int		current;
-	int		next;
 	t_route	*r;
 
 	v = ctx->k - 1;
@@ -58,24 +88,36 @@ static bool	fill_remaining(struct s_tour_ctx *ctx)
 		r = &ctx->ws->sol->routes[v];
 		if (r->len > 0 && r->nodes[r->len - 1] == 0)
 			r->len--;
-		while (ctx->remaining > 0 && ctx->ws->route_loads[v] < ctx->cap)
-		{
-			current = 0;
-			if (r->len > 0)
-				current = r->nodes[r->len - 1];
-			next = find_nearest_unvisited(ctx->shared, current,
-					ctx->ws->visited, ctx->c);
-			if (next <= 0)
-				break ;
-			if (!route_append(r, next))
-				return (false);
-			visited_set(ctx->ws->visited, next);
-			ctx->ws->route_loads[v]++;
-			ctx->remaining--;
-		}
+		if (!fill_route_remainder(ctx, v, r))
+			return (false);
 		if (!route_append(r, 0))
 			return (false);
 		v--;
+	}
+	return (true);
+}
+
+static int	last_route_node(t_route *r)
+{
+	if (r->len > 0)
+		return (r->nodes[r->len - 1]);
+	return (0);
+}
+
+static bool	fill_route_remainder(struct s_tour_ctx *ctx, int v, t_route *r)
+{
+	int	current;
+	int	next;
+
+	while (ctx->remaining > 0 && ctx->ws->route_loads[v] < ctx->cap)
+	{
+		current = last_route_node(r);
+		next = find_nearest_unvisited(ctx->shared, current,
+				ctx->ws->visited, ctx->c);
+		if (next <= 0)
+			break ;
+		if (!append_customer(ctx, v, r, next))
+			return (false);
 	}
 	return (true);
 }

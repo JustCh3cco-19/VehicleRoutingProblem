@@ -33,7 +33,7 @@ int	allocate_ctx(t_seq_ctx *ctx)
 	return (1);
 }
 
-void	init_ctx(t_seq_ctx *ctx)
+static void	init_tau_matrix(t_seq_ctx *ctx)
 {
 	int	i;
 	int	j;
@@ -52,8 +52,10 @@ void	init_ctx(t_seq_ctx *ctx)
 		}
 		i++;
 	}
-	seq_shared_build_candidates(&ctx->shared, ctx->c, ctx->beta);
-	seq_shared_update_scores(&ctx->shared, ctx->tau, ctx->alpha);
+}
+
+static void	init_runtime_state(t_seq_ctx *ctx)
+{
 	solution_reset(ctx->best_sol);
 	*ctx->best_cost = DBL_MAX;
 	ctx->stagnation_iters = 0;
@@ -61,6 +63,14 @@ void	init_ctx(t_seq_ctx *ctx)
 	ctx->tau_max = ctx->tau0;
 	ctx->tau_min = ctx->tau0 * 0.05;
 	ctx->start_wall = seq_wall_time();
+}
+
+void	init_ctx(t_seq_ctx *ctx)
+{
+	init_tau_matrix(ctx);
+	seq_shared_build_candidates(&ctx->shared, ctx->c, ctx->beta);
+	seq_shared_update_scores(&ctx->shared, ctx->tau, ctx->alpha);
+	init_runtime_state(ctx);
 }
 
 void	cleanup_ctx(t_seq_ctx *ctx)
