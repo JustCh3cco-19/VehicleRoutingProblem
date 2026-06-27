@@ -16,58 +16,19 @@ extern "C" {
 # include <string.h>
 # include <time.h>
 
-# define CHECK_CUDA(call)                                                     \
-  do {                                                                       \
-    cudaError_t err__ = (call);                                              \
-    if (err__ != cudaSuccess) {                                              \
-      fprintf(stderr, "CUDA error at %s:%d: %s\n", __FILE__, __LINE__,       \
-              cudaGetErrorString(err__));                                    \
-      status = SOLVER_ERR_BACKEND;                                           \
-      goto cleanup;                                                          \
-    }                                                                        \
-  } while (0)
+# define CHECK_CUDA(call) if (!cuda_check((call), &status)) goto cleanup
 
 # define CHECK_CUDA_KERNEL() CHECK_CUDA(cudaGetLastError())
 
-struct s_cuda_solver_ctx
+
+static int	cuda_check(cudaError_t err, t_status *status)
 {
-	t_solver_params		*params;
-	t_cuda_coords		coords;
-	t_solution			*best_sol;
-	double				*best_cost;
-	t_config			config;
-	t_cuda_params		cuda_params;
-	int					m;
-	int					cand_k;
-	uint8_t				q_tau0;
-	float2				*h_coords;
-	t_cuda_ant_summary	*h_ant_summary;
-	int					*h_routes;
-	int					*h_route_lengths;
-	int					*h_flat_routes;
-	int					*h_flat_lengths;
-	float2				*d_coords;
-	uint8_t				*d_tau;
-	int					*d_candidate_idx;
-	float				*d_eta_beta;
-	t_cuda_ant_state	ants;
-	t_cuda_iter_stats	*d_iter_stats;
-	t_cuda_flat_routes	flat;
-	int					max_steps;
-	double				max_runtime;
-	int					max_stagnation;
-	double				min_rel_imp;
-	double				progress_int;
-	int					iter;
-	t_cuda_iter_stats	accum_stats;
-	int					iter_since_best;
-	double				start_time;
-	double				next_progress;
-	double				global_best;
-	size_t				total_elements;
-	size_t				tau_elements;
-};
-typedef struct s_cuda_solver_ctx	t_cuda_solver_ctx;
+	if (err == cudaSuccess)
+		return (1);
+	fprintf(stderr, "CUDA error: %s\n", cudaGetErrorString(err));
+	*status = SOLVER_ERR_BACKEND;
+	return (0);
+}
 
 static double	wall_time_seconds(void)
 {
@@ -121,8 +82,7 @@ static int	select_iter_best_host(const t_cuda_ant_summary *summary, int m,
 	return (found);
 }
 
-static int	copy_ant_to_solution(const int *routes, const int *route_lengths,
-				int k, int m, int ant_idx,
+static int	copy_ant_to_solution(t_cuda_solver_ctx *ctx, int ant_idx,
 				t_solution *dst)
 {
 	int		v;
@@ -134,16 +94,16 @@ static int	copy_ant_to_solution(const int *routes, const int *route_lengths,
 	solution_reset(dst);
 	global_step = 0;
 	v = 0;
-	for (; v < k; ++v)
+	for (; v < ctx->params->k; ++v)
 	{
-		len = route_lengths[ant_idx * k + v];
+		len = ctx->h_route_lengths[ant_idx * ctx->params->k + v];
 		r = &dst->routes[v];
 		if (len < 2 || len > r->cap)
 			return (0);
 		r->len = len;
 		t = 0;
 		for (; t < len; ++t)
-			r->nodes[t] = routes[(global_step + t) * m + ant_idx];
+			r->nodes[t] = ctx->h_routes[(global_step + t) * ctx->m + ant_idx];
 		global_step += len - 1;
 	}
 	return (1);
@@ -200,8 +160,10 @@ static t_status	cuda_init_params(t_cuda_solver_ctx *ctx)
 	init_cuda_params_basic(ctx);
 	init_tau_constants(ctx);
 	ctx->cuda_params.visited_l1_words = (ctx->params->n + 64) / 64;
-	ctx->cuda_params.visited_l2_words = (ctx->cuda_params.visited_l1_words + 63) / 64;
-	ctx->cuda_params.visited_row_stride = ((ctx->cuda_params.visited_l1_words * 8 + 127) / 128) * 128;
+	ctx->cuda_params.visited_l2_words =
+		(ctx->cuda_params.visited_l1_words + 63) / 64;
+	ctx->cuda_params.visited_row_stride =
+		((ctx->cuda_params.visited_l1_words * 8 + 127) / 128) * 128;
 	ctx->cuda_params.depot_close_weight = 2.0f;
 	return (SOLVER_OK);
 }
@@ -219,13 +181,16 @@ static t_status	cuda_alloc_host(t_cuda_solver_ctx *ctx)
 		ctx->h_coords[i].x = ctx->coords.x[i];
 		ctx->h_coords[i].y = ctx->coords.y[i];
 	}
-	ctx->total_elements = (size_t)(ctx->params->n + 1) * (size_t)(ctx->params->n + 1);
+	ctx->total_elements = (size_t)(ctx->params->n + 1)
+		* (size_t)(ctx->params->n + 1);
 	ctx->tau_elements = (ctx->total_elements + 3) & ~3ull;
-	ctx->h_ant_summary = (t_cuda_ant_summary *)malloc(ctx->m * sizeof(t_cuda_ant_summary));
+	ctx->h_ant_summary = (t_cuda_ant_summary *)malloc(ctx->m
+			* sizeof(t_cuda_ant_summary));
 	ctx->max_steps = ctx->cuda_params.route_max_len + 1;
 	ctx->h_routes = (int *)malloc(ctx->max_steps * ctx->m * sizeof(int));
 	ctx->h_route_lengths = (int *)malloc(ctx->m * ctx->params->k * sizeof(int));
-	ctx->h_flat_routes = (int *)malloc(ctx->params->k * (ctx->params->n + 1) * sizeof(int));
+	ctx->h_flat_routes = (int *)malloc(ctx->params->k * (ctx->params->n + 1)
+			* sizeof(int));
 	ctx->h_flat_lengths = (int *)malloc(ctx->params->k * sizeof(int));
 	if (!ctx->h_ant_summary || !ctx->h_routes || !ctx->h_route_lengths
 		|| !ctx->h_flat_routes || !ctx->h_flat_lengths)
@@ -233,24 +198,50 @@ static t_status	cuda_alloc_host(t_cuda_solver_ctx *ctx)
 	return (SOLVER_OK);
 }
 
+static t_status	cuda_alloc_device_ants(t_cuda_solver_ctx *ctx)
+{
+	t_status	status;
+
+	status = SOLVER_OK;
+	CHECK_CUDA(cudaMalloc(&ctx->ants.routes,
+			ctx->max_steps * ctx->m * sizeof(int)));
+	CHECK_CUDA(cudaMalloc(&ctx->ants.route_lengths,
+			ctx->m * ctx->params->k * sizeof(int)));
+	CHECK_CUDA(cudaMalloc(&ctx->ants.visited_l1,
+			ctx->m * ctx->cuda_params.visited_row_stride));
+	CHECK_CUDA(cudaMalloc(&ctx->ants.visited_l2,
+			ctx->m * ctx->cuda_params.visited_l2_words * sizeof(uint64_t)));
+	CHECK_CUDA(cudaMalloc(&ctx->ants.rng_states,
+			ctx->m * sizeof(unsigned int)));
+	CHECK_CUDA(cudaMalloc(&ctx->ants.ant_summary,
+			ctx->m * sizeof(t_cuda_ant_summary)));
+	return (SOLVER_OK);
+cleanup:
+	return (status);
+}
+
 static t_status	cuda_alloc_device(t_cuda_solver_ctx *ctx)
 {
 	t_status	status;
 
 	status = SOLVER_OK;
-	CHECK_CUDA(cudaMalloc(&ctx->d_coords, (ctx->params->n + 1) * sizeof(float2)));
-	CHECK_CUDA(cudaMalloc(&ctx->d_tau, ctx->tau_elements * sizeof(uint8_t)));
-	CHECK_CUDA(cudaMalloc(&ctx->d_candidate_idx, (ctx->params->n + 1) * ctx->cand_k * sizeof(int)));
-	CHECK_CUDA(cudaMalloc(&ctx->d_eta_beta, (ctx->params->n + 1) * ctx->cand_k * sizeof(float)));
-	CHECK_CUDA(cudaMalloc(&ctx->ants.routes, ctx->max_steps * ctx->m * sizeof(int)));
-	CHECK_CUDA(cudaMalloc(&ctx->ants.route_lengths, ctx->m * ctx->params->k * sizeof(int)));
-	CHECK_CUDA(cudaMalloc(&ctx->ants.visited_l1, ctx->m * ctx->cuda_params.visited_row_stride));
-	CHECK_CUDA(cudaMalloc(&ctx->ants.visited_l2, ctx->m * ctx->cuda_params.visited_l2_words * sizeof(uint64_t)));
-	CHECK_CUDA(cudaMalloc(&ctx->ants.rng_states, ctx->m * sizeof(unsigned int)));
-	CHECK_CUDA(cudaMalloc(&ctx->ants.ant_summary, ctx->m * sizeof(t_cuda_ant_summary)));
-	CHECK_CUDA(cudaMalloc(&ctx->d_iter_stats, sizeof(t_cuda_iter_stats)));
-	CHECK_CUDA(cudaMalloc(&ctx->flat.routes, ctx->params->k * (ctx->params->n + 1) * sizeof(int)));
-	CHECK_CUDA(cudaMalloc(&ctx->flat.lengths, ctx->params->k * sizeof(int)));
+	CHECK_CUDA(cudaMalloc(&ctx->d_coords,
+			(ctx->params->n + 1) * sizeof(float2)));
+	CHECK_CUDA(cudaMalloc(&ctx->d_tau,
+			ctx->tau_elements * sizeof(uint8_t)));
+	CHECK_CUDA(cudaMalloc(&ctx->d_candidate_idx,
+			(ctx->params->n + 1) * ctx->cand_k * sizeof(int)));
+	CHECK_CUDA(cudaMalloc(&ctx->d_eta_beta,
+			(ctx->params->n + 1) * ctx->cand_k * sizeof(float)));
+	status = cuda_alloc_device_ants(ctx);
+	if (status != SOLVER_OK)
+		return (status);
+	CHECK_CUDA(cudaMalloc(&ctx->d_iter_stats,
+			sizeof(t_cuda_iter_stats)));
+	CHECK_CUDA(cudaMalloc(&ctx->flat.routes,
+			ctx->params->k * (ctx->params->n + 1) * sizeof(int)));
+	CHECK_CUDA(cudaMalloc(&ctx->flat.lengths,
+			ctx->params->k * sizeof(int)));
 	return (SOLVER_OK);
 cleanup:
 	return (status);
@@ -262,7 +253,8 @@ static t_status	cuda_init_device(t_cuda_solver_ctx *ctx)
 
 	status = SOLVER_OK;
 	CHECK_CUDA(cudaMemcpy(ctx->d_coords, ctx->h_coords,
-			(ctx->params->n + 1) * sizeof(float2), cudaMemcpyHostToDevice));
+			(ctx->params->n + 1) * sizeof(float2),
+			cudaMemcpyHostToDevice));
 	launch_init_tau(ctx->d_tau, ctx->params->n, ctx->q_tau0);
 	CHECK_CUDA_KERNEL();
 	CHECK_CUDA(cudaDeviceSynchronize());
@@ -275,12 +267,14 @@ cleanup:
 	return (status);
 }
 
-static t_status	cuda_iter_step(t_cuda_solver_ctx *ctx, t_cuda_problem_data prob)
+static t_status	cuda_iter_step(t_cuda_solver_ctx *ctx,
+					t_cuda_problem_data prob)
 {
 	t_status	status;
 
 	status = SOLVER_OK;
-	launch_reset_ants(ctx->ants, ctx->cuda_params, ctx->params->seed + ctx->iter);
+	launch_reset_ants(ctx->ants, ctx->cuda_params,
+		ctx->params->seed + ctx->iter);
 	CHECK_CUDA_KERNEL();
 	CHECK_CUDA(cudaDeviceSynchronize());
 	CHECK_CUDA(cudaMemset(ctx->d_iter_stats, 0, sizeof(t_cuda_iter_stats)));
@@ -345,11 +339,12 @@ static t_status	copy_best_data(t_cuda_solver_ctx *ctx, int best_idx)
 
 	status = SOLVER_OK;
 	CHECK_CUDA(cudaMemcpy(ctx->h_routes, ctx->ants.routes,
-			ctx->max_steps * ctx->m * sizeof(int), cudaMemcpyDeviceToHost));
+			ctx->max_steps * ctx->m * sizeof(int),
+			cudaMemcpyDeviceToHost));
 	CHECK_CUDA(cudaMemcpy(ctx->h_route_lengths, ctx->ants.route_lengths,
-			ctx->m * ctx->params->k * sizeof(int), cudaMemcpyDeviceToHost));
-	copy_ant_to_solution(ctx->h_routes, ctx->h_route_lengths,
-		ctx->params->k, ctx->m, best_idx, ctx->best_sol);
+			ctx->m * ctx->params->k * sizeof(int),
+			cudaMemcpyDeviceToHost));
+	copy_ant_to_solution(ctx, best_idx, ctx->best_sol);
 	update_flat_solution(ctx, best_idx);
 	return (SOLVER_OK);
 cleanup:
@@ -405,11 +400,12 @@ cleanup:
 static void	log_progress(t_cuda_solver_ctx *ctx, double progress_time)
 {
 	double	elapsed;
+	double	remaining;
 
 	elapsed = progress_time - ctx->start_time;
 	if (ctx->max_runtime > 0.0)
 	{
-		double remaining = ctx->max_runtime - elapsed;
+		remaining = ctx->max_runtime - elapsed;
 		if (remaining < 0.0)
 			remaining = 0.0;
 		fprintf(stderr,
@@ -466,16 +462,27 @@ static void	cuda_cleanup(t_cuda_solver_ctx *ctx)
 
 static void	print_iteration_stats(t_cuda_solver_ctx *ctx)
 {
-	fprintf(stderr, "\n[cuda] Iteration statistics summary (%d iterations):\n", ctx->iter);
-	fprintf(stderr, "[cuda]   Customer moves:      %llu\n", ctx->accum_stats.customer_moves);
-	fprintf(stderr, "[cuda]   Candidate moves:     %llu\n", ctx->accum_stats.candidate_moves);
-	fprintf(stderr, "[cuda]   Fallback calls:      %llu\n", ctx->accum_stats.fallback_calls);
-	fprintf(stderr, "[cuda]   Fallback moves:      %llu\n", ctx->accum_stats.fallback_moves);
-	fprintf(stderr, "[cuda]   Depot offer calls:   %llu\n", ctx->accum_stats.depot_offer_calls);
-	fprintf(stderr, "[cuda]   Depot close moves:   %llu\n", ctx->accum_stats.depot_close_moves);
-	fprintf(stderr, "[cuda]   Non-empty routes:    %llu\n", ctx->accum_stats.nonempty_routes);
-	fprintf(stderr, "[cuda]   Fallback groups scn: %llu\n", ctx->accum_stats.fallback_word_groups_scanned);
-	fprintf(stderr, "[cuda]   Fallback nodes scd:  %llu\n", ctx->accum_stats.fallback_nodes_scored);
+	fprintf(stderr,
+		"\n[cuda] Iteration statistics summary (%d iterations):\n",
+		ctx->iter);
+	fprintf(stderr, "[cuda]   Customer moves:      %llu\n",
+		ctx->accum_stats.customer_moves);
+	fprintf(stderr, "[cuda]   Candidate moves:     %llu\n",
+		ctx->accum_stats.candidate_moves);
+	fprintf(stderr, "[cuda]   Fallback calls:      %llu\n",
+		ctx->accum_stats.fallback_calls);
+	fprintf(stderr, "[cuda]   Fallback moves:      %llu\n",
+		ctx->accum_stats.fallback_moves);
+	fprintf(stderr, "[cuda]   Depot offer calls:   %llu\n",
+		ctx->accum_stats.depot_offer_calls);
+	fprintf(stderr, "[cuda]   Depot close moves:   %llu\n",
+		ctx->accum_stats.depot_close_moves);
+	fprintf(stderr, "[cuda]   Non-empty routes:    %llu\n",
+		ctx->accum_stats.nonempty_routes);
+	fprintf(stderr, "[cuda]   Fallback groups scn: %llu\n",
+		ctx->accum_stats.fallback_word_groups_scanned);
+	fprintf(stderr, "[cuda]   Fallback nodes scd:  %llu\n",
+		ctx->accum_stats.fallback_nodes_scored);
 }
 
 static t_status	run_solver_loop(t_cuda_solver_ctx *ctx)
@@ -495,7 +502,8 @@ static t_status	run_solver_loop(t_cuda_solver_ctx *ctx)
 		if (status != SOLVER_OK)
 			return (status);
 		update_accum_stats(ctx);
-		if (select_iter_best_host(ctx->h_ant_summary, ctx->m, &best_idx, &best_iter_cost))
+		if (select_iter_best_host(ctx->h_ant_summary, ctx->m, &best_idx,
+				&best_iter_cost))
 		{
 			status = update_global_best(ctx, best_idx, best_iter_cost);
 			if (status != SOLVER_OK)
@@ -533,12 +541,38 @@ static t_status	run_solver_orchestrator(t_cuda_solver_ctx *ctx)
 	init_loop_timers(ctx);
 	if (ctx->config.log_level > LOG_SILENT)
 		fprintf(stderr,
-			"CUDA Solver starting... (N=%d, k=%d, M=%d, candidate_k=%d, seed=%u)\n",
+			"CUDA Solver starting... "
+			"(N=%d, k=%d, M=%d, candidate_k=%d, seed=%u)\n",
 			ctx->params->n, ctx->params->k, ctx->m, ctx->cand_k,
 			ctx->params->seed);
 	status = run_solver_loop(ctx);
 	if (ctx->config.log_level > LOG_SILENT)
 		print_iteration_stats(ctx);
+	return (status);
+}
+
+static void	init_solver_ctx(t_cuda_solver_ctx *ctx)
+{
+	ctx->iter = 0;
+	ctx->iter_since_best = 0;
+	ctx->global_best = DBL_MAX;
+	memset(&ctx->accum_stats, 0, sizeof(t_cuda_iter_stats));
+}
+
+static t_status	setup_and_run(t_cuda_solver_ctx *ctx)
+{
+	t_status	status;
+
+	status = cuda_init_params(ctx);
+	if (status == SOLVER_OK)
+		status = cuda_alloc_host(ctx);
+	if (status == SOLVER_OK)
+		status = cuda_alloc_device(ctx);
+	if (status == SOLVER_OK)
+		status = cuda_init_device(ctx);
+	if (status == SOLVER_OK)
+		status = run_solver_orchestrator(ctx);
+	cuda_cleanup(ctx);
 	return (status);
 }
 
@@ -557,21 +591,12 @@ t_status	vrp_solve_cuda(t_solver_params *params,
 	ctx.coords = coords;
 	ctx.best_sol = best_solution;
 	ctx.best_cost = best_cost;
-	ctx.iter = 0;
-	ctx.iter_since_best = 0;
-	ctx.global_best = DBL_MAX;
-	memset(&ctx.accum_stats, 0, sizeof(t_cuda_iter_stats));
-	status = cuda_init_params(&ctx);
+	init_solver_ctx(&ctx);
+	status = setup_and_run(&ctx);
 	if (status == SOLVER_OK)
-		status = cuda_alloc_host(&ctx);
-	if (status == SOLVER_OK)
-		status = cuda_alloc_device(&ctx);
-	if (status == SOLVER_OK)
-		status = cuda_init_device(&ctx);
-	if (status == SOLVER_OK)
-		status = run_solver_orchestrator(&ctx);
-	cuda_cleanup(&ctx);
-	if (status == SOLVER_OK)
-		status = (*best_cost < DBL_MAX) ? SOLVER_OK : SOLVER_ERR_NO_SOLUTION;
+	{
+		status = (*best_cost < DBL_MAX) ? SOLVER_OK
+			: SOLVER_ERR_NO_SOLUTION;
+	}
 	return (status);
 }

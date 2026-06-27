@@ -14,7 +14,7 @@ typedef struct s_matrix		t_matrix;
 
 enum e_matrix_constants
 {
-	kMatrixDefaultAlignment = 64
+	matrix_default_alignment = 64
 };
 
 int							matrix_mul_size(size_t a, size_t b, size_t *out);

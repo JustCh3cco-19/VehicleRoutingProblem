@@ -87,6 +87,44 @@ t_status	vrp_solve(t_solver_params *params, t_solution *best_solution,
 	return (vrp_solve_with_capacity(params, best_solution, best_cost));
 }
 
+static void	init_seq_ctx(t_seq_ctx *ctx, t_solver_params *params,
+				t_solution *best_solution, double *best_cost)
+{
+	ctx->n = params->n;
+	ctx->k = params->k;
+	ctx->cap = params->vehicle_capacity_customers;
+	ctx->m = params->m;
+	ctx->c = params->c;
+	ctx->alpha = params->alpha;
+	ctx->beta = params->beta;
+	ctx->rho = params->rho;
+	ctx->tau0 = params->tau0;
+	ctx->q = params->q;
+	ctx->seed = params->seed;
+	ctx->best_sol = best_solution;
+	ctx->best_cost = best_cost;
+}
+
+static t_status	setup_and_run_seq(t_seq_ctx *ctx, t_solver_params *params)
+{
+	runtime_config_load_env(&ctx->params);
+	ctx->params.ants = params->m;
+	ctx->params.seed = params->seed;
+	if (ctx->m <= 0)
+	{
+		if (ctx->params.ants > 0)
+			ctx->m = ctx->params.ants;
+		else
+			ctx->m = seq_choose_auto_ants(ctx->n);
+	}
+	ctx->stagnation_trigger = 32;
+	if (ctx->params.stagnation_epochs > 0)
+		ctx->stagnation_trigger = ctx->params.stagnation_epochs / 2;
+	if (ctx->stagnation_trigger < 4)
+		ctx->stagnation_trigger = 4;
+	return (aco_vrp_run_with_config(ctx));
+}
+
 t_status	vrp_solve_with_capacity(t_solver_params *params,
 		t_solution *best_solution, double *best_cost)
 {
@@ -94,33 +132,6 @@ t_status	vrp_solve_with_capacity(t_solver_params *params,
 
 	if (!params)
 		return (SOLVER_ERR_INVALID_INPUT);
-	ctx.n = params->n;
-	ctx.k = params->k;
-	ctx.cap = params->vehicle_capacity_customers;
-	ctx.m = params->m;
-	ctx.c = params->c;
-	ctx.alpha = params->alpha;
-	ctx.beta = params->beta;
-	ctx.rho = params->rho;
-	ctx.tau0 = params->tau0;
-	ctx.q = params->q;
-	ctx.seed = params->seed;
-	ctx.best_sol = best_solution;
-	ctx.best_cost = best_cost;
-	runtime_config_load_env(&ctx.params);
-	ctx.params.ants = params->m;
-	ctx.params.seed = params->seed;
-	if (ctx.m <= 0)
-	{
-		if (ctx.params.ants > 0)
-			ctx.m = ctx.params.ants;
-		else
-			ctx.m = seq_choose_auto_ants(ctx.n);
-	}
-	ctx.stagnation_trigger = 32;
-	if (ctx.params.stagnation_epochs > 0)
-		ctx.stagnation_trigger = ctx.params.stagnation_epochs / 2;
-	if (ctx.stagnation_trigger < 4)
-		ctx.stagnation_trigger = 4;
-	return (aco_vrp_run_with_config(&ctx));
+	init_seq_ctx(&ctx, params, best_solution, best_cost);
+	return (setup_and_run_seq(&ctx, params));
 }

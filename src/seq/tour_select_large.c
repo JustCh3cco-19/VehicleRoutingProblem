@@ -67,16 +67,24 @@ int	select_large(const t_seq_shared *shared, int current,
 	return (res);
 }
 
-int	select_next_customer(const t_seq_shared *shared, int current,
-		const uint64_t *visited, double **c, unsigned int *rng_state)
+int	select_next_customer(t_select_params *params)
 {
 	int	res;
 
-	if (shared->candidate_k <= 1024)
-		res = select_small(shared, current, visited, rng_state);
+	if (params->shared->candidate_k <= 1024)
+	{
+		res = select_small(params->shared, params->current, params->visited,
+				params->rng_state);
+	}
 	else
-		res = select_large(shared, current, visited, rng_state);
+	{
+		res = select_large(params->shared, params->current, params->visited,
+				params->rng_state);
+	}
 	if (res <= 0)
-		return (find_nearest_unvisited(shared, current, visited, c));
+	{
+		return (find_nearest_unvisited(params->shared, params->current,
+				params->visited, params->c));
+	}
 	return (res);
 }

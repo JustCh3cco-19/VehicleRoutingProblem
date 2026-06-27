@@ -104,10 +104,10 @@ Per confronti di speedup stretti, usare gli stessi criteri di arresto per tutti
 i backend:
 
 ```bash
-ACO_SOLVER_TIMEOUT_SECONDS=<seconds>
-ACO_SOLVER_STAGNATION_EPOCHS=<epochs>
-ACO_SOLVER_MIN_REL_IMPROVEMENT=<percent>
-ACO_SOLVER_PROGRESS_INTERVAL_SECONDS=10
+SOLVER_TIMEOUT_SECONDS=<seconds>
+SOLVER_STAGNATION_EPOCHS=<epochs>
+SOLVER_MIN_REL_IMPROVEMENT=<percent>
+SOLVER_PROGRESS_INTERVAL_SECONDS=10
 ```
 
 Per misure di qualita' soluzione, riportare anche `best cost` finale e validita'

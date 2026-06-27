@@ -8,12 +8,14 @@ __device__ static inline float	cuda_rand01(unsigned int *state)
 	return ((float)(*state) / 4294967295.0f);
 }
 
-__device__ static inline float	dequantize_tau(uint8_t q, t_cuda_params params)
+__device__ static inline float	dequantize_tau(uint8_t q,
+									t_cuda_params params)
 {
 	return (expf((float)q * params.log_tau_step + params.log_tau_min));
 }
 
-__device__ static inline uint8_t	quantize_tau(float tau, t_cuda_params params)
+__device__ static inline uint8_t	quantize_tau(float tau,
+										t_cuda_params params)
 {
 	float	log_t;
 	float	q_f;
@@ -170,7 +172,8 @@ __device__ static void	build_candidates_for_node(int i,
 		j = i * params.cand_k + t;
 		d_candidate_idx[j] = best_nodes[t];
 		if (best_nodes[t] > 0)
-			d_eta_beta[j] = powf(1.0f / (best_costs[t] + CUDA_EPS), params.beta);
+			d_eta_beta[j] = powf(1.0f / (best_costs[t] + CUDA_EPS),
+					params.beta);
 		else
 			d_eta_beta[j] = 0.0f;
 	}

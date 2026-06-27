@@ -48,138 +48,161 @@ int	seq_shared_init(t_seq_shared *shared, int n, int candidate_k)
 	return (1);
 }
 
+static void	init_and_zero_row(int *cand_row, float *eta_row, int k,
+				int stride)
+{
+	int	t;
+
+	t = 0;
+	while (t < k)
+	{
+		cand_row[t] = 0;
+		eta_row[t] = 0.0f;
+		t++;
+	}
+	t = k;
+	while (t < stride)
+	{
+		cand_row[t] = 0;
+		eta_row[t] = 0.0f;
+		t++;
+	}
+}
+
+static void	shift_and_insert(int *cand_row, float *eta_row, int k,
+				int insert_at)
+{
+	int	t;
+
+	t = k - 1;
+	while (t > insert_at)
+	{
+		cand_row[t] = cand_row[t - 1];
+		eta_row[t] = eta_row[t - 1];
+		t--;
+	}
+}
+
+static int	find_insert_pos(const int *cand_row, int k, const double *c_row,
+				double dist)
+{
+	int	t;
+
+	t = 0;
+	while (t < k)
+	{
+		if (cand_row[t] == 0 || dist < c_row[cand_row[t]])
+			return (t);
+		t++;
+	}
+	return (-1);
+}
+
+static void	build_candidates_for_row(t_seq_shared *shared, int i, double **c,
+				double beta)
+{
+	int		*cand_row;
+	float	*eta_row;
+	int		node;
+	int		insert_at;
+
+	cand_row = shared->candidate_idx + (size_t)i * (size_t)shared->stride;
+	eta_row = shared->eta_beta + (size_t)i * (size_t)shared->stride;
+	init_and_zero_row(cand_row, eta_row, shared->candidate_k,
+		shared->stride);
+	node = 1;
+	while (node <= shared->n)
+	{
+		if (node != i)
+		{
+			insert_at = find_insert_pos(cand_row, shared->candidate_k, c[i],
+					c[i][node]);
+			if (insert_at >= 0)
+			{
+				shift_and_insert(cand_row, eta_row, shared->candidate_k,
+					insert_at);
+				cand_row[insert_at] = node;
+				eta_row[insert_at] = (float)seq_fast_pow(1.0 / (c[i][node]
+							+ SOLVER_EPS), beta);
+			}
+		}
+		node++;
+	}
+}
+
 void	seq_shared_build_candidates(t_seq_shared *shared, double **c,
 		double beta)
 {
-	int		n;
-	int		k;
-	int		stride;
-	int		i;
-	int		node;
-	int		insert_at;
-	int		t;
-	int		*cand_row;
-	float	*eta_row;
-	double	dist;
-	double	eta;
+	int	i;
 
-	n = shared->n;
-	k = shared->candidate_k;
-	stride = shared->stride;
 	i = 0;
-	while (i <= n)
+	while (i <= shared->n)
 	{
-		cand_row = shared->candidate_idx + (size_t)i * (size_t)stride;
-		eta_row = shared->eta_beta + (size_t)i * (size_t)stride;
-		t = 0;
-		while (t < k)
-		{
-			cand_row[t] = 0;
-			eta_row[t] = 0.0f;
-			t++;
-		}
-		node = 1;
-		while (node <= n)
-		{
-			if (node == i)
-			{
-				node++;
-				continue ;
-			}
-			dist = c[i][node];
-			insert_at = -1;
-			t = 0;
-			while (t < k)
-			{
-				if (cand_row[t] == 0 || dist < c[i][cand_row[t]])
-				{
-					insert_at = t;
-					break ;
-				}
-				t++;
-			}
-			if (insert_at >= 0)
-			{
-				t = k - 1;
-				while (t > insert_at)
-				{
-					cand_row[t] = cand_row[t - 1];
-					eta_row[t] = eta_row[t - 1];
-					t--;
-				}
-				cand_row[insert_at] = node;
-				eta = 1.0 / (dist + SOLVER_EPS);
-				eta_row[insert_at] = (float)seq_fast_pow(eta, beta);
-			}
-			node++;
-		}
-		t = k;
-		while (t < stride)
-		{
-			cand_row[t] = 0;
-			eta_row[t] = 0.0f;
-			t++;
-		}
+		build_candidates_for_row(shared, i, c, beta);
 		i++;
+	}
+}
+
+static void	zero_tail(float *row, int start, int end)
+{
+	int	t;
+
+	t = start;
+	while (t < end)
+	{
+		row[t] = 0.0f;
+		t++;
+	}
+}
+
+static void	update_score_row_generic(t_score_row_params *params,
+				double alpha)
+{
+	int		t;
+	int		node;
+	double	tau_term;
+
+	t = 0;
+	while (t < params->k)
+	{
+		node = params->cand_row[t];
+		if (node > 0)
+		{
+			tau_term = seq_fast_pow(params->tau_row[node], alpha);
+			params->score_row[t] = (float)(tau_term
+					* (double)params->eta_row[t]);
+		}
+		else
+			params->score_row[t] = 0.0f;
+		t++;
 	}
 }
 
 void	seq_shared_update_scores(t_seq_shared *shared, double **restrict tau,
 		double alpha)
 {
-	int				n;
-	int				k;
-	int				stride;
-	int				i;
-	int				*cand_row;
-	float			*eta_row;
-	float			*score_row;
-	const double	*tau_row;
-	int				t;
-	double			tau_term;
+	int					n;
+	int					stride;
+	int					i;
+	t_score_row_params	params;
 
 	n = shared->n;
-	k = shared->candidate_k;
 	stride = shared->stride;
+	params.k = shared->candidate_k;
 	i = 0;
 	while (i <= n)
 	{
-		cand_row = shared->candidate_idx + (size_t)i * (size_t)stride;
-		eta_row = shared->eta_beta + (size_t)i * (size_t)stride;
-		score_row = shared->score + (size_t)i * (size_t)stride;
-		tau_row = tau[i];
+		params.cand_row = shared->candidate_idx + (size_t)i * (size_t)stride;
+		params.eta_row = shared->eta_beta + (size_t)i * (size_t)stride;
+		params.score_row = shared->score + (size_t)i * (size_t)stride;
+		params.tau_row = tau[i];
 		if (alpha == 1.0)
-		{
-			update_score_row_alpha1(cand_row, eta_row, score_row, tau_row, k);
-		}
+			update_score_row_alpha1(&params);
 		else if (alpha == 2.0)
-		{
-			update_score_row_alpha2(cand_row, eta_row, score_row, tau_row, k);
-		}
+			update_score_row_alpha2(&params);
 		else
-		{
-			t = 0;
-			while (t < k)
-			{
-				int node = cand_row[t];
-				if (node > 0)
-				{
-					tau_term = seq_fast_pow(tau_row[node], alpha);
-					score_row[t] = (float)(tau_term * (double)eta_row[t]);
-				}
-				else
-				{
-					score_row[t] = 0.0f;
-				}
-				t++;
-			}
-		}
-		t = k;
-		while (t < stride)
-		{
-			score_row[t] = 0.0f;
-			t++;
-		}
+			update_score_row_generic(&params, alpha);
+		zero_tail(params.score_row, params.k, stride);
 		i++;
 	}
 }

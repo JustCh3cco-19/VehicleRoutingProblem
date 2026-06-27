@@ -4,17 +4,8 @@
 #include <stdbool.h>
 #include <string.h>
 
-struct s_tour_ctx
-{
-	t_seq_workspace		*ws;
-	const t_seq_shared	*shared;
-	int					k;
-	int					cap;
-	int					remaining;
-	double				**c;
-};
-
-static bool	can_extend_route(struct s_tour_ctx *ctx, int vehicle, int fut_cap);
+static bool	can_extend_route(struct s_tour_ctx *ctx, int vehicle,
+				int fut_cap);
 static bool	append_selected_customer(struct s_tour_ctx *ctx, int vehicle,
 		int *current);
 static bool	fill_route_remainder(struct s_tour_ctx *ctx, int v, t_route *r);
@@ -40,7 +31,8 @@ static bool	build_vehicle_route(struct s_tour_ctx *ctx, int vehicle)
 	return (true);
 }
 
-static bool	can_extend_route(struct s_tour_ctx *ctx, int vehicle, int fut_cap)
+static bool	can_extend_route(struct s_tour_ctx *ctx, int vehicle,
+				int fut_cap)
 {
 	if (ctx->remaining <= 0)
 		return (false);
@@ -63,12 +55,17 @@ static bool	append_customer(struct s_tour_ctx *ctx, int vehicle, t_route *r,
 static bool	append_selected_customer(struct s_tour_ctx *ctx, int vehicle,
 		int *current)
 {
-	t_route	*r;
-	int		next;
+	t_route			*r;
+	int				next;
+	t_select_params	params;
 
 	r = &ctx->ws->sol->routes[vehicle];
-	next = select_next_customer(ctx->shared, *current, ctx->ws->visited,
-			ctx->c, &ctx->ws->rng_state);
+	params.shared = ctx->shared;
+	params.current = *current;
+	params.visited = ctx->ws->visited;
+	params.c = ctx->c;
+	params.rng_state = &ctx->ws->rng_state;
+	next = select_next_customer(&params);
 	if (next <= 0)
 		return (false);
 	if (!append_customer(ctx, vehicle, r, next))
@@ -122,33 +119,33 @@ static bool	fill_route_remainder(struct s_tour_ctx *ctx, int v, t_route *r)
 	return (true);
 }
 
-bool	build_ant_solution(t_seq_workspace *ws, const t_seq_shared *shared,
-		int k, int vehicle_capacity_customers, double **restrict c)
+bool	build_ant_solution(t_seq_ctx *ctx)
 {
-	struct s_tour_ctx	ctx;
+	struct s_tour_ctx	tour_ctx;
 	int					vehicle;
 
-	solution_reset(ws->sol);
-	memset(ws->visited, 0, (size_t)shared->visited_words * sizeof(uint64_t));
-	memset(ws->route_loads, 0, (size_t)k * sizeof(int));
-	ctx.ws = ws;
-	ctx.shared = shared;
-	ctx.k = k;
-	ctx.cap = vehicle_capacity_customers;
-	if (ctx.cap <= 0)
-		ctx.cap = shared->n;
-	ctx.remaining = shared->n;
-	ctx.c = c;
+	solution_reset(ctx->ws.sol);
+	memset(ctx->ws.visited, 0, (size_t)ctx->shared.visited_words
+		* sizeof(uint64_t));
+	memset(ctx->ws.route_loads, 0, (size_t)ctx->k * sizeof(int));
+	tour_ctx.ws = &ctx->ws;
+	tour_ctx.shared = &ctx->shared;
+	tour_ctx.k = ctx->k;
+	tour_ctx.cap = ctx->cap;
+	if (tour_ctx.cap <= 0)
+		tour_ctx.cap = ctx->shared.n;
+	tour_ctx.remaining = ctx->shared.n;
+	tour_ctx.c = ctx->c;
 	vehicle = 0;
-	while (vehicle < k)
+	while (vehicle < ctx->k)
 	{
-		if (!build_vehicle_route(&ctx, vehicle))
+		if (!build_vehicle_route(&tour_ctx, vehicle))
 			return (false);
 		vehicle++;
 	}
-	if (ctx.remaining > 0)
+	if (tour_ctx.remaining > 0)
 	{
-		if (!fill_remaining(&ctx))
+		if (!fill_remaining(&tour_ctx))
 			return (false);
 	}
 	return (true);

@@ -18,7 +18,7 @@ void	runtime_config_defaults(t_config *config)
 {
 	if (!config)
 		return ;
-	config->timeout_seconds = 0.0;
+	config->timeout_seconds = 300.0;
 	config->stagnation_epochs = 0;
 	config->min_rel_improvement = 1e-3;
 	config->fixed_epochs = 0;
@@ -33,7 +33,7 @@ void	runtime_config_defaults(t_config *config)
 static void	aco_runtime_config_load_env_mats(t_config *config,
 		const char **vars)
 {
-	config->timeout_seconds = (vars[0] && *vars[0]) ? atof(vars[0]) : 0.0;
+	config->timeout_seconds = (vars[0] && *vars[0]) ? atof(vars[0]) : 300.0;
 	config->stagnation_epochs = (vars[1] && *vars[1]) ? atoi(vars[1]) : 0;
 	config->min_rel_improvement = parse_min_rel_improvement_percent(
 			vars[2], 1e-3);
@@ -51,15 +51,15 @@ static void	aco_runtime_config_load_env_mats(t_config *config,
 
 static void	runtime_config_read_env(const char **vars)
 {
-	vars[0] = getenv("ACO_SOLVER_TIMEOUT_SECONDS");
-	vars[1] = getenv("ACO_SOLVER_STAGNATION_EPOCHS");
-	vars[2] = getenv("ACO_SOLVER_MIN_REL_IMPROVEMENT");
-	vars[3] = getenv("ACO_SOLVER_FIXED_EPOCHS");
-	vars[4] = getenv("ACO_SOLVER_PROGRESS_INTERVAL_SECONDS");
-	vars[5] = getenv("ACO_SOLVER_CANDIDATE_K");
-	vars[6] = getenv("ACO_SOLVER_ANTS");
-	vars[7] = getenv("ACO_SOLVER_LOG_LEVEL");
-	vars[8] = getenv("ACO_SOLVER_REPRODUCIBILITY_MODE");
+	vars[0] = getenv("SOLVER_TIMEOUT_SECONDS");
+	vars[1] = getenv("SOLVER_STAGNATION_EPOCHS");
+	vars[2] = getenv("SOLVER_MIN_REL_IMPROVEMENT");
+	vars[3] = getenv("SOLVER_FIXED_EPOCHS");
+	vars[4] = getenv("SOLVER_PROGRESS_INTERVAL_SECONDS");
+	vars[5] = getenv("SOLVER_CANDIDATE_K");
+	vars[6] = getenv("SOLVER_ANTS");
+	vars[7] = getenv("SOLVER_LOG_LEVEL");
+	vars[8] = getenv("SOLVER_REPRODUCIBILITY_MODE");
 }
 
 static void	runtime_config_clamp(t_config *config)

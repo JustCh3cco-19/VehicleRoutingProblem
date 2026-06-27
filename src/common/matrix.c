@@ -49,7 +49,8 @@ void	*matrix_aligned_calloc(size_t bytes, size_t alignment)
 	return (ptr);
 }
 
-static int	matrix_calc_bytes(size_t size, size_t *stride, size_t *total_bytes)
+static int	matrix_calc_bytes(size_t size, size_t *stride,
+				size_t *total_bytes)
 {
 	size_t	row_bytes;
 	size_t	padded_row_bytes;
@@ -60,7 +61,7 @@ static int	matrix_calc_bytes(size_t size, size_t *stride, size_t *total_bytes)
 	total_elems = 0;
 	if (!matrix_mul_size(size, sizeof(double), &row_bytes))
 		return (0);
-	if (!matrix_align_up(row_bytes, kMatrixDefaultAlignment,
+	if (!matrix_align_up(row_bytes, matrix_default_alignment,
 			&padded_row_bytes))
 		return (0);
 	*stride = padded_row_bytes / sizeof(double);
@@ -81,7 +82,7 @@ static int	matrix_alloc_storage(t_matrix *m, size_t size)
 	if (!matrix_calc_bytes(size, &stride, &total_bytes))
 		return (0);
 	m->stride = (int)stride;
-	m->data = matrix_aligned_calloc(total_bytes, kMatrixDefaultAlignment);
+	m->data = matrix_aligned_calloc(total_bytes, matrix_default_alignment);
 	if (!m->data)
 		return (0);
 	m->rows = malloc(size * sizeof(double *));

@@ -47,9 +47,9 @@ int	seq_choose_candidate_count(int n, int requested_candidate_k)
 {
 	if (requested_candidate_k > 0)
 		return (seq_clamp(requested_candidate_k, 1, n));
-	if (n <= kSeqDenseCandidateLimit)
+	if (n <= seq_dense_candidate_limit)
 		return (n);
-	return (seq_clamp(kSeqDefaultSparseCandidateCount, 1, n));
+	return (seq_clamp(seq_default_sparse_candidate_count, 1, n));
 }
 
 #ifdef _OPENMP
@@ -95,4 +95,3 @@ int	seq_choose_auto_ants(int n)
 }
 
 #endif
-

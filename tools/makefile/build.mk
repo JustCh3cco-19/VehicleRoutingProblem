@@ -67,3 +67,6 @@ clean:
 
 debug:
 	$(MAKE) EXTRA_FLAGS=-DDEBUG
+
+norm:
+	./tools/bash/check_norm_scope.sh

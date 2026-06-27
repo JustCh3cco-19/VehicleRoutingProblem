@@ -51,7 +51,8 @@ static void	par_epoch_sync(t_par_solver_ctx *ctx)
 #endif
 }
 
-static void	par_epoch_step(t_par_solver_ctx *ctx, t_par_workspace *ws, int iter)
+static void	par_epoch_step(t_par_solver_ctx *ctx, t_par_workspace *ws,
+				int iter)
 {
 	par_epoch_sync(ctx);
 	par_solver_scores(ctx);
@@ -65,8 +66,7 @@ void	par_solver_thread_run(t_par_solver_ctx *ctx)
 {
 	t_par_workspace	ws;
 
-	if (!par_ws_init(&ws, ctx->k, ctx->n, ctx->shared.visited_words,
-			ctx->shared.meta_words))
+	if (!par_ws_init(&ws, ctx->k, &ctx->shared))
 	{
 #pragma omp atomic write
 		ctx->workspace_failed = 1;
@@ -97,7 +97,8 @@ static t_status	par_vrp_run(t_par_solver_ctx *ctx)
 	}
 	if (ctx->log_level > LOG_SILENT && ctx->mpi_rank == 0)
 	{
-		fprintf(stderr, "ACO Parallel Ultimate Completion. Best: %.3f. Time: %.3fs\n",
+		fprintf(stderr,
+			"ACO Parallel Ultimate Completion. Best: %.3f. Time: %.3fs\n",
 			*ctx->best_cost, par_wall_time() - ctx->start_time);
 	}
 	par_solver_free(ctx);
@@ -122,59 +123,83 @@ t_status	vrp_solve(t_solver_params *params, t_solution *best_solution,
 	return (vrp_solve_with_capacity(params, best_solution, best_cost));
 }
 
+static void	init_par_solver_ctx(t_par_solver_ctx *ctx,
+				t_solver_params *params, t_solution *best_solution,
+				double *best_cost)
+{
+	ctx->n = params->n;
+	ctx->k = params->k;
+	ctx->cap = params->vehicle_capacity_customers;
+	ctx->m = params->m;
+	ctx->c = params->c;
+	ctx->alpha = params->alpha;
+	ctx->beta = params->beta;
+	ctx->rho = params->rho;
+	ctx->tau0 = params->tau0;
+	ctx->q = params->q;
+	ctx->seed = params->seed;
+	ctx->best_sol = best_solution;
+	ctx->best_cost = best_cost;
+	ctx->mpi_rank = 0;
+	ctx->mpi_size = 1;
+}
+
+static void	init_mpi_ctx(t_par_solver_ctx *ctx)
+{
+#ifdef USE_MPI
+	int	mpi_init;
+
+	mpi_init = 0;
+	MPI_Initialized(&mpi_init);
+	if (mpi_init)
+	{
+		MPI_Comm_rank(MPI_COMM_WORLD, &ctx->mpi_rank);
+		MPI_Comm_size(MPI_COMM_WORLD, &ctx->mpi_size);
+	}
+#else
+	(void)ctx;
+#endif
+}
+
+static void	init_solver_config(t_par_solver_ctx *ctx, t_config *config,
+				t_solver_params *params)
+{
+	int	rank_extra;
+
+	runtime_config_load_env(config);
+	ctx->config = config;
+	ctx->cand_k = par_choose_candidate_count(params->n, config->candidate_k);
+	ctx->total_m = (params->m <= 0) ? ((params->n / 2) * ctx->mpi_size)
+		: params->m;
+	if (params->m <= 0 && config->ants > 0)
+		ctx->total_m = config->ants;
+	rank_extra = (ctx->mpi_rank < (ctx->total_m % ctx->mpi_size))
+		? ctx->mpi_rank
+		: (ctx->total_m % ctx->mpi_size);
+	ctx->ant_off = ctx->mpi_rank * (ctx->total_m / ctx->mpi_size) + rank_extra;
+	ctx->local_m = ctx->total_m / ctx->mpi_size
+		+ (ctx->mpi_rank < (ctx->total_m % ctx->mpi_size));
+	ctx->max_runtime_sec = config->timeout_seconds;
+	ctx->max_stagnation_epochs = config->stagnation_epochs;
+	ctx->min_rel_improvement = config->min_rel_improvement;
+	ctx->progress_interval_sec = config->progress_interval_seconds;
+	ctx->log_level = config->log_level;
+	ctx->fixed_epochs = config->fixed_epochs;
+	if (ctx->max_stagnation_epochs <= 0)
+		ctx->max_stagnation_epochs = 100;
+}
+
 t_status	vrp_solve_with_capacity(t_solver_params *params,
 		t_solution *best_solution, double *best_cost)
 {
 	t_par_solver_ctx	ctx;
-	t_config		config;
+	t_config			config;
 
 	if (!params || params->n <= 0 || params->k <= 0 || !params->c
 		|| !best_solution || !best_cost)
 		return (SOLVER_ERR_INVALID_INPUT);
-	ctx.n = params->n;
-	ctx.k = params->k;
-	ctx.cap = params->vehicle_capacity_customers;
-	ctx.m = params->m;
-	ctx.c = params->c;
-	ctx.alpha = params->alpha;
-	ctx.beta = params->beta;
-	ctx.rho = params->rho;
-	ctx.tau0 = params->tau0;
-	ctx.q = params->q;
-	ctx.seed = params->seed;
-	ctx.best_sol = best_solution;
-	ctx.best_cost = best_cost;
-	ctx.mpi_rank = 0;
-	ctx.mpi_size = 1;
-#ifdef USE_MPI
-	int mpi_init = 0;
-	MPI_Initialized(&mpi_init);
-	if (mpi_init)
-	{
-		MPI_Comm_rank(MPI_COMM_WORLD, &ctx.mpi_rank);
-		MPI_Comm_size(MPI_COMM_WORLD, &ctx.mpi_size);
-	}
-#endif
-	runtime_config_load_env(&config);
-	ctx.config = &config;
-	ctx.cand_k = par_choose_candidate_count(params->n, config.candidate_k);
-	ctx.total_m = (params->m <= 0) ? ((params->n / 2) * ctx.mpi_size)
-		: params->m;
-	if (params->m <= 0 && config.ants > 0)
-		ctx.total_m = config.ants;
-	int rank_extra = (ctx.mpi_rank < (ctx.total_m % ctx.mpi_size))
-		? ctx.mpi_rank
-		: (ctx.total_m % ctx.mpi_size);
-	ctx.ant_off = ctx.mpi_rank * (ctx.total_m / ctx.mpi_size) + rank_extra;
-	ctx.local_m = ctx.total_m / ctx.mpi_size
-		+ (ctx.mpi_rank < (ctx.total_m % ctx.mpi_size));
-	ctx.max_runtime_sec = config.timeout_seconds;
-	ctx.max_stagnation_epochs = config.stagnation_epochs;
-	ctx.min_rel_improvement = config.min_rel_improvement;
-	ctx.progress_interval_sec = config.progress_interval_seconds;
-	ctx.log_level = config.log_level;
-	ctx.fixed_epochs = config.fixed_epochs;
-	if (ctx.max_stagnation_epochs <= 0)
-		ctx.max_stagnation_epochs = 100;
+	init_par_solver_ctx(&ctx, params, best_solution, best_cost);
+	init_mpi_ctx(&ctx);
+	init_solver_config(&ctx, &config, params);
 	return (par_vrp_run(&ctx));
 }

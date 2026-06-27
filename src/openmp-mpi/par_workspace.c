@@ -15,8 +15,7 @@ void	par_ws_free(aco_mpi_workspace_t *ws)
 	solution_free(ws->sol);
 }
 
-int	par_ws_init(aco_mpi_workspace_t *ws, int k, int n, int words,
-		int meta_words)
+int	par_ws_init(aco_mpi_workspace_t *ws, int k, const t_par_shared *s)
 {
 	size_t	visited_bytes;
 	size_t	meta_bytes;
@@ -25,17 +24,21 @@ int	par_ws_init(aco_mpi_workspace_t *ws, int k, int n, int words,
 	visited_bytes = 0;
 	meta_bytes = 0;
 	route_load_bytes = 0;
-	if (!matrix_mul_size((size_t)words, sizeof(uint64_t), &visited_bytes) ||
-		!matrix_mul_size((size_t)meta_words, sizeof(uint64_t), &meta_bytes) ||
+	if (!matrix_mul_size((size_t)s->visited_words, sizeof(uint64_t),
+			&visited_bytes) ||
+		!matrix_mul_size((size_t)s->meta_words, sizeof(uint64_t),
+			&meta_bytes) ||
 		!matrix_mul_size((size_t)k, sizeof(int), &route_load_bytes))
+	{
 		return (0);
-	ws->sol = solution_create(k, n);
-	ws->thread_best = solution_create(k, n);
+	}
+	ws->sol = solution_create(k, s->n);
+	ws->thread_best = solution_create(k, s->n);
 	ws->visited = par_aligned_calloc(visited_bytes);
 	ws->meta_active = par_aligned_calloc(meta_bytes);
-	ws->route_loads = calloc(1u, route_load_bytes);
-	if (!ws->sol || !ws->thread_best || !ws->visited || !ws->meta_active ||
-		!ws->route_loads)
+	ws->route_loads = (int *)calloc(1u, route_load_bytes);
+	if (!ws->sol || !ws->thread_best || !ws->visited || !ws->meta_active
+		|| !ws->route_loads)
 	{
 		par_ws_free(ws);
 		return (0);

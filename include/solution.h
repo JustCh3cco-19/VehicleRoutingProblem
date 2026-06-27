@@ -40,8 +40,8 @@ void						solution_copy(t_solution *dst,
 								const t_solution *src);
 double						solution_cost(const t_solution *s, double **c);
 bool						route_append(t_route *r, int node);
-bool						solution_validate(const t_solution *s, int n, int k,
-								char *err, size_t err_len);
+bool						solution_validate(
+								t_solution_validation *validation);
 bool						solution_validate_cvrp(
 								t_solution_validation *validation);
 

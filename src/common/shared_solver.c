@@ -1,54 +1,20 @@
 #include "internal.h"
 #include "solution.h"
 
-int	shared_select_next(int current, const int *unvisited_nodes,
-		int unvisited_count, double **tau, double **eta,
-		double alpha, double beta, double roulette_r,
-		double *candidate_scores, int *selected_index,
-		t_score_cache *score_cache)
+static int	roulette_select(t_shared_select_ctx *ctx, double denom)
 {
-	const double	*score_row;
-	double			*tau_row;
-	double			*eta_row;
-	double			denom;
-	int				idx;
-	int				node;
-	double			score;
-	double			threshold;
-	double			cumulative;
-	int				chosen_idx;
+	double	threshold;
+	double	cumulative;
+	int		chosen_idx;
+	int		idx;
 
-	if (unvisited_count <= 0)
-	{
-		if (selected_index)
-			*selected_index = -1;
-		return (0);
-	}
-	score_row = score_cache_get_row(score_cache, current, tau, eta, alpha, beta);
-	tau_row = tau[current];
-	eta_row = eta[current];
-	denom = 0.0;
-	idx = 0;
-	while (idx < unvisited_count)
-	{
-		node = unvisited_nodes[idx];
-		score = 0.0;
-		if (score_row)
-			score = score_row[node];
-		else
-			score = fast_pow_nonneg(tau_row[node], alpha)
-				* fast_pow_nonneg(eta_row[node], beta);
-		candidate_scores[idx] = score;
-		denom += score;
-		idx++;
-	}
-	threshold = roulette_r * denom;
+	threshold = ctx->roulette_r * denom;
 	cumulative = 0.0;
-	chosen_idx = unvisited_count - 1;
+	chosen_idx = ctx->unvisited_count - 1;
 	idx = 0;
-	while (idx < unvisited_count)
+	while (idx < ctx->unvisited_count)
 	{
-		cumulative += candidate_scores[idx];
+		cumulative += ctx->candidate_scores[idx];
 		if (cumulative >= threshold)
 		{
 			chosen_idx = idx;
@@ -56,91 +22,148 @@ int	shared_select_next(int current, const int *unvisited_nodes,
 		}
 		idx++;
 	}
-	if (selected_index)
-		*selected_index = chosen_idx;
-	return (unvisited_nodes[chosen_idx]);
+	if (ctx->selected_index)
+		*ctx->selected_index = chosen_idx;
+	return (ctx->unvisited_nodes[chosen_idx]);
 }
 
-bool	shared_build_ant_solution(
-		t_solution *sol, int n, int k, double **tau, double **eta, double alpha,
-		double beta, int vehicle_capacity_customers, t_score_cache *score_cache,
-		unsigned int *rng_state, int *unvisited_nodes, double *candidate_scores,
-		double *random_draws)
+int	shared_select_next(t_shared_select_ctx *ctx)
 {
-	int		route_customer_cap;
-	int		i;
-	int		unvisited_count;
-	int		draw_index;
-	int		vehicle;
-	t_route	*r;
-	int		current;
-	int		assigned_customers;
-	int		remaining_vehicles;
-	int		future_capacity;
-	double	roulette_r;
-	int		selected_idx;
-	int		next;
+	const double	*score_row;
+	double			denom;
+	int				idx;
+	int				node;
+	double			score;
+
+	if (ctx->unvisited_count <= 0)
+	{
+		if (ctx->selected_index)
+			*ctx->selected_index = -1;
+		return (0);
+	}
+	score_row = score_cache_get_row(ctx->score_cache, ctx->current,
+			ctx->score_params);
+	denom = 0.0;
+	idx = 0;
+	while (idx < ctx->unvisited_count)
+	{
+		node = ctx->unvisited_nodes[idx];
+		score = 0.0;
+		if (score_row)
+			score = score_row[node];
+		else
+		{
+			score = fast_pow_nonneg(ctx->score_params->tau[ctx->current][node],
+						ctx->score_params->alpha)
+				* fast_pow_nonneg(ctx->score_params->eta[ctx->current][node],
+						ctx->score_params->beta);
+		}
+		ctx->candidate_scores[idx] = score;
+		denom += score;
+		idx++;
+	}
+	return (roulette_select(ctx, denom));
+}
+
+static void	init_build_data(t_ant_build_ctx *ctx, int *unvisited_count,
+				int *draw_index)
+{
+	int	i;
+
+	solution_reset(ctx->sol);
+	i = 0;
+	while (i < ctx->n)
+	{
+		ctx->unvisited_nodes[i] = i + 1;
+		ctx->random_draws[i] = rand01_state(ctx->rng_state);
+		i++;
+	}
+	*unvisited_count = ctx->n;
+	*draw_index = 0;
+}
+
+static void	init_select_ctx(t_shared_select_ctx *sel, t_ant_build_ctx *ctx)
+{
+	sel->unvisited_nodes = ctx->unvisited_nodes;
+	sel->score_params = ctx->score_params;
+	sel->candidate_scores = ctx->candidate_scores;
+	sel->score_cache = ctx->score_cache;
+}
+
+static bool	build_single_route(t_ant_build_ctx *ctx, int vehicle,
+				int *unvisited_count, int *draw_index)
+{
+	int					current;
+	int					assigned;
+	t_shared_select_ctx	sel;
+	int					next;
+
+	if (!route_append(&ctx->sol->routes[vehicle - 1], 0))
+		return (false);
+	current = 0;
+	assigned = 0;
+	init_select_ctx(&sel, ctx);
+	while (*unvisited_count > 0 && assigned < ctx->vehicle_capacity_customers
+		&& *unvisited_count > (ctx->k - vehicle)
+		* ctx->vehicle_capacity_customers)
+	{
+		sel.current = current;
+		sel.unvisited_count = *unvisited_count;
+		sel.roulette_r = ctx->random_draws[(*draw_index)++];
+		sel.selected_index = &current;
+		next = shared_select_next(&sel);
+		if (next <= 0)
+			break ;
+		if (!route_append(&ctx->sol->routes[vehicle - 1], next))
+			return (false);
+		assigned++;
+		ctx->unvisited_nodes[current] = ctx->unvisited_nodes[
+			--(*unvisited_count)];
+		current = next;
+	}
+	return (route_append(&ctx->sol->routes[vehicle - 1], 0));
+}
+
+static bool	append_remaining_to_last(t_ant_build_ctx *ctx,
+				int *unvisited_count)
+{
 	t_route	*last;
 	int		last_customers;
 
-	solution_reset(sol);
-	route_customer_cap = vehicle_capacity_customers;
-	if (route_customer_cap <= 0)
-		route_customer_cap = n;
-	i = 0;
-	while (i < n)
+	last = &ctx->sol->routes[ctx->k - 1];
+	if (last->len > 0 && last->nodes[last->len - 1] == 0)
+		last->len--;
+	last_customers = last->len > 0 ? (last->len - 1) : 0;
+	while (*unvisited_count > 0
+		&& last_customers < ctx->vehicle_capacity_customers)
 	{
-		unvisited_nodes[i] = i + 1;
-		random_draws[i] = rand01_state(rng_state);
-		i++;
-	}
-	unvisited_count = n;
-	draw_index = 0;
-	vehicle = 1;
-	while (vehicle <= k)
-	{
-		r = &sol->routes[vehicle - 1];
-		if (!route_append(r, 0))
+		(*unvisited_count)--;
+		if (!route_append(last, ctx->unvisited_nodes[*unvisited_count]))
 			return (false);
-		current = 0;
-		assigned_customers = 0;
-		remaining_vehicles = k - vehicle;
-		future_capacity = remaining_vehicles * route_customer_cap;
-		while (unvisited_count > 0 && unvisited_count > future_capacity &&
-assigned_customers < route_customer_cap)
-		{
-			roulette_r = random_draws[draw_index++];
-			selected_idx = -1;
-			next = shared_select_next(current, unvisited_nodes, unvisited_count,
-					tau, eta, alpha, beta, roulette_r,
-					candidate_scores, &selected_idx, score_cache);
-			if (next <= 0)
-				break ;
-			if (!route_append(r, next))
-				return (false);
-			assigned_customers++;
-			unvisited_count--;
-			unvisited_nodes[selected_idx] = unvisited_nodes[unvisited_count];
-			current = next;
-		}
-		if (!route_append(r, 0))
+		last_customers++;
+	}
+	return (route_append(last, 0));
+}
+
+bool	shared_build_ant_solution(t_ant_build_ctx *ctx)
+{
+	int		unvisited_count;
+	int		draw_index;
+	int		vehicle;
+
+	if (ctx->vehicle_capacity_customers <= 0)
+		ctx->vehicle_capacity_customers = ctx->n;
+	init_build_data(ctx, &unvisited_count, &draw_index);
+	vehicle = 1;
+	while (vehicle <= ctx->k)
+	{
+		if (!build_single_route(ctx, vehicle, &unvisited_count, &draw_index))
 			return (false);
 		vehicle++;
 	}
 	if (unvisited_count > 0)
 	{
-		last = &sol->routes[k - 1];
-		if (last->len > 0 && last->nodes[last->len - 1] == 0)
-			last->len--;
-		last_customers = last->len > 0 ? (last->len - 1) : 0;
-		while (unvisited_count > 0 && last_customers < route_customer_cap)
-		{
-			unvisited_count--;
-			if (!route_append(last, unvisited_nodes[unvisited_count]))
-				return (false);
-			last_customers++;
-		}
-		if (!route_append(last, 0))
+		if (!append_remaining_to_last(ctx, &unvisited_count))
 			return (false);
 	}
 	return (true);

@@ -23,7 +23,7 @@ static size_t	calc_matrix_stride(size_t size, size_t *total_bytes)
 	size_t	total_elems;
 
 	if (!matrix_mul_size(size, sizeof(float), &row_bytes) ||
-		!matrix_align_up(row_bytes, kParAlignment, &padded))
+		!matrix_align_up(row_bytes, par_alignment, &padded))
 		return (0);
 	*total_bytes = 0;
 	total_elems = 0;
@@ -34,13 +34,34 @@ static size_t	calc_matrix_stride(size_t size, size_t *total_bytes)
 	return (padded / sizeof(float));
 }
 
+static int	allocate_matrix_data(t_par_matrix *m, size_t size,
+				size_t total_bytes)
+{
+	int	i;
+
+	m->data = par_aligned_calloc(total_bytes);
+	m->rows = malloc(size * sizeof(float *));
+	if (!m->data || !m->rows)
+	{
+		free(m->data);
+		free(m->rows);
+		return (0);
+	}
+	i = 0;
+	while (i <= m->n)
+	{
+		m->rows[i] = m->data + (size_t)i * (size_t)m->stride;
+		i++;
+	}
+	return (1);
+}
+
 t_par_matrix	*par_matrix_create(int n)
 {
 	size_t			size;
 	size_t			total_bytes;
 	size_t			stride;
 	t_par_matrix	*m;
-	int				i;
 
 	if (n < 0)
 		return (NULL);
@@ -55,20 +76,10 @@ t_par_matrix	*par_matrix_create(int n)
 		return (NULL);
 	m->n = n;
 	m->stride = (int)stride;
-	m->data = par_aligned_calloc(total_bytes);
-	m->rows = malloc(size * sizeof(float *));
-	if (!m->data || !m->rows)
+	if (!allocate_matrix_data(m, size, total_bytes))
 	{
-		free(m->data);
-		free(m->rows);
 		free(m);
 		return (NULL);
-	}
-	i = 0;
-	while (i <= n)
-	{
-		m->rows[i] = m->data + (size_t)i * (size_t)m->stride;
-		i++;
 	}
 	return (m);
 }

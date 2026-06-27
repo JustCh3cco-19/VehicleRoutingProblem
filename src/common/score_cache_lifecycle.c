@@ -1,6 +1,19 @@
 #include "internal.h"
 #include <stdlib.h>
 
+static int	allocate_l2(t_score_cache *cache, int l2_lines)
+{
+	if (l2_lines > 0)
+	{
+		cache->l2_keys = malloc((size_t)l2_lines * sizeof(int));
+		cache->l2_rows = calloc((size_t)l2_lines * (size_t)cache->line_len,
+				sizeof(double));
+		if (!cache->l2_keys || !cache->l2_rows)
+			return (0);
+	}
+	return (1);
+}
+
 t_score_cache	*score_cache_create(int n, int l1_lines, int l2_lines)
 {
 	t_score_cache	*cache;
@@ -21,21 +34,10 @@ t_score_cache	*score_cache_create(int n, int l1_lines, int l2_lines)
 	cache->l1_keys = malloc((size_t)l1_lines * sizeof(int));
 	cache->l1_rows = calloc((size_t)l1_lines * (size_t)cache->line_len,
 			sizeof(double));
-	if (!cache->l1_keys || !cache->l1_rows)
+	if (!cache->l1_keys || !cache->l1_rows || !allocate_l2(cache, l2_lines))
 	{
 		score_cache_free(cache);
 		return (NULL);
-	}
-	if (l2_lines > 0)
-	{
-		cache->l2_keys = malloc((size_t)l2_lines * sizeof(int));
-		cache->l2_rows = calloc((size_t)l2_lines * (size_t)cache->line_len,
-				sizeof(double));
-		if (!cache->l2_keys || !cache->l2_rows)
-		{
-			score_cache_free(cache);
-			return (NULL);
-		}
 	}
 	score_cache_invalidate(cache);
 	return (cache);

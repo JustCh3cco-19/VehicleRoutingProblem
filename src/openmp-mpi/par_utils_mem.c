@@ -16,14 +16,14 @@ size_t	par_align_up(size_t value)
 	size_t	aligned;
 
 	aligned = 0;
-	if (!matrix_align_up(value, kParAlignment, &aligned))
+	if (!matrix_align_up(value, par_alignment, &aligned))
 		return (0);
 	return (aligned);
 }
 
 void	*par_aligned_calloc(size_t bytes)
 {
-	return (matrix_aligned_calloc(bytes, kParAlignment));
+	return (matrix_aligned_calloc(bytes, par_alignment));
 }
 
 bool	par_route_append(t_route *r, int node)

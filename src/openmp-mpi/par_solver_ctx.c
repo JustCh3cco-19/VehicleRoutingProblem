@@ -34,6 +34,8 @@ static void	par_populate_mats(t_par_solver_ctx *ctx)
 
 int	par_solver_alloc(t_par_solver_ctx *ctx)
 {
+	t_cand_init_params	init_params;
+
 	ctx->tau_mat = par_matrix_create(ctx->n);
 	ctx->c_mat = par_matrix_create(ctx->n);
 	if (!ctx->tau_mat || !ctx->c_mat)
@@ -43,8 +45,11 @@ int	par_solver_alloc(t_par_solver_ctx *ctx)
 		return (0);
 	}
 	par_populate_mats(ctx);
-	if (!par_shared_init(&ctx->shared, ctx->n, ctx->cand_k, ctx->c_mat,
-			ctx->beta))
+	init_params.n = ctx->n;
+	init_params.cand_k = ctx->cand_k;
+	init_params.c_mat = ctx->c_mat;
+	init_params.beta = ctx->beta;
+	if (!par_shared_init(&ctx->shared, &init_params))
 	{
 		par_matrix_free(ctx->tau_mat);
 		par_matrix_free(ctx->c_mat);

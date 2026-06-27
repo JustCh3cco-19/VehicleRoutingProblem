@@ -6,6 +6,28 @@ This document outlines the coding standards and formatting constraints that must
 
 ## Project Deviations
 
+### Compliance Scope
+
+The active norm-compliance scope is limited to production solver code:
+
+* `src/`
+* `include/`
+* `Makefile`
+* `tools/makefile/`
+
+The following directories are explicitly out of scope because they contain
+historical experiments, benchmark prototypes, generated data, or external
+workflow helpers:
+
+* `experiments/`
+* `exp_dist_calc/`
+* `instances/`
+* `results/`
+* `docs/`
+* `tools/python/`
+* `tools/bash/`
+* `tools/batch/`
+
 This repository does not enforce the traditional 42 preference for replacing
 `for` loops with `while` loops. `for` loops are allowed when they improve
 readability, especially for simple counted iteration.

@@ -25,6 +25,16 @@ struct s_seq_workspace
 };
 typedef struct s_seq_workspace	t_seq_workspace;
 
+struct s_tour_ctx
+{
+	t_seq_workspace		*ws;
+	const t_seq_shared	*shared;
+	int					k;
+	int					cap;
+	int					remaining;
+	double				**c;
+};
+
 struct s_select_ctx
 {
 	const int				*cand_row;
@@ -107,9 +117,9 @@ static inline void	visited_set(uint64_t *visited, int node)
 /* Sequential Utilities */
 enum e_seq_constants
 {
-	kSeqAcoAlignment = 64,
-	kSeqDefaultSparseCandidateCount = 64,
-	kSeqDenseCandidateLimit = 512
+	seq_aco_alignment = 64,
+	seq_default_sparse_candidate_count = 64,
+	seq_dense_candidate_limit = 512
 };
 
 size_t				seq_align_up(size_t value, size_t alignment);
@@ -117,17 +127,19 @@ void				*seq_aligned_calloc(size_t bytes);
 int					seq_clamp(int x, int lo, int hi);
 double				seq_fast_pow(double base, double exponent);
 int					seq_stride(int cols, size_t elem_size);
-int					seq_choose_candidate_count(int n, int requested_candidate_k);
+int					seq_choose_candidate_count(int n,
+						int requested_candidate_k);
 double				seq_wall_time(void);
 int					seq_is_improvement(double prev_best,
 						double new_best, double min_rel_improvement);
 int					seq_choose_auto_ants(int n);
 
 /* Sequential candidates */
-int					seq_shared_init(t_seq_shared *shared, int n, int candidate_k);
+int					seq_shared_init(t_seq_shared *shared, int n,
+						int candidate_k);
 void				seq_shared_free(t_seq_shared *shared);
-void				seq_shared_build_candidates(t_seq_shared *shared, double **c,
-						double beta);
+void				seq_shared_build_candidates(t_seq_shared *shared,
+						double **c, double beta);
 void				seq_shared_update_scores(t_seq_shared *shared,
 						double **restrict tau, double alpha);
 
@@ -135,18 +147,26 @@ void				seq_shared_update_scores(t_seq_shared *shared,
 int					seq_workspace_init(t_seq_workspace *ws, int k, int n,
 						int visited_words);
 void				seq_workspace_free(t_seq_workspace *ws);
-bool				build_ant_solution(t_seq_workspace *ws,
-						const t_seq_shared *shared, int k,
-						int vehicle_capacity_customers, double **restrict c);
+bool				build_ant_solution(t_seq_ctx *ctx);
 double				seq_rand01(unsigned int *state);
-int					find_nearest_unvisited(const t_seq_shared *shared, int current,
-						const uint64_t *restrict visited, double **restrict c);
+int					find_nearest_unvisited(const t_seq_shared *shared,
+						int current, const uint64_t *restrict visited,
+						double **restrict c);
 int					select_small(const t_seq_shared *shared, int current,
 						const uint64_t *visited, unsigned int *rng_state);
 int					select_large(const t_seq_shared *shared, int current,
 						const uint64_t *visited, unsigned int *rng_state);
-int					select_next_customer(const t_seq_shared *shared, int current,
-						const uint64_t *visited, double **c, unsigned int *rng_state);
+struct s_select_params
+{
+	const t_seq_shared		*shared;
+	int						current;
+	const uint64_t			*visited;
+	double					**c;
+	unsigned int			*rng_state;
+};
+typedef struct s_select_params	t_select_params;
+
+int					select_next_customer(t_select_params *params);
 
 /* Sequential context */
 int					allocate_ctx(t_seq_ctx *ctx);
@@ -161,11 +181,17 @@ void				clamp_pheromones(t_seq_ctx *ctx);
 void				reset_pheromones(t_seq_ctx *ctx);
 
 /* Candidates AVX2 Helpers (candidates_avx.c) */
-void				update_score_row_alpha1(const int *restrict cand_row,
-						const float *restrict eta_row, float *restrict score_row,
-						const double *restrict tau_row, int k);
-void				update_score_row_alpha2(const int *restrict cand_row,
-						const float *restrict eta_row, float *restrict score_row,
-						const double *restrict tau_row, int k);
+struct s_score_row_params
+{
+	const int				*cand_row;
+	const float				*eta_row;
+	float					*score_row;
+	const double			*tau_row;
+	int						k;
+};
+typedef struct s_score_row_params	t_score_row_params;
+
+void				update_score_row_alpha1(t_score_row_params *params);
+void				update_score_row_alpha2(t_score_row_params *params);
 
 #endif

@@ -57,7 +57,8 @@ void	par_async_wait_and_apply(t_par_async_context *ctx,
 			i = ctx->displs[r];
 			while (i < ctx->displs[r] + ctx->counts[r])
 			{
-				tau->data[ctx->recv_buf[i].edge_idx] += ctx->recv_buf[i].increment * inv;
+				tau->data[ctx->recv_buf[i].edge_idx] +=
+					ctx->recv_buf[i].increment * inv;
 				i++;
 			}
 		}

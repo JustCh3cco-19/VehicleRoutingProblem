@@ -13,8 +13,8 @@
 
 enum e_par_constants
 {
-	kParAlignment = 64,
-	kParMaxCandidates = 512
+	par_alignment = 64,
+	par_max_candidates = 512
 };
 
 struct s_par_sparse_delta
@@ -56,6 +56,58 @@ struct s_par_workspace
 };
 typedef struct s_par_workspace	t_par_workspace;
 
+struct s_par_tour_ctx
+{
+	t_par_workspace				*ws;
+	const t_par_shared			*s;
+	int							k;
+	int							cap;
+	const t_par_matrix			*c;
+	const float					*scores;
+	int							remaining;
+};
+typedef struct s_par_tour_ctx	t_par_tour_ctx;
+
+struct s_par_select_ctx
+{
+	const int					*cands;
+	const float					*sc;
+	int							t;
+	int							node;
+	float						w;
+	float						denom;
+	float						thres;
+	float						cum;
+	int							nodes[1024];
+	float						scores[1024];
+	int						count;
+};
+typedef struct s_par_select_ctx	t_par_select_ctx;
+
+struct s_nearest_state
+{
+	int			best;
+	float		best_d;
+	const float	*row;
+};
+typedef struct s_nearest_state	t_nearest_state;
+
+struct s_cand_list
+{
+	int		*nodes;
+	float	*dists;
+	int		k;
+};
+typedef struct s_cand_list	t_cand_list;
+
+struct s_cand_init_params
+{
+	int						n;
+	int						cand_k;
+	const t_par_matrix		*c_mat;
+	double					beta;
+};
+typedef struct s_cand_init_params	t_cand_init_params;
 
 # ifdef USE_MPI
 struct s_par_async_context
@@ -80,18 +132,19 @@ int					par_is_improvement(double prev_best, double new_best,
 						double min_rel_improvement);
 t_par_matrix		*par_matrix_create(int n);
 void				par_matrix_free(t_par_matrix *m);
-int					par_choose_candidate_count(int n, int requested_candidate_k);
-int					par_shared_init(t_par_shared *s, int n, int cand_k,
-						const t_par_matrix *c_mat, double beta);
+int					par_choose_candidate_count(int n,
+						int requested_candidate_k);
+int					par_shared_init(t_par_shared *s,
+						const t_cand_init_params *params);
 void				par_shared_free(t_par_shared *s);
 
-int					par_ws_init(t_par_workspace *ws, int k, int n, int words,
-						int meta_words);
+int					par_ws_init(t_par_workspace *ws, int k,
+						const t_par_shared *s);
 void				par_ws_free(t_par_workspace *ws);
 int					par_nearest_unvisited(const t_par_shared *s, int curr,
-						const t_par_workspace *ws, const t_par_matrix *c);
-bool				par_build_ant(t_par_workspace *ws, const t_par_shared *s,
-						int k, int cap, const t_par_matrix *c, const float *scores);
+						const t_par_workspace *ws,
+						const t_par_matrix *c);
+bool				par_build_ant(t_par_tour_ctx *ctx);
 double				par_solution_cost(const t_solution *s, float **c);
 
 # ifdef USE_MPI

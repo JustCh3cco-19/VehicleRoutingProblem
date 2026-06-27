@@ -253,8 +253,16 @@ static int	cli_solution_valid(t_cli_validation *validation)
 		valid = solution_validate_cvrp(&sol_validation);
 	}
 	else
-		valid = solution_validate(validation->best, validation->n,
-				validation->k, err, sizeof(err));
+	{
+		sol_validation.s = validation->best;
+		sol_validation.n = validation->n;
+		sol_validation.k = validation->k;
+		sol_validation.demands = NULL;
+		sol_validation.vehicle_capacity = 0;
+		sol_validation.err = err;
+		sol_validation.err_len = sizeof(err);
+		valid = solution_validate(&sol_validation);
+	}
 	if (!valid)
 		fprintf(stderr, "invalid solution: %s\n", err);
 	return (valid);

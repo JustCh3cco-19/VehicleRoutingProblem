@@ -23,8 +23,8 @@ void	*seq_aligned_calloc(size_t bytes)
 	size_t	alloc_bytes;
 	void	*ptr;
 
-	alloc_bytes = seq_align_up(bytes, kSeqAcoAlignment);
-	ptr = aligned_alloc(kSeqAcoAlignment, alloc_bytes);
+	alloc_bytes = seq_align_up(bytes, seq_aco_alignment);
+	ptr = aligned_alloc(seq_aco_alignment, alloc_bytes);
 	if (!ptr)
 		return (NULL);
 	memset(ptr, 0, alloc_bytes);
@@ -37,7 +37,7 @@ int	seq_stride(int cols, size_t elem_size)
 	size_t	padded;
 
 	row_bytes = (size_t)cols * elem_size;
-	padded = seq_align_up(row_bytes, kSeqAcoAlignment);
+	padded = seq_align_up(row_bytes, seq_aco_alignment);
 	return ((int)(padded / elem_size));
 }
 
@@ -59,4 +59,3 @@ double	seq_wall_time(void)
 }
 
 #endif
-

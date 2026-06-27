@@ -45,33 +45,35 @@ static void	par_solver_score_row(t_par_solver_ctx *ctx, int i)
 	}
 }
 
-static void	par_solver_ant_step(t_par_solver_ctx *ctx, t_par_workspace *ws,
-		int iter, int a, double *t_best_c)
-{
-	double	cost;
-
-	ws->rng_state = make_ant_seed(ctx->seed, iter, ctx->ant_off + a);
-	if (!par_build_ant(ws, &ctx->shared, ctx->k, ctx->cap, ctx->c_mat,
-			ctx->score_mat))
-		return ;
-	cost = par_solution_cost(ws->sol, ctx->c_mat->rows);
-	if (cost < *t_best_c)
-	{
-		*t_best_c = cost;
-		solution_copy(ws->thread_best, ws->sol);
-	}
-}
-
 void	par_solver_ants(t_par_solver_ctx *ctx, t_par_workspace *ws, int iter)
 {
 	double	t_best_c;
 	int		a;
+	double	cost;
 
 	t_best_c = DBL_MAX;
 #pragma omp for schedule(runtime) nowait
 	for (a = 0; a < ctx->local_m; a++)
 	{
-		par_solver_ant_step(ctx, ws, iter, a, &t_best_c);
+		t_par_tour_ctx	tour_ctx;
+
+		ws->rng_state = make_ant_seed(ctx->seed, iter, ctx->ant_off + a);
+		tour_ctx.ws = ws;
+		tour_ctx.s = &ctx->shared;
+		tour_ctx.k = ctx->k;
+		tour_ctx.cap = ctx->cap;
+		tour_ctx.c = ctx->c_mat;
+		tour_ctx.scores = ctx->score_mat;
+		tour_ctx.remaining = ctx->shared.n;
+		if (par_build_ant(&tour_ctx))
+		{
+			cost = par_solution_cost(ws->sol, ctx->c_mat->rows);
+			if (cost < t_best_c)
+			{
+				t_best_c = cost;
+				solution_copy(ws->thread_best, ws->sol);
+			}
+		}
 	}
 #pragma omp critical
 	{
@@ -88,6 +90,7 @@ static void	par_log_iter(t_par_solver_ctx *ctx, int iter)
 {
 	double	now;
 	double	elapsed;
+	double	remaining;
 
 	now = par_wall_time();
 	if (ctx->log_level > LOG_SILENT && ctx->mpi_rank == 0
@@ -96,10 +99,11 @@ static void	par_log_iter(t_par_solver_ctx *ctx, int iter)
 		elapsed = now - ctx->start_time;
 		if (ctx->max_runtime_sec > 0.0)
 		{
-			double remaining = ctx->max_runtime_sec - elapsed;
+			remaining = ctx->max_runtime_sec - elapsed;
 			if (remaining < 0.0)
 				remaining = 0.0;
-			fprintf(stderr, "[mpi] elapsed %.1fs, remaining %.1fs, iter %d, best %.3f\n",
+			fprintf(stderr,
+				"[mpi] elapsed %.1fs, remaining %.1fs, iter %d, best %.3f\n",
 				elapsed, remaining, iter + 1, *ctx->best_cost);
 		}
 		else

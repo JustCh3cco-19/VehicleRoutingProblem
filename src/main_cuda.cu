@@ -14,20 +14,12 @@ t_status	vrp_solve_cuda(t_solver_params *params,
 				t_solution *best_solution,
 				double *best_cost);
 
-struct s_cuda_main_ctx
-{
-	t_cli_options		options;
-	t_vrp_instance		instance;
-	float				*coords_x;
-	float				*coords_y;
-	t_solution			*best;
-	double				best_cost;
-};
-typedef struct s_cuda_main_ctx	t_cuda_main_ctx;
+
 
 static int	prepare_cuda_run(t_cuda_main_ctx *ctx)
 {
-	if (vrp_load_tsplib_instance(ctx->options.instance_path, &ctx->instance) != 0)
+	if (vrp_load_tsplib_instance(ctx->options.instance_path,
+			&ctx->instance) != 0)
 		return (0);
 	if (vrp_instance_create_float_coords(&ctx->instance, &ctx->coords_x,
 			&ctx->coords_y) != 0)

@@ -6,86 +6,71 @@
 #include <stdint.h>
 #include <string.h>
 
-struct s_par_tour_ctx
-{
-	aco_mpi_workspace_t			*ws;
-	const aco_mpi_rank_shared_t	*s;
-	int							k;
-	int							cap;
-	const aco_mpi_matrix_float_t	*c;
-	const float					*scores;
-	int							remaining;
-};
-
-struct s_par_select_ctx
-{
-	const int					*cands;
-	const float					*sc;
-	int							t;
-	int							node;
-	float						w;
-	float						denom;
-	float						thres;
-	float						cum;
-	int							nodes[1024];
-	float						scores[1024];
-	int						count;
-};
-
-static bool	par_can_extend_route(struct s_par_tour_ctx *ctx, int v,
+static bool	par_can_extend_route(t_par_tour_ctx *ctx, int v,
 				int fut_cap);
-static bool	par_append_selected(struct s_par_tour_ctx *ctx, int v, int *curr);
+static bool	par_append_selected(t_par_tour_ctx *ctx, int v, int *curr);
+
+static void	check_visited_word(const aco_mpi_rank_shared_t *s,
+				const aco_mpi_workspace_t *ws, int w,
+				struct s_nearest_state *state)
+{
+	uint64_t	mask;
+	int			base;
+	int			bits;
+	int			bit;
+	int			node;
+
+	mask = ~ws->visited[w];
+	base = w << 6;
+	if (w == s->visited_words - 1)
+	{
+		bits = (s->n % 64) + 1;
+		if (bits < 64)
+			mask &= (1ull << bits) - 1;
+	}
+	if (w == 0)
+		mask &= ~1ull;
+	while (mask != 0)
+	{
+		bit = __builtin_ctzll(mask);
+		node = base + bit;
+		if (state->row[node] < state->best_d)
+		{
+			state->best_d = state->row[node];
+			state->best = node;
+		}
+		mask &= mask - 1;
+	}
+}
 
 int	par_nearest_unvisited(const aco_mpi_rank_shared_t *s, int curr,
 		const aco_mpi_workspace_t *ws, const aco_mpi_matrix_float_t *c)
 {
-	int			best;
-	float		best_d;
-	const float	*row;
-	int			mw;
-	uint64_t	m_mask;
+	struct s_nearest_state	state;
+	int						mw;
+	uint64_t				m_mask;
+	int						w_off;
+	int						w;
 
-	best = 0;
-	best_d = FLT_MAX;
-	row = c->rows[curr];
+	state.best = 0;
+	state.best_d = FLT_MAX;
+	state.row = c->rows[curr];
 	mw = 0;
 	while (mw < s->meta_words)
 	{
 		m_mask = ws->meta_active[mw];
 		while (m_mask != 0)
 		{
-			int	w_off = __builtin_ctzll(m_mask);
-			int	w = (mw << 6) + w_off;
+			w_off = __builtin_ctzll(m_mask);
+			w = (mw << 6) + w_off;
 			if (w >= s->visited_words)
 				break ;
-			uint64_t visited = ws->visited[w];
-			uint64_t mask = ~visited;
-			int base = w << 6;
-			if (w == s->visited_words - 1)
-			{
-				int bits = (s->n % 64) + 1;
-				if (bits < 64)
-					mask &= (1ull << bits) - 1;
-			}
-			if (w == 0)
-				mask &= ~1ull;
-			while (mask != 0)
-			{
-				int bit = __builtin_ctzll(mask);
-				int node = base + bit;
-				float d = row[node];
-				if (d < best_d)
-				{
-					best_d = d;
-					best = node;
-				}
-				mask &= mask - 1;
-			}
+			check_visited_word(s, ws, w, &state);
 			m_mask &= m_mask - 1;
 		}
 		mw++;
 	}
-	return (best);
+	return (state.best);
 }
 
 static void	par_populate_small(struct s_par_tour_ctx *tour, int curr,
@@ -266,27 +251,20 @@ static bool	par_append_selected(struct s_par_tour_ctx *ctx, int v, int *curr)
 	return (true);
 }
 
-bool	par_build_ant(aco_mpi_workspace_t *ws, const aco_mpi_rank_shared_t *s,
-		int k, int cap, const aco_mpi_matrix_float_t *c, const float *scores)
+bool	par_build_ant(t_par_tour_ctx *ctx)
 {
-	struct s_par_tour_ctx	ctx;
-	int						v;
+	int	v;
 
-	solution_reset(ws->sol);
-	memset(ws->visited, 0, (size_t)s->visited_words * sizeof(uint64_t));
-	memset(ws->meta_active, 0xFF, (size_t)s->meta_words * sizeof(uint64_t));
-	memset(ws->route_loads, 0, (size_t)k * sizeof(int));
-	ctx.ws = ws;
-	ctx.s = s;
-	ctx.k = k;
-	ctx.cap = cap;
-	ctx.c = c;
-	ctx.scores = scores;
-	ctx.remaining = s->n;
+	solution_reset(ctx->ws->sol);
+	memset(ctx->ws->visited, 0, (size_t)ctx->s->visited_words
+		* sizeof(uint64_t));
+	memset(ctx->ws->meta_active, 0xFF, (size_t)ctx->s->meta_words
+		* sizeof(uint64_t));
+	memset(ctx->ws->route_loads, 0, (size_t)ctx->k * sizeof(int));
 	v = 0;
-	while (v < k)
+	while (v < ctx->k)
 	{
-		if (!par_build_vehicle_route(&ctx, v))
+		if (!par_build_vehicle_route(ctx, v))
 			return (false);
 		v++;
 	}

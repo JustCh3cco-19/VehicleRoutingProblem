@@ -1,61 +1,76 @@
 # Norm Compliance Analysis & Remaining Refactoring Plan
 
-This report tracks the remaining work needed to align the current
-`VehicleRoutingProblem` C codebase with [norm.md](norm.md). Completed refactors
-have been removed from the action plan.
+This report tracks compliance with [norm.md](norm.md) for the production
+solver scope only.
 
 ---
 
-## 1. Current Status
+## 1. Scope
 
-Several previously listed violations have already been addressed:
+Included:
 
-* Public solver entrypoints now use `t_solver_params` instead of long argument
-  lists.
-* Sequential shared/workspace/solution types use `struct s_*` and `t_*` naming.
-* `src/common/solution.c`, `src/common/instance_parser.c`,
-  `src/common/cli_common.c`, `src/common/matrix.c`, and `src/main.c` have been
-  substantially refactored toward the local norm style.
-* Wrapper/helper split files introduced during refactoring were removed; the
-  original compact file structure for `main.c` and `matrix.c` was restored.
-* The project-specific norm now explicitly allows `for` loops when they improve
-  readability, provided loop variables are declared before the loop header.
-* `experiments/` is out of scope for norm compliance cleanup.
-* CUDA remains in scope, but only after the core C code has been refined.
-* CUDA public structs were renamed from PascalCase to `struct s_*` / `t_*`.
-* CUDA header guards, constants, prototypes, return syntax, and line-width
-  issues have received an initial cleanup pass.
-* Core C return syntax has been scanned; no `return value;` occurrences remain
-  in `include/`, `src/common/`, `src/seq/`, or `src/openmp-mpi/`.
-* CUDA has been fully refactored, formatted, and validated against the local norm style.
-* CUDA public structs were renamed to `struct s_*` / `t_*`.
-* CUDA header guards, constants, prototypes, return syntax, and line-width have been cleaned and verified.
-* All CUDA-related functions now accept at most 4 parameters, declare at most 5 local variables, and are strictly under 25 lines of length.
-* Space-based indentation in CUDA files has been fully converted to real tab characters.
+* `src/`
+* `include/`
+* `Makefile`
+* `tools/makefile/`
+
+Excluded by policy:
+
+* `experiments/`
+* `exp_dist_calc/`
+* `instances/`
+* `results/`
+* `docs/`
+* `tools/python/`
+* `tools/bash/`
+* `tools/batch/`
+
+`tools/bash/check_norm_scope.sh` is the local repeatable checker for this
+scope. Run it with:
+
+```sh
+make norm
+```
 
 ---
 
-## 2. Remaining Major Violations
+## 2. Current Status
 
-| Category | Remaining Issue | Priority |
-| :--- | :--- | :--- |
-| **Function signatures** | Core C helper signatures are clean; CUDA helper signatures are fully compliant. | - |
-| **Function length** | Core C and CUDA functions are fully compliant (no functions exceed 25 lines). | - |
-| **Variable count** | Core C and CUDA functions are fully compliant (no functions exceed 5 variables). | - |
-| **Formatting** | Space indentation in CUDA files was converted to real tab characters. Inconsistent blank lines and combined declarations have been cleaned. | - |
-| **Return style** | Core C and CUDA are clean (using parenthesized return statements). | - |
-| **Line width** | Core C and CUDA are clean. | - |
-| **Naming** | Naming conforms to snake_case and `s_` / `t_` prefix rules. | - |
+The previous report claimed 100% compliance. That claim was incorrect.
+
+Confirmed:
+
+* Sequential, OpenMP-MPI, and CUDA production targets rebuild successfully.
+* `experiments/` and `exp_dist_calc/` are now explicitly outside the
+  compliance scope.
+* Core refactors already moved several context structs into headers and
+  reduced some over-wide public function signatures.
+
+Still failing:
+
+* Several production source files contain more than five function definitions.
+
+Recently fixed:
+
+* The CUDA multiline `CHECK_CUDA` macro was removed.
+* `kCamelCase` enum constants in production C headers were renamed to snake
+  case.
+* The currently reported production line-width violation was wrapped.
 
 ---
 
 ## 3. Remaining Refactoring Plan
 
-All phases of the refactoring plan have been successfully executed:
-1. **Phase 1 (Signature Cleanup)**: Complete. Struct bundling was introduced for high-arity CUDA parameters, ensuring all functions have <= 4 parameters.
-2. **Phase 2 (Function Length and Variables)**: Complete. All functions in `src/cuda` and `src/main_cuda.cu` have been decomposed into smaller helpers under 25 lines and with <= 5 local variables.
-3. **Phase 3 (Formatting Pass)**: Complete. Tabulation formatting, Allman brace style, return statements, and variable declaration placement/alignment rules have been fully satisfied.
-4. **Phase 4 (Scope Decision)**: Complete. Core C and CUDA scopes are fully compliant.
+1. Split high-density implementation files into focused modules, starting with
+   `src/cuda/kernels.cu`, `src/cuda/cuda.cu`, `src/common/solution.c`, and
+   `src/openmp-mpi/par_tour.c`.
+2. Continue splitting production C/CUDA files until each source file has at
+   most five function definitions.
+3. Re-run `make norm` after each split.
+4. Rebuild all production targets:
 
-All targets in the chosen norm scope compile and run successfully.
-
+```sh
+make -B seq
+make -B openmp_mpi
+make -B cuda
+```

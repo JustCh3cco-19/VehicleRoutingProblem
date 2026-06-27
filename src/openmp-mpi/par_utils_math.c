@@ -47,8 +47,8 @@ static int	par_clamp_candidates(int n, int k)
 {
 	if (k < 16)
 		k = 16;
-	if (k > kParMaxCandidates)
-		k = kParMaxCandidates;
+	if (k > par_max_candidates)
+		k = par_max_candidates;
 	if (k > n)
 		return (n);
 	return (k);

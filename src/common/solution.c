@@ -142,17 +142,16 @@ static void	set_err(char *err, size_t err_len, const char *msg)
 	snprintf(err, err_len, "%s", msg);
 }
 
-static bool	validate_header(const t_solution *s, int n, int k, char *err,
-		size_t err_len)
+static bool	validate_header(t_solution_validation *val)
 {
-	if (!s)
+	if (!val->s)
 	{
-		set_err(err, err_len, "solution is NULL");
+		set_err(val->err, val->err_len, "solution is NULL");
 		return (false);
 	}
-	if (s->k != k || !s->routes || n < 0 || k < 0)
+	if (val->s->k != val->k || !val->s->routes || val->n < 0 || val->k < 0)
 	{
-		set_err(err, err_len, "invalid solution metadata");
+		set_err(val->err, val->err_len, "invalid solution metadata");
 		return (false);
 	}
 	return (true);
@@ -169,29 +168,29 @@ static bool	validate_node(int node, int t, const t_route *r, bool *seen)
 	return (true);
 }
 
-static bool	validate_route(const t_route *r, int n, bool *seen, char *err,
-		size_t err_len)
+static bool	validate_route(t_solution_validation *val, const t_route *r,
+		bool *seen)
 {
 	int	node;
 	int	t;
 
 	if (r->len < 2 || r->nodes[0] != 0 || r->nodes[r->len - 1] != 0)
 	{
-		set_err(err, err_len, "route must start/end at depot 0");
+		set_err(val->err, val->err_len, "route must start/end at depot 0");
 		return (false);
 	}
 	t = 0;
 	for (; t < r->len; t++)
 	{
 		node = r->nodes[t];
-		if (node < 0 || node > n)
+		if (node < 0 || node > val->n)
 		{
-			set_err(err, err_len, "route contains out-of-range node");
+			set_err(val->err, val->err_len, "route contains out-of-range node");
 			return (false);
 		}
 		if (!validate_node(node, t, r, seen))
 		{
-			set_err(err, err_len, "invalid or repeated route node");
+			set_err(val->err, val->err_len, "invalid or repeated route node");
 			return (false);
 		}
 	}
@@ -214,36 +213,37 @@ static bool	validate_all_seen(bool *seen, int n, char *err, size_t err_len)
 	return (true);
 }
 
-bool	solution_validate(const t_solution *s, int n, int k, char *err,
-		size_t err_len)
+bool	solution_validate(t_solution_validation *val)
 {
 	bool	*seen;
 	int		i;
 	bool	valid;
 
-	set_err(err, err_len, "");
-	if (!validate_header(s, n, k, err, err_len))
+	set_err(val->err, val->err_len, "");
+	if (!validate_header(val))
 		return (false);
-	seen = calloc((size_t)(n + 1), sizeof(bool));
+	seen = (bool *)calloc((size_t)(val->n + 1), sizeof(bool));
 	if (!seen)
 	{
-		set_err(err, err_len, "allocation failure in solution_validate");
+		set_err(val->err, val->err_len,
+			"allocation failure in solution_validate");
 		return (false);
 	}
 	valid = true;
 	i = 0;
-	for (; valid && i < s->k; i++)
+	for (; valid && i < val->s->k; i++)
 	{
-		valid = validate_route(&s->routes[i], n, seen, err, err_len);
+		valid = validate_route(val, &val->s->routes[i], seen);
 	}
 	if (valid)
-		valid = validate_all_seen(seen, n, err, err_len);
+		valid = validate_all_seen(seen, val->n, val->err,
+				val->err_len);
 	free(seen);
 	return (valid);
 }
 
-static bool	validate_capacity_route(const t_route *r, const int *demands,
-		int vehicle_capacity, char *err, size_t err_len)
+static bool	validate_capacity_route(t_solution_validation *val,
+		const t_route *r)
 {
 	int	load;
 	int	node;
@@ -254,15 +254,16 @@ static bool	validate_capacity_route(const t_route *r, const int *demands,
 	for (; t + 1 < r->len; t++)
 	{
 		node = r->nodes[t];
-		if (demands[node] < 0)
+		if (val->demands[node] < 0)
 		{
-			set_err(err, err_len, "route contains customer with negative demand");
+			set_err(val->err, val->err_len,
+				"route contains customer with negative demand");
 			return (false);
 		}
-		load += demands[node];
-		if (load > vehicle_capacity)
+		load += val->demands[node];
+		if (load > val->vehicle_capacity)
 		{
-			set_err(err, err_len, "route exceeds vehicle capacity");
+			set_err(val->err, val->err_len, "route exceeds vehicle capacity");
 			return (false);
 		}
 	}
@@ -275,8 +276,7 @@ bool	solution_validate_cvrp(t_solution_validation *validation)
 
 	if (!validation)
 		return (false);
-	if (!solution_validate(validation->s, validation->n, validation->k,
-			validation->err, validation->err_len))
+	if (!solution_validate(validation))
 		return (false);
 	if (!validation->demands || validation->vehicle_capacity <= 0
 		|| validation->demands[0] != 0)
@@ -288,9 +288,7 @@ bool	solution_validate_cvrp(t_solution_validation *validation)
 	i = 0;
 	for (; i < validation->s->k; i++)
 	{
-		if (!validate_capacity_route(&validation->s->routes[i],
-				validation->demands, validation->vehicle_capacity,
-				validation->err, validation->err_len))
+		if (!validate_capacity_route(validation, &validation->s->routes[i]))
 			return (false);
 	}
 	set_err(validation->err, validation->err_len, "");
