@@ -115,7 +115,7 @@ tail -n +2 "$manifest" \
           ACO_SOLVER_REPRODUCIBILITY_MODE="$repro_mode" \
           ACO_SOLVER_IMPROVE_EPS="$improve_rel" \
           ACO_CUDA_PROFILE="$cuda_profile" \
-          ./aco_vrp_cuda.out "$instance_path" "$K" "$m" "$seed_run" 2>&1)
+          ./cuda.out "$instance_path" "$K" "$m" "$seed_run" 2>&1)
         rc=$?
 
         stats_line="$(grep -Eo '[0-9]+([.][0-9]+)?,[0-9]+' "$time_file" | tail -n1)"

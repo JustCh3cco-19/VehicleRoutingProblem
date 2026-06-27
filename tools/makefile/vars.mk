@@ -20,7 +20,7 @@ RESULTS_ROOT?=results
 PYTHON_BIN?=$(if $(wildcard .venv/bin/python),.venv/bin/python,python3)
 
 # Targets
-BIN=aco_vrp_seq.out
+BIN=seq.out
 SEQ_DIR=src/seq
 PAR_DIR=src/openmp-mpi
 COMMON_DIR=src/common
@@ -45,9 +45,9 @@ CLI_COMMON_OBJ=$(COMMON_DIR)/cli_common.o
 
 OBJ=src/main.o $(SEQ_OBJ) $(ACO_SHARED_OBJ) $(ACO_CONFIG_OBJ) $(SOLUTION_OBJ) $(MATRIX_OBJ) $(INSTANCE_PARSER_OBJ) $(CLI_COMMON_OBJ)
 
-OPENMP_MPI_BIN=aco_vrp_openmp_mpi.out
+OPENMP_MPI_BIN=openmp_mpi.out
 OPENMP_MPI_SRC=src/main.c $(PAR_SRC) $(PAR_CANDIDATES_SRC) $(PAR_SYNC_SRC) $(ACO_SHARED_SRC) $(ACO_CONFIG_SRC) $(SOLUTION_SRC) $(MATRIX_SRC) $(INSTANCE_PARSER_SRC) $(CLI_COMMON_SRC)
-CUDA_BIN=aco_vrp_cuda.out
+CUDA_BIN=cuda.out
 CUDA_MAIN_SRC=src/main_cuda.cu
 CUDA_ACO_SRC=src/cuda/cuda.cu
 CUDA_KERNELS_SRC=src/cuda/kernels.cu

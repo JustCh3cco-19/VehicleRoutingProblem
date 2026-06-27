@@ -73,7 +73,7 @@ run_seq() {
   echo "[smoke_seq] running solver"
   ACO_SOLVER_TIMEOUT_SECONDS=10 \
   ACO_SOLVER_STAGNATION_EPOCHS=10 \
-  timeout 20s "$root_dir/aco_vrp_seq.out" "$instance" 2 8 1234 > "$log" 2>&1
+  timeout 20s "$root_dir/seq.out" "$instance" 2 8 1234 > "$log" 2>&1
   check_output 2
   grep '^best cost:' "$log"
 }
@@ -97,7 +97,7 @@ run_mpi() {
   OMP_NUM_THREADS="${SMOKE_MPI_OMP_THREADS:-2}" \
   ACO_SOLVER_TIMEOUT_SECONDS=10 \
   ACO_SOLVER_STAGNATION_EPOCHS=10 \
-  timeout 20s mpirun -np "${SMOKE_MPI_RANKS:-1}" "$root_dir/aco_vrp_openmp_mpi.out" "$instance" 2 8 1234 > "$log" 2>&1
+  timeout 20s mpirun -np "${SMOKE_MPI_RANKS:-1}" "$root_dir/openmp_mpi.out" "$instance" 2 8 1234 > "$log" 2>&1
   check_output 2
   grep '^best cost:' "$log"
 }
@@ -119,7 +119,7 @@ run_cuda() {
   echo "[smoke_cuda] running solver"
   ACO_SOLVER_TIMEOUT_SECONDS=10 \
   ACO_SOLVER_STAGNATION_EPOCHS=10 \
-  timeout 20s "$root_dir/aco_vrp_cuda.out" "$instance" 2 8 1234 > "$log" 2>&1
+  timeout 20s "$root_dir/cuda.out" "$instance" 2 8 1234 > "$log" 2>&1
   check_output 2
   grep '^best cost:' "$log"
 }

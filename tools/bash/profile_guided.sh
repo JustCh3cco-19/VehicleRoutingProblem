@@ -47,11 +47,11 @@ if [ $HAS_GPROF -eq 1 ]; then
   # Run on a small/medium demo problem to generate gmon.out
   echo "  Running sequential solver..."
   ACO_SOLVER_TIMEOUT_SECONDS=5 ACO_SOLVER_STAGNATION_EPOCHS=100 \
-    "$ROOT_DIR/aco_vrp_seq.out" 200 5 16 1234 > /dev/null 2>&1 || true
+    "$ROOT_DIR/seq.out" 200 5 16 1234 > /dev/null 2>&1 || true
 
   # Run gprof and write output
   if [ -f "${ROOT_DIR}/gmon.out" ]; then
-    gprof "$ROOT_DIR/aco_vrp_seq.out" "${ROOT_DIR}/gmon.out" > "${REPORTS_DIR}/cpu_profile_gprof.txt"
+    gprof "$ROOT_DIR/seq.out" "${ROOT_DIR}/gmon.out" > "${REPORTS_DIR}/cpu_profile_gprof.txt"
     echo "  SUCCESS: CPU profile saved to reports/profile/cpu_profile_gprof.txt"
     rm -f "${ROOT_DIR}/gmon.out"
   else
@@ -75,7 +75,7 @@ if [ $HAS_GPU -eq 1 ] && { [ $HAS_NSYS -eq 1 ] || [ $HAS_NCU -eq 1 ]; }; then
       -o "${REPORTS_DIR}/nsys_cvrp_profile" \
       --force-overwrite true \
       --stats=true \
-      "$ROOT_DIR/aco_vrp_cuda.out" 100 3 16 1234 >/dev/null 2>&1 || true
+      "$ROOT_DIR/cuda.out" 100 3 16 1234 >/dev/null 2>&1 || true
     echo "  SUCCESS: Nsys report saved to reports/profile/nsys_cvrp_profile.nsys-rep"
   fi
 
@@ -85,7 +85,7 @@ if [ $HAS_GPU -eq 1 ] && { [ $HAS_NSYS -eq 1 ] || [ $HAS_NCU -eq 1 ]; }; then
     ncu \
       -o "${REPORTS_DIR}/ncu_cvrp_profile" \
       --force-overwrite \
-      "$ROOT_DIR/aco_vrp_cuda.out" 100 3 16 1234 >/dev/null 2>&1 || true
+      "$ROOT_DIR/cuda.out" 100 3 16 1234 >/dev/null 2>&1 || true
     echo "  SUCCESS: Ncu report saved to reports/profile/ncu_cvrp_profile.ncu-rep"
   fi
 else

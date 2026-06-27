@@ -8,9 +8,9 @@ from pathlib import Path
 
 # Paths
 ROOT_DIR = Path(__file__).resolve().parent.parent.parent
-SEQ_BIN = ROOT_DIR / "aco_vrp_seq.out"
-MPI_BIN = ROOT_DIR / "aco_vrp_openmp_mpi.out"
-CUDA_BIN = ROOT_DIR / "aco_vrp_cuda.out"
+SEQ_BIN = ROOT_DIR / "seq.out"
+MPI_BIN = ROOT_DIR / "openmp_mpi.out"
+CUDA_BIN = ROOT_DIR / "cuda.out"
 
 def calculate_euc2d(c1, c2):
     return math.sqrt((c1[0] - c2[0])**2 + (c1[1] - c2[1])**2)

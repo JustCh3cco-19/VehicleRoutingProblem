@@ -103,7 +103,7 @@ tail -n +2 "$manifest" \
           ACO_SOLVER_MIN_REL_IMPROVEMENT="$improve_rel" \
           ACO_SOLVER_CANDIDATE_K="$candidate_k" \
           ACO_SOLVER_REPRODUCIBILITY_MODE="$repro_mode" \
-          ./aco_vrp_seq.out "$instance_path" "$K" "$m_run" "$seed_run" 2>&1)
+          ./seq.out "$instance_path" "$K" "$m_run" "$seed_run" 2>&1)
         rc=$?
 
         stats_line="$(grep -Eo '[0-9]+([.][0-9]+)?,[0-9]+' "$stats_file" | tail -n1)"

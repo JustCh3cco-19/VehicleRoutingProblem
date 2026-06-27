@@ -104,7 +104,7 @@ tail -n +2 "$manifest" \
           ACO_SOLVER_CANDIDATE_K="$candidate_k" \
           ACO_SOLVER_REPRODUCIBILITY_MODE="$repro_mode" \
           OMP_NUM_THREADS="$omp_threads" \
-          "${launcher_cmd[@]}" ./aco_vrp_openmp_mpi.out "$instance_path" "$K" "$m" "$seed_run" </dev/null 2>&1)
+          "${launcher_cmd[@]}" ./openmp_mpi.out "$instance_path" "$K" "$m" "$seed_run" </dev/null 2>&1)
         rc=$?
 
         stats_line="$(grep -Eo '[0-9]+([.][0-9]+)?,[0-9]+' "$stats_file" | tail -n1)"

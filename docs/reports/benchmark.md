@@ -79,9 +79,9 @@ la macchina non ha memoria sufficiente per `128000` o `200000`.
 
 | Backend | Target Make | Binario | Note |
 | --- | --- | --- | --- |
-| Sequenziale | `make seq` | `aco_vrp_seq.out` | Baseline di correttezza e speedup. |
-| MPI/OpenMP | `make openmp_mpi` | `aco_vrp_openmp_mpi.out` | Backend ibrido CPU distribuito/condiviso. |
-| CUDA | `make cuda` | `aco_vrp_cuda.out` | Backend GPU; richiede GPU CUDA visibile. |
+| Sequenziale | `make seq` | `seq.out` | Baseline di correttezza e speedup. |
+| MPI/OpenMP | `make openmp_mpi` | `openmp_mpi.out` | Backend ibrido CPU distribuito/condiviso. |
+| CUDA | `make cuda` | `cuda.out` | Backend GPU; richiede GPU CUDA visibile. |
 | PyVRP | `make solve_pyvrp` | runner Python | Riferimento esterno opzionale per qualita' soluzione. |
 
 ## Parametri Solver
