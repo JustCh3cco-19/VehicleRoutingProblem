@@ -22,6 +22,9 @@ Several previously listed violations have already been addressed:
   readability, provided loop variables are declared before the loop header.
 * `experiments/` is out of scope for norm compliance cleanup.
 * CUDA remains in scope, but only after the core C code has been refined.
+* CUDA public structs were renamed from PascalCase to `struct s_*` / `t_*`.
+* CUDA header guards, constants, prototypes, return syntax, and line-width
+  issues have received an initial cleanup pass.
 * Core C return syntax has been scanned; no `return value;` occurrences remain
   in `include/`, `src/common/`, `src/seq/`, or `src/openmp-mpi/`.
 * Core C line-width scan is clean for `src/common`, `src/seq`,
@@ -37,9 +40,9 @@ Several previously listed violations have already been addressed:
 | **Function length** | Algorithm/orchestrator functions in sequential, OpenMP/MPI, CUDA, and parser/helper paths still need line-count review. | High |
 | **Variable count** | Several functions still declare more than 5 local variables. | High |
 | **Formatting** | Some files still contain declaration+initialization, inconsistent blank lines, or non-tab indentation. | Medium |
-| **Return style** | Some C/CUDA files still use `return value;` instead of `return (value);`. | Medium |
-| **Line width** | Core C line width is clean; CUDA headers/sources still need review. | Medium |
-| **Naming** | CUDA types such as `CudaParams` remain PascalCase if CUDA is included in the norm scope. | Medium |
+| **Return style** | Core C is clean; CUDA comments still mention return values in prose. | Low |
+| **Line width** | Core C is clean; CUDA sources need a final verification scan after each CUDA edit. | Medium |
+| **Naming** | CUDA PascalCase typedefs have been renamed; continue watching new CUDA API additions. | Low |
 
 ---
 
@@ -49,8 +52,7 @@ Several previously listed violations have already been addressed:
 
 1. Bundle remaining high-arity validation parameters into small context structs.
 2. Finish remaining core C helper signatures that exceed 4 parameters.
-3. After core C cleanup, rename PascalCase CUDA structs and typedefs to
-   `struct s_*` / `t_*`.
+3. Keep CUDA APIs on the new `struct s_*` / `t_*` naming convention.
 
 ### Phase 2: Audit Function Length and Variables
 
@@ -71,7 +73,7 @@ Several previously listed violations have already been addressed:
 1. Replace remaining declaration+initialization patterns where they violate
    `norm.md`.
 2. Normalize return syntax to `return (...)`.
-3. Fix remaining CUDA line-width issues during the CUDA phase.
+3. Keep CUDA line-width checks clean during the CUDA phase.
 4. Normalize indentation to real tab characters in C files under the chosen
    norm scope.
 

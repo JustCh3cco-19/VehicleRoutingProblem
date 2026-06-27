@@ -7,42 +7,42 @@
 
 __device__ static inline float cuda_rand01(unsigned int *state) {
   *state = (*state * 1664525u) + 1013904223u;
-  return (float)(*state) / 4294967295.0f;
+  return ((float)(*state) / 4294967295.0f);
 }
 
 __device__ static inline float dequantize_tau(uint8_t q, float log_min,
                                               float log_step) {
-  return expf((float)q * log_step + log_min);
+  return (expf((float)q * log_step + log_min));
 }
 
 __device__ static inline uint8_t quantize_tau(float tau, float log_min,
                                               float log_step, uint8_t q_min,
                                               uint8_t q_max) {
   if (tau <= 0.0f) {
-    return q_min;
+    return (q_min);
   }
   float log_t = logf(tau);
   float q_f = (log_t - log_min) / log_step;
   if (q_f <= (float)q_min) {
-    return q_min;
+    return (q_min);
   }
   if (q_f >= (float)q_max) {
-    return q_max;
+    return (q_max);
   }
-  return (uint8_t)roundf(q_f);
+  return ((uint8_t)roundf(q_f));
 }
 
 __device__ static inline float calc_dist(float2 a, float2 b) {
   float dx = a.x - b.x;
   float dy = a.y - b.y;
-  return sqrtf(dx * dx + dy * dy);
+  return (sqrtf(dx * dx + dy * dy));
 }
 
 __device__ static inline float cuda_warp_sum(float value) {
   for (int offset = CUDA_WARP_SIZE / 2; offset > 0; offset >>= 1) {
     value += __shfl_down_sync(0xFFFFFFFFu, value, offset);
   }
-  return value;
+  return (value);
 }
 
 __device__ static inline float cuda_warp_prefix_sum(float value, int lane) {
@@ -52,14 +52,7 @@ __device__ static inline float cuda_warp_prefix_sum(float value, int lane) {
       value += other;
     }
   }
-  return value;
-}
-
-__device__ static inline unsigned int cuda_warp_sum_u32(unsigned int value) {
-  for (int offset = CUDA_WARP_SIZE / 2; offset > 0; offset >>= 1) {
-    value += __shfl_down_sync(0xFFFFFFFFu, value, offset);
-  }
-  return value;
+  return (value);
 }
 
 __device__ static inline uint64_t cuda_relevant_mask_for_word(int word_idx,
@@ -74,13 +67,13 @@ __device__ static inline uint64_t cuda_relevant_mask_for_word(int word_idx,
   if (end_node > n) {
     int valid_bits = n - start_node + 1;
     if (valid_bits <= 0) {
-      return 0ull;
+      return (0ull);
     }
     if (valid_bits < 64) {
       mask &= ((1ull << valid_bits) - 1ull);
     }
   }
-  return mask;
+  return (mask);
 }
 
 
@@ -109,7 +102,7 @@ __global__ void kernel_evaporate_tau(uint8_t *d_tau, uint64_t total_elements,
 __global__ void kernel_build_candidate_lists(const float2 *d_coords,
                                                 int *d_candidate_idx,
                                                 float *d_eta_beta,
-                                                CudaParams params) {
+                                                t_cuda_params params) {
   int i = blockIdx.x * blockDim.x + threadIdx.x;
   int cand_k = params.cand_k;
 
@@ -167,8 +160,8 @@ __global__ void kernel_reset_ant_state(int *d_routes,
                                           uint64_t *d_visited_l1,
                                           uint64_t *d_visited_l2,
                                           unsigned int *d_rng_states,
-                                          CudaAntSummary *d_ant_summary,
-                                          CudaParams params,
+                                          t_cuda_ant_summary *d_ant_summary,
+                                          t_cuda_params params,
                                           unsigned int seed) {
   int ant = blockIdx.x * blockDim.x + threadIdx.x;
   if (ant >= params.m) {
@@ -202,7 +195,7 @@ __device__ static int select_from_candidates(int current,
                                                 const float *d_eta_beta,
                                                 const uint64_t *visited_l1,
                                                 unsigned int *rng_state,
-                                                CudaParams params,
+                                                t_cuda_params params,
                                                 float *total_score_out) {
   int lane = threadIdx.x & (CUDA_WARP_SIZE - 1);
   int base = current * params.cand_k;
@@ -218,7 +211,8 @@ __device__ static int select_from_candidates(int current,
       if ((visited_l1[word_idx] & mask) == 0) {
         uint64_t tau_idx = (uint64_t)current * (params.n + 1) + candidate;
         uint8_t q_tau = d_tau[tau_idx];
-        float tau = dequantize_tau(q_tau, params.log_tau_min, params.log_tau_step);
+        float tau = dequantize_tau(q_tau, params.log_tau_min,
+                                   params.log_tau_step);
         float tau_term = powf(tau, params.alpha);
         score = tau_term * d_eta_beta[base + lane];
       }
@@ -232,7 +226,7 @@ __device__ static int select_from_candidates(int current,
   }
 
   if (total <= 0.0f) {
-    return -1;
+    return (-1);
   }
 
   float threshold = 0.0f;
@@ -242,15 +236,16 @@ __device__ static int select_from_candidates(int current,
   threshold = __shfl_sync(0xFFFFFFFFu, threshold, 0);
 
   float prefix = cuda_warp_prefix_sum(score, lane);
-  int selected = (score > 0.0f && prefix >= threshold && (prefix - score) < threshold);
+  int selected = (score > 0.0f && prefix >= threshold &&
+                  (prefix - score) < threshold);
   unsigned int mask_sel = __ballot_sync(0xFFFFFFFFu, selected);
 
   if (mask_sel != 0u) {
     int chosen_lane = __ffs((int)mask_sel) - 1;
-    return __shfl_sync(0xFFFFFFFFu, candidate, chosen_lane);
+    return (__shfl_sync(0xFFFFFFFFu, candidate, chosen_lane));
   }
 
-  return -1;
+  return (-1);
 }
 
 __device__ static int select_global_fallback(int current,
@@ -259,8 +254,8 @@ __device__ static int select_global_fallback(int current,
                                                 const uint64_t *visited_l1,
                                                 const uint64_t *visited_l2,
                                                 unsigned int *rng_state,
-                                                CudaParams params,
-                                                CudaIterStats *d_iter_stats,
+                                                t_cuda_params params,
+                                                t_cuda_iter_stats *d_iter_stats,
                                                 float *total_score_out) {
   int lane = threadIdx.x & (CUDA_WARP_SIZE - 1);
   float local_sum = 0.0f;
@@ -273,7 +268,10 @@ __device__ static int select_global_fallback(int current,
   int groups_scanned = 0;
   int nodes_scored = 0;
 
-  int word_chunks = (params.visited_l1_words + CUDA_WARP_SIZE - 1) / CUDA_WARP_SIZE;
+  int word_chunks;
+
+  word_chunks = (params.visited_l1_words + CUDA_WARP_SIZE - 1)
+      / CUDA_WARP_SIZE;
   float2 p_curr = d_coords[current];
 
 
@@ -288,7 +286,9 @@ __device__ static int select_global_fallback(int current,
 
       if ((visited_l2[l2_word] & l2_mask) == 0) {
         groups_scanned++;
-        uint64_t relevant_mask = cuda_relevant_mask_for_word(word_idx, params.n);
+        uint64_t relevant_mask;
+
+        relevant_mask = cuda_relevant_mask_for_word(word_idx, params.n);
         free_mask = (~visited_l1[word_idx]) & relevant_mask;
       }
     }
@@ -315,7 +315,8 @@ __device__ static int select_global_fallback(int current,
 
         uint64_t tau_idx = (uint64_t)current * (params.n + 1) + node;
         uint8_t q_tau = d_tau[tau_idx];
-        float tau = dequantize_tau(q_tau, params.log_tau_min, params.log_tau_step);
+        float tau = dequantize_tau(q_tau, params.log_tau_min,
+                                   params.log_tau_step);
 
         float weight = powf(tau, params.alpha) * powf(eta, params.beta);
 
@@ -365,16 +366,18 @@ __device__ static int select_global_fallback(int current,
   }
 
   if (lane == 0 && d_iter_stats) {
-    atomicAdd(&(d_iter_stats->fallback_word_groups_scanned), (unsigned long long)total_groups);
-    atomicAdd(&(d_iter_stats->fallback_nodes_scored), (unsigned long long)total_nodes);
+    atomicAdd(&(d_iter_stats->fallback_word_groups_scanned),
+              (unsigned long long)total_groups);
+    atomicAdd(&(d_iter_stats->fallback_nodes_scored),
+              (unsigned long long)total_nodes);
   }
 
   int global_selected = __shfl_sync(0xFFFFFFFFu, current_node, 0);
 
   if (total_sum <= 0.0f) {
-    return -1;
+    return (-1);
   }
-  return global_selected;
+  return (global_selected);
 }
 
 __global__ void kernel_construct_solutions(const float2 *d_coords,
@@ -386,9 +389,9 @@ __global__ void kernel_construct_solutions(const float2 *d_coords,
                                               uint64_t *d_visited_l1,
                                               uint64_t *d_visited_l2,
                                               unsigned int *d_rng_states,
-                                              CudaAntSummary *d_ant_summary,
-                                              CudaIterStats *d_iter_stats,
-                                              CudaParams params) {
+                                              t_cuda_ant_summary *d_ant_summary,
+                                              t_cuda_iter_stats *d_iter_stats,
+                                              t_cuda_params params) {
   int lane = threadIdx.x & (CUDA_WARP_SIZE - 1);
   int ant = (blockIdx.x * blockDim.x + threadIdx.x) / CUDA_WARP_SIZE;
 
@@ -430,14 +433,20 @@ __global__ void kernel_construct_solutions(const float2 *d_coords,
 
       int chosen_from_fallback = 0;
       float score_cand = 0.0f;
-      int move = select_from_candidates(current_b, d_tau, d_candidate_idx, d_eta_beta, l1_row, &rng_state, params, &score_cand);
+      int move = select_from_candidates(current_b, d_tau, d_candidate_idx,
+                                        d_eta_beta, l1_row, &rng_state, params,
+                                        &score_cand);
 
       if (move <= 0) {
-        move = select_global_fallback(current_b, d_coords, d_tau, l1_row, l2_row, &rng_state, params, d_iter_stats, &score_cand);
+        move = select_global_fallback(current_b, d_coords, d_tau, l1_row,
+                                      l2_row, &rng_state, params,
+                                      d_iter_stats, &score_cand);
         chosen_from_fallback = 1;
       }
 
-      int close_allowed = (remaining_b <= (params.k - vehicle - 1) * params.cap);
+      int close_allowed;
+
+      close_allowed = (remaining_b <= (params.k - vehicle - 1) * params.cap);
       if (close_allowed && lane == 0 && d_iter_stats) {
         atomicAdd(&(d_iter_stats->depot_offer_calls), 1ULL);
       }
@@ -547,7 +556,7 @@ __global__ void kernel_deposit_solution(uint8_t *d_tau,
                                            const int *d_route_lengths,
                                            float deposit_amount,
                                            int best_ant,
-                                           CudaParams params) {
+                                           t_cuda_params params) {
   int veh_idx = blockIdx.x * blockDim.x + threadIdx.x;
 
   if (veh_idx >= params.k) {
@@ -568,9 +577,12 @@ __global__ void kernel_deposit_solution(uint8_t *d_tau,
 
     uint64_t tau_idx = (uint64_t)prev * (params.n + 1) + curr;
     uint8_t old_q = d_tau[tau_idx];
-    float old_tau = dequantize_tau(old_q, params.log_tau_min, params.log_tau_step);
+    float old_tau = dequantize_tau(old_q, params.log_tau_min,
+                                   params.log_tau_step);
     float new_tau = old_tau + deposit_amount;
-    uint8_t new_q = quantize_tau(new_tau, params.log_tau_min, params.log_tau_step, params.q_tau_min, params.q_tau_max);
+    uint8_t new_q = quantize_tau(new_tau, params.log_tau_min,
+                                 params.log_tau_step, params.q_tau_min,
+                                 params.q_tau_max);
 
     atomicMax_uint8(&d_tau[tau_idx], new_q);
 
@@ -585,7 +597,7 @@ __global__ void kernel_deposit_flat_solution(uint8_t *d_tau,
                                                 const int *d_flat_routes,
                                                 const int *d_flat_lengths,
                                                 float deposit_amount,
-                                                CudaParams params) {
+                                                t_cuda_params params) {
   int veh_idx = blockIdx.x * blockDim.x + threadIdx.x;
 
   if (veh_idx >= params.k) {
@@ -603,9 +615,12 @@ __global__ void kernel_deposit_flat_solution(uint8_t *d_tau,
 
     uint64_t tau_idx = (uint64_t)prev * (params.n + 1) + curr;
     uint8_t old_q = d_tau[tau_idx];
-    float old_tau = dequantize_tau(old_q, params.log_tau_min, params.log_tau_step);
+    float old_tau = dequantize_tau(old_q, params.log_tau_min,
+                                   params.log_tau_step);
     float new_tau = old_tau + deposit_amount;
-    uint8_t new_q = quantize_tau(new_tau, params.log_tau_min, params.log_tau_step, params.q_tau_min, params.q_tau_max);
+    uint8_t new_q = quantize_tau(new_tau, params.log_tau_min,
+                                 params.log_tau_step, params.q_tau_min,
+                                 params.q_tau_max);
 
     atomicMax_uint8(&d_tau[tau_idx], new_q);
 
@@ -633,7 +648,7 @@ void launch_evaporate_tau(uint8_t *d_tau, int n, uint8_t delta,
 }
 
 void launch_build_candidate_lists(const float2 *d_coords, int *d_candidate_idx,
-                                  float *d_eta_beta, CudaParams params) {
+                                  float *d_eta_beta, t_cuda_params params) {
   int total = params.n + 1;
   int blocks = (total + CUDA_THREADS_PER_BLOCK - 1) / CUDA_THREADS_PER_BLOCK;
   kernel_build_candidate_lists<<<blocks, CUDA_THREADS_PER_BLOCK>>>(
@@ -643,8 +658,8 @@ void launch_build_candidate_lists(const float2 *d_coords, int *d_candidate_idx,
 void launch_reset_ant_state(int *d_routes, int *d_route_lengths,
                             uint64_t *d_visited_l1, uint64_t *d_visited_l2,
                             unsigned int *d_rng_states,
-                            CudaAntSummary *d_ant_summary, CudaParams params,
-                            unsigned int seed) {
+                            t_cuda_ant_summary *d_ant_summary,
+                            t_cuda_params params, unsigned int seed) {
   int blocks = (params.m + CUDA_THREADS_PER_BLOCK - 1) / CUDA_THREADS_PER_BLOCK;
   kernel_reset_ant_state<<<blocks, CUDA_THREADS_PER_BLOCK>>>(
       d_routes, d_route_lengths, d_visited_l1, d_visited_l2, d_rng_states,
@@ -657,9 +672,9 @@ void launch_construct_solutions(const float2 *d_coords, const uint8_t *d_tau,
                                 int *d_route_lengths, uint64_t *d_visited_l1,
                                 uint64_t *d_visited_l2,
                                 unsigned int *d_rng_states,
-                                CudaAntSummary *d_ant_summary,
-                                CudaIterStats *d_iter_stats,
-                                CudaParams params) {
+                                t_cuda_ant_summary *d_ant_summary,
+                                t_cuda_iter_stats *d_iter_stats,
+                                t_cuda_params params) {
   int warps_per_block = CUDA_THREADS_PER_BLOCK / CUDA_WARP_SIZE;
   int blocks = (params.m + warps_per_block - 1) / warps_per_block;
   kernel_construct_solutions<<<blocks, CUDA_THREADS_PER_BLOCK>>>(
@@ -670,7 +685,7 @@ void launch_construct_solutions(const float2 *d_coords, const uint8_t *d_tau,
 
 void launch_deposit_solution(uint8_t *d_tau, const int *d_routes,
                              const int *d_route_lengths, float deposit_amount,
-                             int best_ant, CudaParams params) {
+                             int best_ant, t_cuda_params params) {
   int blocks = (params.k + CUDA_THREADS_PER_BLOCK - 1) / CUDA_THREADS_PER_BLOCK;
   kernel_deposit_solution<<<blocks, CUDA_THREADS_PER_BLOCK>>>(
       d_tau, d_routes, d_route_lengths, deposit_amount, best_ant, params);
@@ -678,7 +693,7 @@ void launch_deposit_solution(uint8_t *d_tau, const int *d_routes,
 
 void launch_deposit_flat_solution(uint8_t *d_tau, const int *d_flat_routes,
                                   const int *d_flat_lengths,
-                                  float deposit_amount, CudaParams params) {
+                                  float deposit_amount, t_cuda_params params) {
   int blocks = (params.k + CUDA_THREADS_PER_BLOCK - 1) / CUDA_THREADS_PER_BLOCK;
   kernel_deposit_flat_solution<<<blocks, CUDA_THREADS_PER_BLOCK>>>(
       d_tau, d_flat_routes, d_flat_lengths, deposit_amount, params);

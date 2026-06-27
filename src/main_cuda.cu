@@ -112,5 +112,5 @@ cleanup:
   vrp_instance_free(&instance);
   free(coords_x);
   free(coords_y);
-  return status;
+  return (status);
 }
