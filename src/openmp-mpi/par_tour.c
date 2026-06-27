@@ -32,6 +32,10 @@ struct s_par_select_ctx
 	int						count;
 };
 
+static bool	par_can_extend_route(struct s_par_tour_ctx *ctx, int v,
+				int fut_cap);
+static bool	par_append_selected(struct s_par_tour_ctx *ctx, int v, int *curr);
+
 int	par_nearest_unvisited(const aco_mpi_rank_shared_t *s, int curr,
 		const aco_mpi_workspace_t *ws, const aco_mpi_matrix_float_t *c)
 {
@@ -207,7 +211,6 @@ static int	par_select_next(struct s_par_tour_ctx *ctx, int curr)
 static bool	par_build_vehicle_route(struct s_par_tour_ctx *ctx, int v)
 {
 	int	curr;
-	int	next;
 	int	rem_v;
 	int	fut_cap;
 
@@ -218,25 +221,48 @@ static bool	par_build_vehicle_route(struct s_par_tour_ctx *ctx, int v)
 	{
 		rem_v = ctx->k - v - 1;
 		fut_cap = rem_v * ctx->cap;
-		if (!(ctx->remaining > 0 && ctx->remaining > fut_cap
-			&& ctx->ws->route_loads[v] < ctx->cap))
+		if (!par_can_extend_route(ctx, v, fut_cap))
 			break ;
-		next = par_select_next(ctx, curr);
-		if (next <= 0)
+		if (!par_append_selected(ctx, v, &curr))
 			break ;
-		if (!par_route_append(&ctx->ws->sol->routes[v], next))
-			return (false);
-		ctx->ws->visited[(unsigned)next >> 6] |= (1ull
-				<< ((unsigned)next & 63u));
-		if (ctx->ws->visited[(unsigned)next >> 6] == 0xFFFFFFFFFFFFFFFFull)
-			ctx->ws->meta_active[(unsigned)next >> 12] &= ~(1ull
-					<< (((unsigned)next >> 6) & 63u));
-		ctx->ws->route_loads[v]++;
-		ctx->remaining--;
-		curr = next;
 	}
 	if (!par_route_append(&ctx->ws->sol->routes[v], 0))
 		return (false);
+	return (true);
+}
+
+static bool	par_can_extend_route(struct s_par_tour_ctx *ctx, int v,
+		int fut_cap)
+{
+	if (ctx->remaining <= 0)
+		return (false);
+	if (ctx->remaining <= fut_cap)
+		return (false);
+	return (ctx->ws->route_loads[v] < ctx->cap);
+}
+
+static void	par_mark_visited(struct s_par_tour_ctx *ctx, int next)
+{
+	ctx->ws->visited[(unsigned)next >> 6] |= (1ull
+			<< ((unsigned)next & 63u));
+	if (ctx->ws->visited[(unsigned)next >> 6] == 0xFFFFFFFFFFFFFFFFull)
+		ctx->ws->meta_active[(unsigned)next >> 12] &= ~(1ull
+				<< (((unsigned)next >> 6) & 63u));
+}
+
+static bool	par_append_selected(struct s_par_tour_ctx *ctx, int v, int *curr)
+{
+	int	next;
+
+	next = par_select_next(ctx, *curr);
+	if (next <= 0)
+		return (false);
+	if (!par_route_append(&ctx->ws->sol->routes[v], next))
+		return (false);
+	par_mark_visited(ctx, next);
+	ctx->ws->route_loads[v]++;
+	ctx->remaining--;
+	*curr = next;
 	return (true);
 }
 

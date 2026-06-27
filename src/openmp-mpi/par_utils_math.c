@@ -6,12 +6,13 @@
 #include <stdlib.h>
 #include <string.h>
 
+static long	par_cache_unit_multiplier(char *buf);
+
 static long	par_get_l3_cache_size(void)
 {
 	FILE	*f;
 	char	buf[64];
 	long	size;
-	char	*unit;
 
 	f = fopen("/sys/devices/system/cpu/cpu0/cache/index3/size", "r");
 	if (!f)
@@ -23,17 +24,41 @@ static long	par_get_l3_cache_size(void)
 	}
 	fclose(f);
 	size = atol(buf);
+	return (size * par_cache_unit_multiplier(buf));
+}
+
+static long	par_cache_unit_multiplier(char *buf)
+{
+	char	*unit;
+
 	unit = strpbrk(buf, "KMGTkmgt");
-	if (unit)
-	{
-		if (*unit == 'k' || *unit == 'k')
-			size *= 1024;
-		else if (*unit == 'M' || *unit == 'm')
-			size *= 1024 * 1024;
-		else if (*unit == 'G' || *unit == 'g')
-			size *= 1024 * 1024 * 1024;
-	}
-	return (size);
+	if (!unit)
+		return (1);
+	if (*unit == 'k' || *unit == 'K')
+		return (1024);
+	if (*unit == 'M' || *unit == 'm')
+		return (1024 * 1024);
+	if (*unit == 'G' || *unit == 'g')
+		return (1024 * 1024 * 1024);
+	return (1);
+}
+
+static int	par_clamp_candidates(int n, int k)
+{
+	if (k < 16)
+		k = 16;
+	if (k > kParMaxCandidates)
+		k = kParMaxCandidates;
+	if (k > n)
+		return (n);
+	return (k);
+}
+
+static int	par_default_candidates(int n)
+{
+	if (n < 32)
+		return (n);
+	return (32);
 }
 
 int	par_choose_candidate_count(int n, int requested_candidate_k)
@@ -43,27 +68,13 @@ int	par_choose_candidate_count(int n, int requested_candidate_k)
 	int		k;
 
 	if (requested_candidate_k > 0)
-	{
-		if (requested_candidate_k > n)
-			return (n);
-		return (requested_candidate_k);
-	}
+		return (par_clamp_candidates(n, requested_candidate_k));
 	l3_size = par_get_l3_cache_size();
 	if (l3_size <= 0)
-	{
-		if (n < 32)
-			return (n);
-		return (32);
-	}
+		return (par_default_candidates(n));
 	target_bytes = (double)l3_size * 0.7;
 	k = (int)(target_bytes / ((double)(n + 1) * 8.0));
-	if (k < 16)
-		k = 16;
-	if (k > kParMaxCandidates)
-		k = kParMaxCandidates;
-	if (k > n)
-		return (n);
-	return (k);
+	return (par_clamp_candidates(n, k));
 }
 
 float	par_fast_powf(float base, float exp)

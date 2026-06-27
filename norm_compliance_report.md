@@ -59,9 +59,9 @@ Several previously listed violations have already been addressed:
    * `src/common/instance_parser.c`: parser helpers require final verification
    * `src/seq`: primary runner/epoch/context/tour functions have been split
      and no longer appear in the >25-line scan
-   * `src/openmp-mpi`: `par_solver_init`, `par_solver_scores`,
-     `par_solver_reduce_best`, `par_build_vehicle_route`,
-     `par_get_l3_cache_size`, `par_choose_candidate_count`
+   * `src/openmp-mpi`: solver loop, init, epoch, tour, and math helpers have
+     been split and no longer appear in the >25-line scan
+   * Current core C >25-line scan is clean
 2. Split only large or complex files/functions; do not split compact utility
    files solely because they exceed 5 functions.
 3. Reduce local variable count where functions still exceed 5 declarations.

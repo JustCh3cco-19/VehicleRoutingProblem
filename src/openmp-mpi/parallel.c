@@ -10,34 +10,55 @@
 # include <mpi.h>
 #endif
 
+static int	par_epoch_should_stop(t_par_solver_ctx *ctx, int iter);
+static void	par_epoch_step(t_par_solver_ctx *ctx, t_par_workspace *ws,
+				int iter);
+
 static void	par_solver_epoch_loop(t_par_solver_ctx *ctx, t_par_workspace *ws)
 {
 	int	iter;
 
 	iter = 0;
-	while (1)
+	while (!par_epoch_should_stop(ctx, iter))
 	{
-		if (ctx->fixed_epochs > 0 && iter >= ctx->fixed_epochs)
-			break ;
-		if (ctx->fixed_epochs <= 0
-			&& ctx->iter_since_best >= ctx->max_stagnation_epochs)
-			break ;
-		if (ctx->max_runtime_sec > 0.0 && (par_wall_time() - ctx->start_time)
-			>= ctx->max_runtime_sec)
-			break ;
-#ifdef USE_MPI
-#pragma omp master
-		par_async_wait_and_apply(&ctx->async_ctx, ctx->tau_mat, ctx->mpi_rank,
-			ctx->mpi_size);
-#pragma omp barrier
-#endif
-		par_solver_scores(ctx);
-		par_solver_ants(ctx, ws, iter);
-		par_solver_reduce_best(ctx, iter);
-		par_solver_evaporate(ctx);
-		par_solver_deposit(ctx);
+		par_epoch_step(ctx, ws, iter);
 		iter++;
 	}
+}
+
+static int	par_epoch_should_stop(t_par_solver_ctx *ctx, int iter)
+{
+	if (ctx->fixed_epochs > 0 && iter >= ctx->fixed_epochs)
+		return (1);
+	if (ctx->fixed_epochs <= 0
+		&& ctx->iter_since_best >= ctx->max_stagnation_epochs)
+		return (1);
+	if (ctx->max_runtime_sec > 0.0 && (par_wall_time() - ctx->start_time)
+		>= ctx->max_runtime_sec)
+		return (1);
+	return (0);
+}
+
+static void	par_epoch_sync(t_par_solver_ctx *ctx)
+{
+#ifdef USE_MPI
+#pragma omp master
+	par_async_wait_and_apply(&ctx->async_ctx, ctx->tau_mat, ctx->mpi_rank,
+		ctx->mpi_size);
+#pragma omp barrier
+#else
+	(void)ctx;
+#endif
+}
+
+static void	par_epoch_step(t_par_solver_ctx *ctx, t_par_workspace *ws, int iter)
+{
+	par_epoch_sync(ctx);
+	par_solver_scores(ctx);
+	par_solver_ants(ctx, ws, iter);
+	par_solver_reduce_best(ctx, iter);
+	par_solver_evaporate(ctx);
+	par_solver_deposit(ctx);
 }
 
 void	par_solver_thread_run(t_par_solver_ctx *ctx)

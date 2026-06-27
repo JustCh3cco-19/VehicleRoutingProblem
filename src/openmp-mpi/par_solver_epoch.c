@@ -5,9 +5,22 @@
 #include <math.h>
 #include <stdio.h>
 
+static void	par_solver_score_row(t_par_solver_ctx *ctx, int i);
+static void	par_reduce_best_master(t_par_solver_ctx *ctx, int iter);
+static void	par_reduce_min(t_par_solver_ctx *ctx, double *g_min);
+
 void	par_solver_scores(t_par_solver_ctx *ctx)
 {
 	int			i;
+
+#pragma omp for schedule(static) nowait
+	for (i = 0; i <= ctx->n; i++)
+		par_solver_score_row(ctx, i);
+#pragma omp barrier
+}
+
+static void	par_solver_score_row(t_par_solver_ctx *ctx, int i)
+{
 	int			*cands;
 	float		*etas;
 	float		*sc;
@@ -15,26 +28,21 @@ void	par_solver_scores(t_par_solver_ctx *ctx)
 	int			t;
 	int			node;
 
-#pragma omp for schedule(static) nowait
-	for (i = 0; i <= ctx->n; i++)
+	cands = ctx->shared.cand_idx + (size_t)i * (size_t)ctx->shared.stride;
+	etas = ctx->shared.eta_beta + (size_t)i * (size_t)ctx->shared.stride;
+	sc = ctx->score_mat + (size_t)i * (size_t)ctx->shared.stride;
+	tau_row = ctx->tau_mat->rows[i];
+	t = 0;
+	while (t < ctx->shared.cand_k)
 	{
-		cands = ctx->shared.cand_idx + (size_t)i * (size_t)ctx->shared.stride;
-		etas = ctx->shared.eta_beta + (size_t)i * (size_t)ctx->shared.stride;
-		sc = ctx->score_mat + (size_t)i * (size_t)ctx->shared.stride;
-		tau_row = ctx->tau_mat->rows[i];
-		t = 0;
-		while (t < ctx->shared.cand_k)
-		{
-			node = cands[t];
-			if (node > 0)
-				sc[t] = par_fast_powf(tau_row[node], (float)ctx->alpha)
-					* etas[t];
-			else
-				sc[t] = 0.0f;
-			t++;
-		}
+		node = cands[t];
+		if (node > 0)
+			sc[t] = par_fast_powf(tau_row[node], (float)ctx->alpha)
+				* etas[t];
+		else
+			sc[t] = 0.0f;
+		t++;
 	}
-#pragma omp barrier
 }
 
 static void	par_solver_ant_step(t_par_solver_ctx *ctx, t_par_workspace *ws,
@@ -106,30 +114,39 @@ static void	par_log_iter(t_par_solver_ctx *ctx, int iter)
 void	par_solver_reduce_best(t_par_solver_ctx *ctx, int iter)
 {
 #pragma omp master
-	{
-		double	g_min;
-
-		g_min = ctx->iter_best_cost_g;
-#ifdef USE_MPI
-		if (ctx->mpi_size > 1)
-		{
-			MPI_Allreduce(MPI_IN_PLACE, &g_min, 1, MPI_DOUBLE, MPI_MIN,
-				MPI_COMM_WORLD);
-		}
-#endif
-		if (par_is_improvement(*ctx->best_cost, g_min,
-				ctx->min_rel_improvement))
-			ctx->iter_since_best = 0;
-		else
-			ctx->iter_since_best++;
-		if (g_min < *ctx->best_cost)
-		{
-			*ctx->best_cost = g_min;
-			solution_copy(ctx->best_sol, ctx->iter_best_sol_rank);
-		}
-		par_log_iter(ctx, iter);
-		ctx->iter_best_cost_g = DBL_MAX;
-		ctx->rank_delta_count = 0;
-	}
+	par_reduce_best_master(ctx, iter);
 #pragma omp barrier
+}
+
+static void	par_reduce_best_master(t_par_solver_ctx *ctx, int iter)
+{
+	double	g_min;
+
+	g_min = ctx->iter_best_cost_g;
+	par_reduce_min(ctx, &g_min);
+	if (par_is_improvement(*ctx->best_cost, g_min,
+			ctx->min_rel_improvement))
+		ctx->iter_since_best = 0;
+	else
+		ctx->iter_since_best++;
+	if (g_min < *ctx->best_cost)
+	{
+		*ctx->best_cost = g_min;
+		solution_copy(ctx->best_sol, ctx->iter_best_sol_rank);
+	}
+	par_log_iter(ctx, iter);
+	ctx->iter_best_cost_g = DBL_MAX;
+	ctx->rank_delta_count = 0;
+}
+
+static void	par_reduce_min(t_par_solver_ctx *ctx, double *g_min)
+{
+#ifdef USE_MPI
+	if (ctx->mpi_size > 1)
+		MPI_Allreduce(MPI_IN_PLACE, g_min, 1, MPI_DOUBLE, MPI_MIN,
+			MPI_COMM_WORLD);
+#else
+	(void)ctx;
+	(void)g_min;
+#endif
 }
