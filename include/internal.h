@@ -51,7 +51,7 @@ struct s_aco_thread_workspace
 };
 typedef struct s_aco_thread_workspace	t_thread_workspace;
 
-/* Shared Helpers & Legacy Solver (shared.c, shared_solver.c, score_cache.c, score_cache_lifecycle.c) */
+/* Shared helpers */
 double				fast_pow_nonneg(double base, double exponent);
 const double		*score_cache_get_row(t_score_cache *cache, int current,
 						double **tau, double **eta, double alpha, double beta);

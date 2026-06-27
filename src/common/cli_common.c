@@ -229,29 +229,46 @@ void	cli_print_solution_cost(double best_cost)
 	printf("best cost: %.3f\n", best_cost);
 }
 
-static int	cli_solution_valid(const t_solution *best, int n, int k,
-		const int *demands, int vehicle_capacity)
+static void	fill_solution_validation(t_solution_validation *dst,
+		t_cli_validation *src, char *err)
 {
-	char	err[160];
-	int		valid;
+	dst->s = src->best;
+	dst->n = src->n;
+	dst->k = src->k;
+	dst->demands = src->demands;
+	dst->vehicle_capacity = src->vehicle_capacity;
+	dst->err = err;
+	dst->err_len = 160;
+}
 
-	if (demands)
-		valid = solution_validate_cvrp(best, n, k, demands,
-				vehicle_capacity, err, sizeof(err));
+static int	cli_solution_valid(t_cli_validation *validation)
+{
+	t_solution_validation	sol_validation;
+	char					err[160];
+	int						valid;
+
+	if (validation->demands)
+	{
+		fill_solution_validation(&sol_validation, validation, err);
+		valid = solution_validate_cvrp(&sol_validation);
+	}
 	else
-		valid = solution_validate(best, n, k, err, sizeof(err));
+		valid = solution_validate(validation->best, validation->n,
+				validation->k, err, sizeof(err));
 	if (!valid)
 		fprintf(stderr, "invalid solution: %s\n", err);
 	return (valid);
 }
 
-int	cli_validate_solution_or_report(const t_solution *best, int n, int k,
-		const int *demands, int vehicle_capacity, double best_cost)
+int	cli_validate_solution_or_report(t_cli_validation *validation)
 {
-	if (!isfinite(best_cost) || best_cost <= 0.0)
+	if (!validation)
+		return (0);
+	if (!isfinite(validation->best_cost) || validation->best_cost <= 0.0)
 	{
-		fprintf(stderr, "invalid solution cost: %.12g\n", best_cost);
+		fprintf(stderr, "invalid solution cost: %.12g\n",
+			validation->best_cost);
 		return (0);
 	}
-	return (cli_solution_valid(best, n, k, demands, vehicle_capacity));
+	return (cli_solution_valid(validation));
 }

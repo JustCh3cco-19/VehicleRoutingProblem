@@ -269,25 +269,30 @@ static bool	validate_capacity_route(const t_route *r, const int *demands,
 	return (true);
 }
 
-bool	solution_validate_cvrp(const t_solution *s, int n, int k,
-		const int *demands, int vehicle_capacity, char *err, size_t err_len)
+bool	solution_validate_cvrp(t_solution_validation *validation)
 {
 	int	i;
 
-	if (!solution_validate(s, n, k, err, err_len))
+	if (!validation)
 		return (false);
-	if (!demands || vehicle_capacity <= 0 || demands[0] != 0)
+	if (!solution_validate(validation->s, validation->n, validation->k,
+			validation->err, validation->err_len))
+		return (false);
+	if (!validation->demands || validation->vehicle_capacity <= 0
+		|| validation->demands[0] != 0)
 	{
-		set_err(err, err_len, "invalid capacity validation input");
+		set_err(validation->err, validation->err_len,
+			"invalid capacity validation input");
 		return (false);
 	}
 	i = 0;
-	for (; i < s->k; i++)
+	for (; i < validation->s->k; i++)
 	{
-		if (!validate_capacity_route(&s->routes[i], demands,
-				vehicle_capacity, err, err_len))
+		if (!validate_capacity_route(&validation->s->routes[i],
+				validation->demands, validation->vehicle_capacity,
+				validation->err, validation->err_len))
 			return (false);
 	}
-	set_err(err, err_len, "");
+	set_err(validation->err, validation->err_len, "");
 	return (true);
 }

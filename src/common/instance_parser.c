@@ -166,6 +166,18 @@ static void	commit_instance(t_vrp_parse_state *state)
 	state->instance->capacity = state->capacity;
 }
 
+static int	finish_load(t_vrp_parse_state *state, int ok)
+{
+	if (ok)
+		ok = validate_instance(state);
+	if (ok)
+		commit_instance(state);
+	fclose(state->f);
+	if (!ok)
+		vrp_instance_free(state->instance);
+	return (!ok);
+}
+
 int	vrp_load_tsplib_instance(const char *path, t_vrp_instance *instance)
 {
 	t_vrp_parse_state	state;
@@ -187,14 +199,7 @@ int	vrp_load_tsplib_instance(const char *path, t_vrp_instance *instance)
 	ok = 1;
 	while (ok && fgets(line, sizeof(line), state.f))
 		ok = parse_line(&state, line);
-	if (ok)
-		ok = validate_instance(&state);
-	if (ok)
-		commit_instance(&state);
-	fclose(state.f);
-	if (!ok)
-		vrp_instance_free(instance);
-	return (!ok);
+	return (finish_load(&state, ok));
 }
 
 int	vrp_instance_create_euc2d_matrix(const t_vrp_instance *instance,

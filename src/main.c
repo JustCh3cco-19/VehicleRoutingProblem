@@ -79,13 +79,20 @@ static t_status	run_solver(t_solver_params *params, t_cli_options *options,
 static int	print_result(t_status solver_status, t_cli_options *options,
 		t_vrp_instance *instance, t_solution *best)
 {
+	t_cli_validation	validation;
+
 	if (solver_status != SOLVER_OK)
 	{
 		fprintf(stderr, "solver failed: %s\n", status_string(solver_status));
 		return (0);
 	}
-	if (!cli_validate_solution_or_report(best, options->n, options->k,
-			instance->demands, instance->capacity, options->best_cost))
+	validation.best = best;
+	validation.n = options->n;
+	validation.k = options->k;
+	validation.demands = instance->demands;
+	validation.vehicle_capacity = instance->capacity;
+	validation.best_cost = options->best_cost;
+	if (!cli_validate_solution_or_report(&validation))
 		return (0);
 	cli_print_solution_routes(best, options->k);
 	cli_print_solution_cost(options->best_cost);

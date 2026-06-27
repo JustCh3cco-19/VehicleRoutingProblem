@@ -226,9 +226,11 @@ static bool	par_build_vehicle_route(struct s_par_tour_ctx *ctx, int v)
 			break ;
 		if (!par_route_append(&ctx->ws->sol->routes[v], next))
 			return (false);
-		ctx->ws->visited[(unsigned)next >> 6] |= (1ull << ((unsigned)next & 63u));
+		ctx->ws->visited[(unsigned)next >> 6] |= (1ull
+				<< ((unsigned)next & 63u));
 		if (ctx->ws->visited[(unsigned)next >> 6] == 0xFFFFFFFFFFFFFFFFull)
-			ctx->ws->meta_active[(unsigned)next >> 12] &= ~(1ull << (((unsigned)next >> 6) & 63u));
+			ctx->ws->meta_active[(unsigned)next >> 12] &= ~(1ull
+					<< (((unsigned)next >> 6) & 63u));
 		ctx->ws->route_loads[v]++;
 		ctx->remaining--;
 		curr = next;

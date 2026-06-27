@@ -31,6 +31,17 @@ struct s_aco_cli_options
 };
 typedef struct s_aco_cli_options	t_cli_options;
 
+struct s_cli_validation
+{
+	const t_solution		*best;
+	int						n;
+	int						k;
+	const int				*demands;
+	int						vehicle_capacity;
+	double					best_cost;
+};
+typedef struct s_cli_validation	t_cli_validation;
+
 int							cli_parse_int_arg(const char *s, int *out);
 unsigned int				cli_parse_uint_arg(const char *s, int *ok);
 void						cli_options_defaults(t_cli_options *options);
@@ -41,9 +52,7 @@ void						cli_print_solution_routes(const t_solution *best,
 								int k);
 void						cli_print_solution_cost(double best_cost);
 int							cli_validate_solution_or_report(
-								const t_solution *best, int n, int k,
-								const int *demands, int vehicle_capacity,
-								double best_cost);
+								t_cli_validation *validation);
 
 # ifdef __cplusplus
 }

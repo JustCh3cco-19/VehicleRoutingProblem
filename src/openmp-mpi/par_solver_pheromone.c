@@ -21,26 +21,32 @@ void	par_solver_evaporate(t_par_solver_ctx *ctx)
 static void	par_deposit_route(t_par_solver_ctx *ctx, t_route *r,
 		float weighted_dep)
 {
-	int	t;
-	int	d_idx;
+	size_t	edge_a;
+	size_t	edge_b;
+	int		t;
+	int		d_idx;
 
 	t = 0;
 	while (t + 1 < r->len)
 	{
+		edge_a = (size_t)r->nodes[t] * ctx->tau_mat->stride
+			+ r->nodes[t + 1];
+		edge_b = (size_t)r->nodes[t + 1] * ctx->tau_mat->stride
+			+ r->nodes[t];
 #pragma omp atomic
-		ctx->tau_mat->data[(size_t)r->nodes[t] * ctx->tau_mat->stride + r->nodes[t + 1]] += weighted_dep;
+		ctx->tau_mat->data[edge_a] += weighted_dep;
 #pragma omp atomic
-		ctx->tau_mat->data[(size_t)r->nodes[t + 1] * ctx->tau_mat->stride + r->nodes[t]] += weighted_dep;
+		ctx->tau_mat->data[edge_b] += weighted_dep;
 #pragma omp atomic capture
 		d_idx = ctx->rank_delta_count++;
 		ctx->rank_deltas[d_idx] = (t_par_sparse_delta){
-			.edge_idx = (uint32_t)((size_t)r->nodes[t] * ctx->tau_mat->stride + r->nodes[t + 1]),
+			.edge_idx = (uint32_t)edge_a,
 			.increment = weighted_dep
 		};
 #pragma omp atomic capture
 		d_idx = ctx->rank_delta_count++;
 		ctx->rank_deltas[d_idx] = (t_par_sparse_delta){
-			.edge_idx = (uint32_t)((size_t)r->nodes[t + 1] * ctx->tau_mat->stride + r->nodes[t]),
+			.edge_idx = (uint32_t)edge_b,
 			.increment = weighted_dep
 		};
 		t++;

@@ -49,6 +49,7 @@ int main(int argc, char **argv) {
   t_solution *best = NULL;
   double best_cost = 0.0;
   t_status solver_status = SOLVER_OK;
+  t_cli_validation validation;
   vrp_instance_init(&instance);
   cli_options_defaults(&options);
 
@@ -92,9 +93,13 @@ int main(int argc, char **argv) {
     goto cleanup;
   }
 
-  if (!cli_validate_solution_or_report(best, options.n, options.k,
-                                       instance.demands,
-                                       instance.capacity, best_cost)) {
+  validation.best = best;
+  validation.n = options.n;
+  validation.k = options.k;
+  validation.demands = instance.demands;
+  validation.vehicle_capacity = instance.capacity;
+  validation.best_cost = best_cost;
+  if (!cli_validate_solution_or_report(&validation)) {
     status = 1;
     goto cleanup;
   }

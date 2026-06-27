@@ -19,7 +19,8 @@ static void	par_solver_epoch_loop(t_par_solver_ctx *ctx, t_par_workspace *ws)
 	{
 		if (ctx->fixed_epochs > 0 && iter >= ctx->fixed_epochs)
 			break ;
-		if (ctx->fixed_epochs <= 0 && ctx->iter_since_best >= ctx->max_stagnation_epochs)
+		if (ctx->fixed_epochs <= 0
+			&& ctx->iter_since_best >= ctx->max_stagnation_epochs)
 			break ;
 		if (ctx->max_runtime_sec > 0.0 && (par_wall_time() - ctx->start_time)
 			>= ctx->max_runtime_sec)
@@ -140,10 +141,12 @@ t_status	vrp_solve_with_capacity(t_solver_params *params,
 		: params->m;
 	if (params->m <= 0 && config.ants > 0)
 		ctx.total_m = config.ants;
-	int rank_extra = (ctx.mpi_rank < (ctx.total_m % ctx.mpi_size)) ? ctx.mpi_rank
+	int rank_extra = (ctx.mpi_rank < (ctx.total_m % ctx.mpi_size))
+		? ctx.mpi_rank
 		: (ctx.total_m % ctx.mpi_size);
 	ctx.ant_off = ctx.mpi_rank * (ctx.total_m / ctx.mpi_size) + rank_extra;
-	ctx.local_m = ctx.total_m / ctx.mpi_size + (ctx.mpi_rank < (ctx.total_m % ctx.mpi_size));
+	ctx.local_m = ctx.total_m / ctx.mpi_size
+		+ (ctx.mpi_rank < (ctx.total_m % ctx.mpi_size));
 	ctx.max_runtime_sec = config.timeout_seconds;
 	ctx.max_stagnation_epochs = config.stagnation_epochs;
 	ctx.min_rel_improvement = config.min_rel_improvement;

@@ -46,8 +46,10 @@ int	find_nearest_unvisited(const t_seq_shared *shared, int current,
 static void	populate_small(const t_seq_shared *shared, int current,
 		const uint64_t *visited, struct s_select_ctx *ctx)
 {
-	ctx->cand_row = shared->candidate_idx + (size_t)current * (size_t)shared->stride;
-	ctx->score_row = shared->score + (size_t)current * (size_t)shared->stride;
+	ctx->cand_row = shared->candidate_idx + (size_t)current
+		* (size_t)shared->stride;
+	ctx->score_row = shared->score + (size_t)current
+		* (size_t)shared->stride;
 	ctx->k = shared->candidate_k;
 	ctx->count = 0;
 	ctx->denom = 0.0;

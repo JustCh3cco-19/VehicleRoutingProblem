@@ -49,13 +49,8 @@ static void	aco_runtime_config_load_env_mats(t_config *config,
 		: config->reproducibility_mode;
 }
 
-void	runtime_config_load_env(t_config *config)
+static void	runtime_config_read_env(const char **vars)
 {
-	const char	*vars[9];
-
-	if (!config)
-		return ;
-	runtime_config_defaults(config);
 	vars[0] = getenv("ACO_SOLVER_TIMEOUT_SECONDS");
 	vars[1] = getenv("ACO_SOLVER_STAGNATION_EPOCHS");
 	vars[2] = getenv("ACO_SOLVER_MIN_REL_IMPROVEMENT");
@@ -65,7 +60,10 @@ void	runtime_config_load_env(t_config *config)
 	vars[6] = getenv("ACO_SOLVER_ANTS");
 	vars[7] = getenv("ACO_SOLVER_LOG_LEVEL");
 	vars[8] = getenv("ACO_SOLVER_REPRODUCIBILITY_MODE");
-	aco_runtime_config_load_env_mats(config, vars);
+}
+
+static void	runtime_config_clamp(t_config *config)
+{
 	if (config->stagnation_epochs < 0)
 		config->stagnation_epochs = 0;
 	if (config->min_rel_improvement <= 0.0)
@@ -82,4 +80,16 @@ void	runtime_config_load_env(t_config *config)
 		config->log_level = 0;
 	if (config->reproducibility_mode < 0)
 		config->reproducibility_mode = 0;
+}
+
+void	runtime_config_load_env(t_config *config)
+{
+	const char	*vars[9];
+
+	if (!config)
+		return ;
+	runtime_config_defaults(config);
+	runtime_config_read_env(vars);
+	aco_runtime_config_load_env_mats(config, vars);
+	runtime_config_clamp(config);
 }

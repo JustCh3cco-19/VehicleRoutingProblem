@@ -123,7 +123,7 @@ int					seq_is_improvement(double prev_best,
 						double new_best, double min_rel_improvement);
 int					seq_choose_auto_ants(int n);
 
-/* Sequential Candidate & Scoring Management (candidates.c) */
+/* Sequential candidates */
 int					seq_shared_init(t_seq_shared *shared, int n, int candidate_k);
 void				seq_shared_free(t_seq_shared *shared);
 void				seq_shared_build_candidates(t_seq_shared *shared, double **c,
@@ -131,7 +131,7 @@ void				seq_shared_build_candidates(t_seq_shared *shared, double **c,
 void				seq_shared_update_scores(t_seq_shared *shared,
 						double **restrict tau, double alpha);
 
-/* Sequential Tour & Workspace Management (tour.c, tour_select.c, tour_select_large.c, workspace.c) */
+/* Sequential tours */
 int					seq_workspace_init(t_seq_workspace *ws, int k, int n,
 						int visited_words);
 void				seq_workspace_free(t_seq_workspace *ws);
@@ -148,7 +148,7 @@ int					select_large(const t_seq_shared *shared, int current,
 int					select_next_customer(const t_seq_shared *shared, int current,
 						const uint64_t *visited, double **c, unsigned int *rng_state);
 
-/* Sequential Context and Lifecycle Helpers (seq_ctx.c, seq_epoch.c, seq_pheromone.c) */
+/* Sequential context */
 int					allocate_ctx(t_seq_ctx *ctx);
 void				init_ctx(t_seq_ctx *ctx);
 void				cleanup_ctx(t_seq_ctx *ctx);

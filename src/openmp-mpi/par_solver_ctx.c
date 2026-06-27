@@ -114,15 +114,18 @@ void	par_solver_log_start(t_par_solver_ctx *ctx)
 		&& omp_get_thread_num() == 0 && !ctx->workspace_failed)
 	{
 		fprintf(stderr,
-			"ACO Parallel Starting with %d threads. N=%d k=%d Cap=%d candidate_k=%d seed=%u\n",
-			omp_get_num_threads(), ctx->n, ctx->k, ctx->cap, ctx->cand_k, ctx->seed);
+			"ACO Parallel Starting with %d threads. "
+			"N=%d k=%d Cap=%d candidate_k=%d seed=%u\n",
+			omp_get_num_threads(), ctx->n, ctx->k, ctx->cap,
+			ctx->cand_k, ctx->seed);
 	}
 #else
 	if (ctx->log_level > LOG_SILENT && ctx->mpi_rank == 0
 		&& !ctx->workspace_failed)
 	{
 		fprintf(stderr,
-			"ACO Parallel Starting. N=%d k=%d Cap=%d candidate_k=%d seed=%u\n",
+			"ACO Parallel Starting. "
+			"N=%d k=%d Cap=%d candidate_k=%d seed=%u\n",
 			ctx->n, ctx->k, ctx->cap, ctx->cand_k, ctx->seed);
 	}
 #endif
