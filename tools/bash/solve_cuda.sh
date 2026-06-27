@@ -28,6 +28,7 @@ fi
 if [ "$repeats" -lt 1 ]; then
   repeats=1
 fi
+improve_rel="$improve_rel_raw"
 commit_hash="$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")"
 compiler="$(nvcc --version | grep "release" | sed 's/.*release //;s/,.*//' 2>/dev/null || echo "nvcc")"
 compiler_flags="-Iinclude -O3 -std=c++17 -arch=sm_120"
@@ -107,13 +108,11 @@ tail -n +2 "$manifest" \
         time_file="$(mktemp)"
 
         out=$(/usr/bin/time -f "%e,%M" -o "$time_file" env \
-          ACO_SOLVER_TIMEOUT_SECONDS="$runtime_s" \
-          ACO_SOLVER_STAGNATION_EPOCHS="$stag_iters" \
-          ACO_SOLVER_STAGNATION_ITERS="$stag_iters" \
-          ACO_SOLVER_MIN_REL_IMPROVEMENT="$improve_rel" \
-          ACO_SOLVER_CANDIDATE_K="$candidate_k" \
-          ACO_SOLVER_REPRODUCIBILITY_MODE="$repro_mode" \
-          ACO_SOLVER_IMPROVE_EPS="$improve_rel" \
+          SOLVER_TIMEOUT_SECONDS="$runtime_s" \
+          SOLVER_STAGNATION_EPOCHS="$stag_iters" \
+          SOLVER_MIN_REL_IMPROVEMENT="$improve_rel" \
+          SOLVER_CANDIDATE_K="$candidate_k" \
+          SOLVER_REPRODUCIBILITY_MODE="$repro_mode" \
           ACO_CUDA_PROFILE="$cuda_profile" \
           ./cuda.out "$instance_path" "$K" "$m" "$seed_run" 2>&1)
         rc=$?

@@ -17,6 +17,7 @@ repro_mode="${SOLVE_REPRODUCIBILITY_MODE:-0}"
 if [ "$repeats" -lt 1 ]; then
   repeats=1
 fi
+improve_rel="$improve_rel_pct"
 commit_hash="$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")"
 compiler="$(gcc -dumpversion 2>/dev/null || echo "gcc")"
 compiler_flags="-Wall -Wextra -std=c11 -Iinclude -O3"
@@ -98,11 +99,11 @@ tail -n +2 "$manifest" \
         stats_file="$(mktemp)"
 
         out=$(/usr/bin/time -f "%e,%M" -o "$stats_file" env \
-          ACO_SOLVER_TIMEOUT_SECONDS="$runtime_s" \
-          ACO_SOLVER_STAGNATION_EPOCHS="$stag_iters" \
-          ACO_SOLVER_MIN_REL_IMPROVEMENT="$improve_rel" \
-          ACO_SOLVER_CANDIDATE_K="$candidate_k" \
-          ACO_SOLVER_REPRODUCIBILITY_MODE="$repro_mode" \
+          SOLVER_TIMEOUT_SECONDS="$runtime_s" \
+          SOLVER_STAGNATION_EPOCHS="$stag_iters" \
+          SOLVER_MIN_REL_IMPROVEMENT="$improve_rel" \
+          SOLVER_CANDIDATE_K="$candidate_k" \
+          SOLVER_REPRODUCIBILITY_MODE="$repro_mode" \
           ./seq.out "$instance_path" "$K" "$m_run" "$seed_run" 2>&1)
         rc=$?
 

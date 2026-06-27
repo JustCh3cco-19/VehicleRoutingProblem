@@ -46,7 +46,7 @@ if [ $HAS_GPROF -eq 1 ]; then
 
   # Run on a small/medium demo problem to generate gmon.out
   echo "  Running sequential solver..."
-  ACO_SOLVER_TIMEOUT_SECONDS=5 ACO_SOLVER_STAGNATION_EPOCHS=100 \
+  SOLVER_TIMEOUT_SECONDS=5 SOLVER_STAGNATION_EPOCHS=100 \
     "$ROOT_DIR/seq.out" 200 5 16 1234 > /dev/null 2>&1 || true
 
   # Run gprof and write output

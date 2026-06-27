@@ -98,11 +98,11 @@ tail -n +2 "$manifest" \
         stats_file="$(mktemp)"
 
         out=$(/usr/bin/time -f "%e,%M" -o "$stats_file" env \
-          ACO_SOLVER_TIMEOUT_SECONDS="$runtime_s" \
-          ACO_SOLVER_STAGNATION_EPOCHS="$stag_iters" \
-          ACO_SOLVER_MIN_REL_IMPROVEMENT="$improve_rel" \
-          ACO_SOLVER_CANDIDATE_K="$candidate_k" \
-          ACO_SOLVER_REPRODUCIBILITY_MODE="$repro_mode" \
+          SOLVER_TIMEOUT_SECONDS="$runtime_s" \
+          SOLVER_STAGNATION_EPOCHS="$stag_iters" \
+          SOLVER_MIN_REL_IMPROVEMENT="$improve_rel" \
+          SOLVER_CANDIDATE_K="$candidate_k" \
+          SOLVER_REPRODUCIBILITY_MODE="$repro_mode" \
           OMP_NUM_THREADS="$omp_threads" \
           "${launcher_cmd[@]}" ./openmp_mpi.out "$instance_path" "$K" "$m" "$seed_run" </dev/null 2>&1)
         rc=$?

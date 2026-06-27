@@ -62,9 +62,9 @@ def test_small_optimal(bin_path, backend_name):
         
         # Run solver with high iterations/ants or reproducibility mode to ensure optimal path is found
         env = {
-            "ACO_SOLVER_TIMEOUT_SECONDS": "5",
-            "ACO_SOLVER_STAGNATION_EPOCHS": "100",
-            "ACO_SOLVER_MIN_REL_IMPROVEMENT": "0.001"
+            "SOLVER_TIMEOUT_SECONDS": "5",
+            "SOLVER_STAGNATION_EPOCHS": "100",
+            "SOLVER_MIN_REL_IMPROVEMENT": "0.001"
         }
         res = run_solver(bin_path, [tmp_path, 2, 16, 1234], env_vars=env)
             
@@ -107,8 +107,8 @@ def test_impossible_capacity(bin_path, backend_name):
         create_vrp_file(tmp_path, "impossible_cap", 3, 2, 1, coords, demands)
         
         env = {
-            "ACO_SOLVER_TIMEOUT_SECONDS": "2",
-            "ACO_SOLVER_STAGNATION_EPOCHS": "10"
+            "SOLVER_TIMEOUT_SECONDS": "2",
+            "SOLVER_STAGNATION_EPOCHS": "10"
         }
         res = run_solver(bin_path, [tmp_path, 2, 8, 1234], env_vars=env)
         
@@ -196,8 +196,8 @@ def test_cost_validation(bin_path, backend_name):
     try:
         create_vrp_file(tmp_path, "cost_val", 4, 2, 3, coords, demands)
         env = {
-            "ACO_SOLVER_TIMEOUT_SECONDS": "2",
-            "ACO_SOLVER_STAGNATION_EPOCHS": "20"
+            "SOLVER_TIMEOUT_SECONDS": "2",
+            "SOLVER_STAGNATION_EPOCHS": "20"
         }
         res = run_solver(bin_path, [tmp_path, 2, 8, 1234], env_vars=env)
         

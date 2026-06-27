@@ -44,8 +44,6 @@ static t_status	run_solver_loop(t_cuda_solver_ctx *ctx)
 static void	init_loop_timers(t_cuda_solver_ctx *ctx)
 {
 	ctx->max_runtime = ctx->config.timeout_seconds;
-	if (ctx->max_runtime <= 0.0)
-		ctx->max_runtime = 300.0;
 	ctx->max_stagnation = ctx->config.stagnation_epochs;
 	ctx->min_rel_imp = ctx->config.min_rel_improvement;
 	ctx->progress_int = ctx->config.progress_interval_seconds;

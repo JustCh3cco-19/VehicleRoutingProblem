@@ -185,8 +185,6 @@ static void	init_solver_config(t_par_solver_ctx *ctx, t_config *config,
 	ctx->progress_interval_sec = config->progress_interval_seconds;
 	ctx->log_level = config->log_level;
 	ctx->fixed_epochs = config->fixed_epochs;
-	if (ctx->max_stagnation_epochs <= 0)
-		ctx->max_stagnation_epochs = 100;
 }
 
 t_status	vrp_solve_with_capacity(t_solver_params *params,

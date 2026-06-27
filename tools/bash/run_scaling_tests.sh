@@ -1,9 +1,9 @@
 #!/bin/bash
 set -e
 
-export ACO_SOLVER_TIMEOUT_SECONDS=300
-export ACO_SOLVER_STAGNATION_EPOCHS=100
-export ACO_SOLVER_MIN_REL_IMPROVEMENT=5
+export SOLVER_TIMEOUT_SECONDS=300
+export SOLVER_STAGNATION_EPOCHS=100
+export SOLVER_MIN_REL_IMPROVEMENT=5
 
 instances=(
   "instances/generated_benchmark/n2000_k8_s19002.vrp 8 256"
