@@ -27,6 +27,7 @@ struct s_aco_cli_options
 	double					rho;
 	double					tau0;
 	double					q;
+	double					best_cost;
 };
 typedef struct s_aco_cli_options	t_cli_options;
 

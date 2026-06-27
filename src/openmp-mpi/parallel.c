@@ -84,40 +84,42 @@ static t_status	par_vrp_run(t_par_solver_ctx *ctx)
 	return (SOLVER_ERR_NO_SOLUTION);
 }
 
-t_status	vrp_solve(int n, int k, int m, double **c, double alpha, double beta,
-		double rho, double tau0, double q, unsigned int seed,
-		t_solution *best_solution, double *best_cost)
+t_status	vrp_solve(t_solver_params *params, t_solution *best_solution,
+		double *best_cost)
 {
 	int	cap;
 
-	if (k > 0)
-		cap = (int)(((long long)120 * n + 100 * k - 1) / (100 * k));
+	if (!params)
+		return (SOLVER_ERR_INVALID_INPUT);
+	if (params->k > 0)
+		cap = (int)(((long long)120 * params->n + 100 * params->k - 1)
+				/ (100 * params->k));
 	else
-		cap = n;
-	return (vrp_solve_with_capacity(n, k, cap, m, c, alpha, beta, rho, tau0,
-			q, seed, best_solution, best_cost));
+		cap = params->n;
+	params->vehicle_capacity_customers = cap;
+	return (vrp_solve_with_capacity(params, best_solution, best_cost));
 }
 
-t_status	vrp_solve_with_capacity(int n, int k, int cap, int m, double **c,
-		double alpha, double beta, double rho, double tau0, double q,
-		unsigned int seed, t_solution *best_solution, double *best_cost)
+t_status	vrp_solve_with_capacity(t_solver_params *params,
+		t_solution *best_solution, double *best_cost)
 {
 	t_par_solver_ctx	ctx;
 	t_config		config;
 
-	if (n <= 0 || k <= 0 || !c || !best_solution || !best_cost)
+	if (!params || params->n <= 0 || params->k <= 0 || !params->c
+		|| !best_solution || !best_cost)
 		return (SOLVER_ERR_INVALID_INPUT);
-	ctx.n = n;
-	ctx.k = k;
-	ctx.cap = cap;
-	ctx.m = m;
-	ctx.c = c;
-	ctx.alpha = alpha;
-	ctx.beta = beta;
-	ctx.rho = rho;
-	ctx.tau0 = tau0;
-	ctx.q = q;
-	ctx.seed = seed;
+	ctx.n = params->n;
+	ctx.k = params->k;
+	ctx.cap = params->vehicle_capacity_customers;
+	ctx.m = params->m;
+	ctx.c = params->c;
+	ctx.alpha = params->alpha;
+	ctx.beta = params->beta;
+	ctx.rho = params->rho;
+	ctx.tau0 = params->tau0;
+	ctx.q = params->q;
+	ctx.seed = params->seed;
 	ctx.best_sol = best_solution;
 	ctx.best_cost = best_cost;
 	ctx.mpi_rank = 0;
@@ -133,9 +135,10 @@ t_status	vrp_solve_with_capacity(int n, int k, int cap, int m, double **c,
 #endif
 	runtime_config_load_env(&config);
 	ctx.config = &config;
-	ctx.cand_k = par_choose_candidate_count(n, config.candidate_k);
-	ctx.total_m = (m <= 0) ? ((n / 2) * ctx.mpi_size) : m;
-	if (m <= 0 && config.ants > 0)
+	ctx.cand_k = par_choose_candidate_count(params->n, config.candidate_k);
+	ctx.total_m = (params->m <= 0) ? ((params->n / 2) * ctx.mpi_size)
+		: params->m;
+	if (params->m <= 0 && config.ants > 0)
 		ctx.total_m = config.ants;
 	int rank_extra = (ctx.mpi_rank < (ctx.total_m % ctx.mpi_size)) ? ctx.mpi_rank
 		: (ctx.total_m % ctx.mpi_size);

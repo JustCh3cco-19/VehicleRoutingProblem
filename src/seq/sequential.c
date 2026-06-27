@@ -43,42 +43,45 @@ static t_status	aco_vrp_run_with_config(struct s_seq_ctx *ctx)
 	return (SOLVER_ERR_NO_SOLUTION);
 }
 
-t_status	vrp_solve(int n, int k, int m, double **c, double alpha, double beta,
-		double rho, double tau0, double q, unsigned int seed,
-		t_solution *best_solution, double *best_cost)
+t_status	vrp_solve(t_solver_params *params, t_solution *best_solution,
+		double *best_cost)
 {
 	int	cap;
 
-	if (k > 0)
-		cap = (int)(((long long)120 * n + 100 * k - 1) / (100 * k));
+	if (!params)
+		return (SOLVER_ERR_INVALID_INPUT);
+	if (params->k > 0)
+		cap = (int)(((long long)120 * params->n + 100 * params->k - 1)
+				/ (100 * params->k));
 	else
-		cap = n;
-	return (vrp_solve_with_capacity(n, k, cap, m, c, alpha, beta, rho, tau0,
-			q, seed, best_solution, best_cost));
+		cap = params->n;
+	params->vehicle_capacity_customers = cap;
+	return (vrp_solve_with_capacity(params, best_solution, best_cost));
 }
 
-t_status	vrp_solve_with_capacity(int n, int k, int cap, int m, double **c,
-		double alpha, double beta, double rho, double tau0, double q,
-		unsigned int seed, t_solution *best_solution, double *best_cost)
+t_status	vrp_solve_with_capacity(t_solver_params *params,
+		t_solution *best_solution, double *best_cost)
 {
 	struct s_seq_ctx	ctx;
 
-	ctx.n = n;
-	ctx.k = k;
-	ctx.cap = cap;
-	ctx.m = m;
-	ctx.c = c;
-	ctx.alpha = alpha;
-	ctx.beta = beta;
-	ctx.rho = rho;
-	ctx.tau0 = tau0;
-	ctx.q = q;
-	ctx.seed = seed;
+	if (!params)
+		return (SOLVER_ERR_INVALID_INPUT);
+	ctx.n = params->n;
+	ctx.k = params->k;
+	ctx.cap = params->vehicle_capacity_customers;
+	ctx.m = params->m;
+	ctx.c = params->c;
+	ctx.alpha = params->alpha;
+	ctx.beta = params->beta;
+	ctx.rho = params->rho;
+	ctx.tau0 = params->tau0;
+	ctx.q = params->q;
+	ctx.seed = params->seed;
 	ctx.best_sol = best_solution;
 	ctx.best_cost = best_cost;
 	runtime_config_load_env(&ctx.params);
-	ctx.params.ants = m;
-	ctx.params.seed = seed;
+	ctx.params.ants = params->m;
+	ctx.params.seed = params->seed;
 	if (ctx.m <= 0)
 	{
 		if (ctx.params.ants > 0)

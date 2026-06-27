@@ -4,6 +4,33 @@ This document outlines the coding standards and formatting constraints that must
 
 ---
 
+## Project Deviations
+
+This repository does not enforce the traditional 42 preference for replacing
+`for` loops with `while` loops. `for` loops are allowed when they improve
+readability, especially for simple counted iteration.
+
+Allowed `for` loops must still respect the rest of this document:
+
+* Do not declare loop variables inside the `for` header.
+* Do not combine declaration and initialization.
+* Keep declarations at the beginning of the function or scope.
+* Keep one instruction per line and avoid assignments in conditions.
+
+Example:
+
+```c
+int	i;
+
+i = 0;
+for (; i < n; i++)
+{
+	/* ... */
+}
+```
+
+---
+
 ## III.1 Naming Conventions
 
 * **Structures**: A structure’s name must start with `s_` (e.g., `struct s_var`).

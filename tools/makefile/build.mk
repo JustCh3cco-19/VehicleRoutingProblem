@@ -17,7 +17,7 @@ $(ACO_CONFIG_OBJ): $(COMMON_DIR)/%.o: $(COMMON_DIR)/%.c include/config.h
 $(SOLUTION_OBJ): $(SOLUTION_SRC) include/solution.h
 	$(CC) $(EXTRA_FLAGS) $(FLAGS) $(FORCE_OPT) $(PERF_FLAGS) -c $< -o $@
 
-$(MATRIX_OBJ): $(MATRIX_SRC) include/matrix.h
+$(MATRIX_OBJ): $(COMMON_DIR)/%.o: $(COMMON_DIR)/%.c include/matrix.h
 	$(CC) $(EXTRA_FLAGS) $(FLAGS) $(FORCE_OPT) $(PERF_FLAGS) -c $< -o $@
 
 $(INSTANCE_PARSER_OBJ): $(INSTANCE_PARSER_SRC) include/instance_parser.h include/matrix.h

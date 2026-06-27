@@ -15,18 +15,30 @@ enum e_status
 };
 typedef enum e_status		t_status;
 
+struct s_solver_params
+{
+	int						n;
+	int						k;
+	int						m;
+	int						vehicle_capacity_customers;
+	double					**c;
+	double					alpha;
+	double					beta;
+	double					rho;
+	double					tau0;
+	double					q;
+	unsigned int			seed;
+};
+typedef struct s_solver_params	t_solver_params;
+
 const char					*status_string(t_status status);
 
-t_status					vrp_solve(int n, int k, int m, double **c,
-								double alpha, double beta, double rho,
-								double tau0, double q, unsigned int seed,
-								t_solution *best_solution, double *best_cost);
+t_status					vrp_solve(t_solver_params *params,
+								t_solution *best_solution,
+								double *best_cost);
 
-t_status					vrp_solve_with_capacity(int n, int k,
-								int vehicle_capacity_customers, int m,
-								double **c, double alpha, double beta,
-								double rho, double tau0, double q,
-								unsigned int seed, t_solution *best_solution,
+t_status					vrp_solve_with_capacity(t_solver_params *params,
+								t_solution *best_solution,
 								double *best_cost);
 
 double						rand01_state(unsigned int *state);
