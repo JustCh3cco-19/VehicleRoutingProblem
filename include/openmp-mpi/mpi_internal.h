@@ -1,14 +1,14 @@
 #ifndef MPI_INTERNAL_H
 # define MPI_INTERNAL_H
 
-# include "solver.h"
-# include "config.h"
-# include <stddef.h>
-# include <stdint.h>
+#include "solver.h"
+#include "config.h"
+#include <stddef.h>
+#include <stdint.h>
 
 
 # ifdef USE_MPI
-#  include <mpi.h>
+#include <mpi.h>
 # endif
 
 enum e_par_constants

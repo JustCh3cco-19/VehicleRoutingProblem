@@ -1,8 +1,8 @@
 #ifndef SEQ_INTERNAL_H
 # define SEQ_INTERNAL_H
 
-# include "../internal.h"
-# include <stdbool.h>
+#include "../internal.h"
+#include <stdbool.h>
 
 struct s_seq_shared
 {

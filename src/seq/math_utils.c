@@ -1,11 +1,11 @@
-# include "solver.h"
+#include "solver.h"
 #include "config.h"
 #include "seq/internal.h"
 #include <float.h>
 #include <math.h>
 
 #ifdef _OPENMP
-# include <omp.h>
+#include <omp.h>
 #endif
 
 int	seq_clamp(int x, int lo, int hi)

@@ -1,4 +1,4 @@
-# include "solver.h"
+#include "solver.h"
 #include "config.h"
 #include "openmp-mpi/mpi_internal.h"
 #include "solution.h"
@@ -7,7 +7,7 @@
 #include <stdlib.h>
 
 #ifdef USE_MPI
-# include <mpi.h>
+#include <mpi.h>
 #endif
 
 static int	par_epoch_should_stop(t_par_solver_ctx *ctx, int iter);

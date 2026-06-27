@@ -1,7 +1,7 @@
 #ifndef SOLVER_H
 # define SOLVER_H
 
-# include "solution.h"
+#include "solution.h"
 
 # define SOLVER_EPS 1e-9
 

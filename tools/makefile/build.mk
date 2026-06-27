@@ -23,7 +23,7 @@ $(ACO_SHARED_OBJ): $(COMMON_DIR)/%.o: $(COMMON_DIR)/%.c include/solver.h include
 $(ACO_CONFIG_OBJ): $(COMMON_DIR)/%.o: $(COMMON_DIR)/%.c include/config.h
 	$(CC) $(EXTRA_FLAGS) $(FLAGS) $(FORCE_OPT) $(PERF_FLAGS) -c $< -o $@
 
-$(SOLUTION_OBJ): $(SOLUTION_SRC) include/solution.h
+$(SOLUTION_OBJ): $(COMMON_DIR)/%.o: $(COMMON_DIR)/%.c include/solution.h
 	$(CC) $(EXTRA_FLAGS) $(FLAGS) $(FORCE_OPT) $(PERF_FLAGS) -c $< -o $@
 
 $(MATRIX_OBJ): $(COMMON_DIR)/%.o: $(COMMON_DIR)/%.c include/matrix.h
@@ -48,10 +48,10 @@ cuda: $(CUDA_BIN)
 $(CUDA_MAIN_OBJ): $(CUDA_MAIN_SRC) include/solver.h include/cli_common.h include/instance_parser.h include/matrix.h include/solution.h
 	$(NVCC) $(NVCC_FLAGS) $(CUDA_ARCH_FLAG) -c $< -o $@
 
-$(CUDA_ACO_OBJ): $(CUDA_ACO_SRC) include/solver.h include/config.h include/cuda/cuda_kernels.h include/matrix.h include/solution.h
+$(CUDA_ACO_OBJ): src/cuda/%.o: src/cuda/%.cu include/solver.h include/config.h include/cuda/cuda_kernels.h include/cuda/cuda_internal.h include/matrix.h include/solution.h
 	$(NVCC) $(NVCC_FLAGS) $(CUDA_ARCH_FLAG) -c $< -o $@
 
-$(CUDA_KERNELS_OBJ): $(CUDA_KERNELS_SRC) include/cuda/cuda_kernels.h
+$(CUDA_KERNELS_OBJ): src/cuda/%.o: src/cuda/%.cu include/cuda/cuda_kernels.h
 	$(NVCC) $(NVCC_FLAGS) $(CUDA_ARCH_FLAG) -c $< -o $@
 
 $(CUDA_BIN): $(CUDA_OBJ)

@@ -1,8 +1,8 @@
-# include "solver.h"
+#include "solver.h"
 #include "seq/internal.h"
 
 #if defined(__AVX2__)
-# include <immintrin.h>
+#include <immintrin.h>
 
 static void	update_avx_alpha1(t_score_row_params *params, int *t)
 {

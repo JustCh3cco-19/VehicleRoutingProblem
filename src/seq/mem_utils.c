@@ -1,11 +1,11 @@
-# include "solver.h"
+#include "solver.h"
 #include "seq/internal.h"
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
 
 #ifdef _OPENMP
-# include <omp.h>
+#include <omp.h>
 #endif
 
 size_t	seq_align_up(size_t value, size_t alignment)

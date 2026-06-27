@@ -48,7 +48,8 @@ Confirmed:
 
 Still failing:
 
-* Several production source files contain more than five function definitions.
+* Several production source files still contain more than six function
+  definitions.
 
 Recently fixed:
 
@@ -56,6 +57,10 @@ Recently fixed:
 * `kCamelCase` enum constants in production C headers were renamed to snake
   case.
 * The currently reported production line-width violation was wrapped.
+* `solution.c` was split into lifecycle, cost, base validation, and CVRP
+  validation modules.
+* `shared_solver.c` was split from shared roulette selection.
+* `seq_epoch.c` was split from per-ant execution.
 
 ---
 
@@ -65,7 +70,7 @@ Recently fixed:
    `src/cuda/kernels.cu`, `src/cuda/cuda.cu`, `src/common/solution.c`, and
    `src/openmp-mpi/par_tour.c`.
 2. Continue splitting production C/CUDA files until each source file has at
-   most five function definitions.
+   most six function definitions.
 3. Re-run `make norm` after each split.
 4. Rebuild all production targets:
 

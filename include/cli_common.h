@@ -1,7 +1,7 @@
 #ifndef CLI_COMMON_H
 # define CLI_COMMON_H
 
-# include "solution.h"
+#include "solution.h"
 
 # ifdef __cplusplus
 extern "C" {

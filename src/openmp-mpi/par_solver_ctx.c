@@ -1,4 +1,4 @@
-# include "solver.h"
+#include "solver.h"
 #include "openmp-mpi/mpi_internal.h"
 #include "matrix.h"
 #include "solution.h"
@@ -7,7 +7,7 @@
 #include <stdlib.h>
 
 #ifdef _OPENMP
-# include <omp.h>
+#include <omp.h>
 #endif
 
 static void	par_populate_mats(t_par_solver_ctx *ctx)

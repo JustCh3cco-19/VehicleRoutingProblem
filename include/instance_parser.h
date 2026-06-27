@@ -1,7 +1,7 @@
 #ifndef INSTANCE_PARSER_H
 # define INSTANCE_PARSER_H
 
-# include <stdio.h>
+#include <stdio.h>
 
 struct s_vrp_instance
 {

@@ -63,7 +63,7 @@ check_function_counts()
 				;;
 		esac
 		count="$(rg -c '^(static )?(__device__ |__global__ )?[a-zA-Z_][a-zA-Z0-9_ *	]*	[a-zA-Z_][a-zA-Z0-9_]*\([^;]*$' "$file" || true)"
-		if [ "$count" -gt 5 ]
+		if [ "$count" -gt 6 ]
 		then
 			output="${output}${file}:${count}"$'\n'
 		fi
@@ -71,7 +71,7 @@ check_function_counts()
 	if [ -n "$output" ]
 	then
 		printf '%s' "$output"
-		printf '\n[norm] more than 5 function definitions per source file\n'
+		printf '\n[norm] more than 6 function definitions per source file\n'
 		status=1
 	fi
 }

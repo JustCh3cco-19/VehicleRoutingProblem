@@ -1,13 +1,13 @@
 extern "C" {
-# include "solver.h"
-# include "cli_common.h"
-# include "instance_parser.h"
-# include "solution.h"
+#include "solver.h"
+#include "cli_common.h"
+#include "instance_parser.h"
+#include "solution.h"
 }
 
-# include "cuda/cuda_kernels.h"
-# include <stdio.h>
-# include <stdlib.h>
+#include "cuda/cuda_context.h"
+#include <stdio.h>
+#include <stdlib.h>
 
 t_status	vrp_solve_cuda(t_solver_params *params,
 				t_cuda_coords coords,

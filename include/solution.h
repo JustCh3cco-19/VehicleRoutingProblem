@@ -1,8 +1,8 @@
 #ifndef SOLUTION_H
 # define SOLUTION_H
 
-# include <stdbool.h>
-# include <stddef.h>
+#include <stdbool.h>
+#include <stddef.h>
 
 struct s_route
 {

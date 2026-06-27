@@ -1,14 +1,14 @@
-# include "solver.h"
+#include "solver.h"
 #include "openmp-mpi/mpi_internal.h"
 #include "matrix.h"
 #include "solution.h"
 #include <time.h>
 
 #ifdef USE_MPI
-# include <mpi.h>
+#include <mpi.h>
 #endif
 #ifdef _OPENMP
-# include <omp.h>
+#include <omp.h>
 #endif
 
 size_t	par_align_up(size_t value)

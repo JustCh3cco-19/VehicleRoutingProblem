@@ -1,7 +1,7 @@
 #ifndef MATRIX_H
 # define MATRIX_H
 
-# include <stddef.h>
+#include <stddef.h>
 
 struct s_matrix
 {

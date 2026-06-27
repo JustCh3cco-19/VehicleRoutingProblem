@@ -1,14 +1,14 @@
-# include "solver.h"
-# include "cli_common.h"
-# include "instance_parser.h"
-# include "matrix.h"
-# include "solution.h"
+#include "solver.h"
+#include "cli_common.h"
+#include "instance_parser.h"
+#include "matrix.h"
+#include "solution.h"
 
-# include <math.h>
-# include <stdio.h>
+#include <math.h>
+#include <stdio.h>
 
 #ifdef USE_MPI
-# include <mpi.h>
+#include <mpi.h>
 #endif
 
 static void	fill_example_costs(double **c, int n)

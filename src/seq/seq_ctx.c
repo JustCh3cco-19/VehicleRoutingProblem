@@ -1,4 +1,4 @@
-# include "solver.h"
+#include "solver.h"
 #include "seq/internal.h"
 #include "matrix.h"
 #include "solution.h"

@@ -1,10 +1,10 @@
 #ifndef INTERNAL_H
 # define INTERNAL_H
 
-# include "solver.h"
-# include "config.h"
-# include <stddef.h>
-# include <stdint.h>
+#include "solver.h"
+#include "config.h"
+#include <stddef.h>
+#include <stdint.h>
 
 struct s_aco_score_cache
 {

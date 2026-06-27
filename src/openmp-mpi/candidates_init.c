@@ -1,4 +1,4 @@
-# include "solver.h"
+#include "solver.h"
 #include "openmp-mpi/mpi_internal.h"
 #include "matrix.h"
 #include <float.h>
