@@ -1,4 +1,4 @@
-#include "aco.h"
+# include "solver.h"
 #include "openmp-mpi/mpi_internal.h"
 #include "matrix.h"
 #include "solution.h"
@@ -26,7 +26,7 @@ void	*par_aligned_calloc(size_t bytes)
 	return (matrix_aligned_calloc(bytes, kParAlignment));
 }
 
-bool	par_route_append(Route *r, int node)
+bool	par_route_append(t_route *r, int node)
 {
 	if (r->len >= r->cap)
 		return (false);

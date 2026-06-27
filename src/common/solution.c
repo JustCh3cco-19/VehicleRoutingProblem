@@ -17,7 +17,7 @@ static size_t align_up_size(size_t value, size_t alignment) {
 }
 
 
-bool route_append(Route *r, int node) {
+bool route_append(t_route *r, int node) {
   if (r->len >= r->cap) {
     return false;
   }
@@ -26,24 +26,24 @@ bool route_append(Route *r, int node) {
 }
 
 
-Solution *solution_create(int K, int n) {
-  if (K <= 0 || n < 0) {
+t_solution *solution_create(int k, int n) {
+  if (k <= 0 || n < 0) {
     return NULL;
   }
 
-  Solution *s = calloc(1, sizeof(*s));
+  t_solution *s = calloc(1, sizeof(*s));
   if (!s) {
     return NULL;
   }
-  s->K = K;
+  s->k = k;
   s->route_cap = n + 2;
-  s->routes = calloc((size_t)K, sizeof(Route));
+  s->routes = calloc((size_t)k, sizeof(t_route));
   if (!s->routes) {
     free(s);
     return NULL;
   }
 
-  size_t total_nodes = (size_t)K * (size_t)s->route_cap;
+  size_t total_nodes = (size_t)k * (size_t)s->route_cap;
   size_t bytes = total_nodes * sizeof(int);
   size_t aligned_bytes = align_up_size(bytes, SOLUTION_ALIGNMENT);
   s->nodes_storage = aligned_alloc(SOLUTION_ALIGNMENT, aligned_bytes);
@@ -54,8 +54,8 @@ Solution *solution_create(int K, int n) {
   }
   memset(s->nodes_storage, 0, aligned_bytes);
 
-  for (int i = 0; i < K; ++i) {
-    Route *r = &s->routes[i];
+  for (int i = 0; i < k; ++i) {
+    t_route *r = &s->routes[i];
     r->nodes = s->nodes_storage + (size_t)i * (size_t)s->route_cap;
     r->cap = s->route_cap;
     r->len = 0;
@@ -65,14 +65,14 @@ Solution *solution_create(int K, int n) {
 }
 
 
-void solution_reset(Solution *s) {
-  for (int i = 0; i < s->K; ++i) {
+void solution_reset(t_solution *s) {
+  for (int i = 0; i < s->k; ++i) {
     s->routes[i].len = 0;
   }
 }
 
 
-void solution_free(Solution *s) {
+void solution_free(t_solution *s) {
   if (!s) {
     return;
   }
@@ -82,20 +82,20 @@ void solution_free(Solution *s) {
 }
 
 
-void solution_copy(Solution *dst, const Solution *src) {
-  for (int i = 0; i < src->K; ++i) {
-    const Route *r_src = &src->routes[i];
-    Route *r_dst = &dst->routes[i];
+void solution_copy(t_solution *dst, const t_solution *src) {
+  for (int i = 0; i < src->k; ++i) {
+    const t_route *r_src = &src->routes[i];
+    t_route *r_dst = &dst->routes[i];
     r_dst->len = r_src->len;
     memcpy(r_dst->nodes, r_src->nodes, (size_t)r_src->len * sizeof(int));
   }
 }
 
 
-double solution_cost(const Solution *s, double **c) {
+double solution_cost(const t_solution *s, double **c) {
   double cost = 0.0;
-  for (int i = 0; i < s->K; ++i) {
-    const Route *r = &s->routes[i];
+  for (int i = 0; i < s->k; ++i) {
+    const t_route *r = &s->routes[i];
     for (int t = 0; t + 1 < r->len; ++t) {
       int u = r->nodes[t];
       int v = r->nodes[t + 1];
@@ -114,22 +114,22 @@ static void set_err(char *err, size_t err_len, const char *msg) {
 }
 
 
-bool solution_validate(const Solution *s, int n, int K, char *err,
+bool solution_validate(const t_solution *s, int n, int k, char *err,
                        size_t err_len) {
   if (!s) {
     set_err(err, err_len, "solution is NULL");
     return false;
   }
-  if (s->K != K) {
-    set_err(err, err_len, "solution K does not match expected K");
+  if (s->k != k) {
+    set_err(err, err_len, "solution k does not match expected k");
     return false;
   }
   if (!s->routes) {
     set_err(err, err_len, "solution routes are NULL");
     return false;
   }
-  if (n < 0 || K < 0) {
-    set_err(err, err_len, "invalid n or K");
+  if (n < 0 || k < 0) {
+    set_err(err, err_len, "invalid n or k");
     return false;
   }
 
@@ -139,8 +139,8 @@ bool solution_validate(const Solution *s, int n, int K, char *err,
     return false;
   }
 
-  for (int i = 0; i < s->K; ++i) {
-    const Route *r = &s->routes[i];
+  for (int i = 0; i < s->k; ++i) {
+    const t_route *r = &s->routes[i];
     if (r->len < 2) {
       free(seen);
       set_err(err, err_len, "route length < 2");
@@ -189,9 +189,9 @@ bool solution_validate(const Solution *s, int n, int K, char *err,
   return true;
 }
 
-bool solution_validate_cvrp(const Solution *s, int n, int K, const int *demands,
+bool solution_validate_cvrp(const t_solution *s, int n, int k, const int *demands,
                             int vehicle_capacity, char *err, size_t err_len) {
-  if (!solution_validate(s, n, K, err, err_len)) {
+  if (!solution_validate(s, n, k, err, err_len)) {
     return false;
   }
   if (!demands) {
@@ -207,8 +207,8 @@ bool solution_validate_cvrp(const Solution *s, int n, int K, const int *demands,
     return false;
   }
 
-  for (int i = 0; i < s->K; ++i) {
-    const Route *r = &s->routes[i];
+  for (int i = 0; i < s->k; ++i) {
+    const t_route *r = &s->routes[i];
     int load = 0;
     for (int t = 1; t + 1 < r->len; ++t) {
       int node = r->nodes[t];

@@ -1,4 +1,4 @@
-#include "aco.h"
+# include "solver.h"
 #include "config.h"
 #include "seq/internal.h"
 #include <float.h>
@@ -36,11 +36,11 @@ int	seq_is_improvement(double prev_best, double new_best,
 
 	if (prev_best >= DBL_MAX || new_best >= DBL_MAX)
 		return (new_best < prev_best);
-	if (new_best >= prev_best - ACO_EPS)
+	if (new_best >= prev_best - SOLVER_EPS)
 		return (0);
 	abs_gain = prev_best - new_best;
-	rel_gain = abs_gain / fmax(prev_best, ACO_EPS);
-	return (rel_gain + ACO_EPS >= min_rel_improvement);
+	rel_gain = abs_gain / fmax(prev_best, SOLVER_EPS);
+	return (rel_gain + SOLVER_EPS >= min_rel_improvement);
 }
 
 int	seq_choose_candidate_count(int n, int requested_candidate_k)

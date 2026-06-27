@@ -1,7 +1,7 @@
 #include "config.h"
 #include <stdlib.h>
 
-double	aco_parse_min_rel_improvement_percent(const char *s,
+double	parse_min_rel_improvement_percent(const char *s,
 		double default_fraction)
 {
 	double	percent;
@@ -14,7 +14,7 @@ double	aco_parse_min_rel_improvement_percent(const char *s,
 	return (percent / 100.0);
 }
 
-void	aco_runtime_config_defaults(t_aco_config *config)
+void	runtime_config_defaults(t_config *config)
 {
 	if (!config)
 		return ;
@@ -30,12 +30,12 @@ void	aco_runtime_config_defaults(t_aco_config *config)
 	config->reproducibility_mode = 0;
 }
 
-static void	aco_runtime_config_load_env_mats(t_aco_config *config,
+static void	aco_runtime_config_load_env_mats(t_config *config,
 		const char **vars)
 {
 	config->timeout_seconds = (vars[0] && *vars[0]) ? atof(vars[0]) : 0.0;
 	config->stagnation_epochs = (vars[1] && *vars[1]) ? atoi(vars[1]) : 0;
-	config->min_rel_improvement = aco_parse_min_rel_improvement_percent(
+	config->min_rel_improvement = parse_min_rel_improvement_percent(
 			vars[2], 1e-3);
 	config->fixed_epochs = (vars[3] && *vars[3]) ? atoi(vars[3]) : 0;
 	config->progress_interval_seconds = (vars[4] && *vars[4]) ? atof(vars[4])
@@ -49,13 +49,13 @@ static void	aco_runtime_config_load_env_mats(t_aco_config *config,
 		: config->reproducibility_mode;
 }
 
-void	aco_runtime_config_load_env(t_aco_config *config)
+void	runtime_config_load_env(t_config *config)
 {
 	const char	*vars[9];
 
 	if (!config)
 		return ;
-	aco_runtime_config_defaults(config);
+	runtime_config_defaults(config);
 	vars[0] = getenv("ACO_SOLVER_TIMEOUT_SECONDS");
 	vars[1] = getenv("ACO_SOLVER_STAGNATION_EPOCHS");
 	vars[2] = getenv("ACO_SOLVER_MIN_REL_IMPROVEMENT");

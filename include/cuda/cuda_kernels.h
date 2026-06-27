@@ -18,7 +18,7 @@
  */
 typedef struct {
   int n;
-  int K;
+  int k;
   int m;
   int cap;
   int cand_k;
@@ -29,7 +29,7 @@ typedef struct {
   float beta;
   float rho;
   float tau0;
-  float Q;
+  float q;
   float tau_min;
   float tau_max;
 

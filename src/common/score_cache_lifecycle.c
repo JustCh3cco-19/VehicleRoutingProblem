@@ -1,9 +1,9 @@
 #include "internal.h"
 #include <stdlib.h>
 
-t_aco_score_cache	*aco_score_cache_create(int n, int l1_lines, int l2_lines)
+t_score_cache	*score_cache_create(int n, int l1_lines, int l2_lines)
 {
-	t_aco_score_cache	*cache;
+	t_score_cache	*cache;
 
 	if (n < 0)
 		return (NULL);
@@ -23,7 +23,7 @@ t_aco_score_cache	*aco_score_cache_create(int n, int l1_lines, int l2_lines)
 			sizeof(double));
 	if (!cache->l1_keys || !cache->l1_rows)
 	{
-		aco_score_cache_free(cache);
+		score_cache_free(cache);
 		return (NULL);
 	}
 	if (l2_lines > 0)
@@ -33,15 +33,15 @@ t_aco_score_cache	*aco_score_cache_create(int n, int l1_lines, int l2_lines)
 				sizeof(double));
 		if (!cache->l2_keys || !cache->l2_rows)
 		{
-			aco_score_cache_free(cache);
+			score_cache_free(cache);
 			return (NULL);
 		}
 	}
-	aco_score_cache_invalidate(cache);
+	score_cache_invalidate(cache);
 	return (cache);
 }
 
-void	aco_score_cache_invalidate(t_aco_score_cache *cache)
+void	score_cache_invalidate(t_score_cache *cache)
 {
 	int	i;
 
@@ -61,7 +61,7 @@ void	aco_score_cache_invalidate(t_aco_score_cache *cache)
 	}
 }
 
-void	aco_score_cache_reset_stats(t_aco_score_cache *cache)
+void	score_cache_reset_stats(t_score_cache *cache)
 {
 	if (!cache)
 		return ;
@@ -70,8 +70,8 @@ void	aco_score_cache_reset_stats(t_aco_score_cache *cache)
 	cache->l3_misses = 0;
 }
 
-void	aco_score_cache_get_stats(const t_aco_score_cache *cache,
-		t_aco_cache_stats *out)
+void	score_cache_get_stats(const t_score_cache *cache,
+		t_cache_stats *out)
 {
 	if (!out)
 		return ;
@@ -85,7 +85,7 @@ void	aco_score_cache_get_stats(const t_aco_score_cache *cache,
 	out->l3_misses = cache->l3_misses;
 }
 
-void	aco_score_cache_free(t_aco_score_cache *cache)
+void	score_cache_free(t_score_cache *cache)
 {
 	if (!cache)
 		return ;

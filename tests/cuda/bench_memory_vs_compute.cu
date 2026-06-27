@@ -38,7 +38,7 @@ int main() {
     size_t results_size = N * sizeof(float);
 
     printf("Benchmarking for N = %d, Iterations = %d\n", N, ITERATIONS);
-    printf("Memory: Matrix = %.2f MB, Coordinates = %.2f MB\n", 
+    printf("Memory: t_matrix = %.2f MB, Coordinates = %.2f MB\n", 
            (float)matrix_size / (1024*1024), (float)coords_size / (1024*1024));
 
     float *h_costs = (float*)malloc(matrix_size);

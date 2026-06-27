@@ -1,4 +1,4 @@
-#include "aco.h"
+# include "solver.h"
 #include "seq/internal.h"
 #include <float.h>
 #include <stdint.h>

@@ -1,4 +1,4 @@
-#include "aco.h"
+# include "solver.h"
 #include "openmp-mpi/mpi_internal.h"
 #include "matrix.h"
 #include "solution.h"
@@ -110,19 +110,19 @@ void	par_solver_free(t_par_solver_ctx *ctx)
 void	par_solver_log_start(t_par_solver_ctx *ctx)
 {
 #ifdef _OPENMP
-	if (ctx->log_level > ACO_LOG_SILENT && ctx->mpi_rank == 0
+	if (ctx->log_level > LOG_SILENT && ctx->mpi_rank == 0
 		&& omp_get_thread_num() == 0 && !ctx->workspace_failed)
 	{
 		fprintf(stderr,
-			"ACO Parallel Starting with %d threads. N=%d K=%d Cap=%d candidate_k=%d seed=%u\n",
+			"ACO Parallel Starting with %d threads. N=%d k=%d Cap=%d candidate_k=%d seed=%u\n",
 			omp_get_num_threads(), ctx->n, ctx->k, ctx->cap, ctx->cand_k, ctx->seed);
 	}
 #else
-	if (ctx->log_level > ACO_LOG_SILENT && ctx->mpi_rank == 0
+	if (ctx->log_level > LOG_SILENT && ctx->mpi_rank == 0
 		&& !ctx->workspace_failed)
 	{
 		fprintf(stderr,
-			"ACO Parallel Starting. N=%d K=%d Cap=%d candidate_k=%d seed=%u\n",
+			"ACO Parallel Starting. N=%d k=%d Cap=%d candidate_k=%d seed=%u\n",
 			ctx->n, ctx->k, ctx->cap, ctx->cand_k, ctx->seed);
 	}
 #endif

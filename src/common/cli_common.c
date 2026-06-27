@@ -64,26 +64,26 @@ unsigned int cli_parse_uint_arg(const char *s, int *ok) {
   return (unsigned int)v;
 }
 
-void cli_options_defaults(AcoCliOptions *options) {
+void cli_options_defaults(t_cli_options *options) {
   if (!options) {
     return;
   }
 
-  options->mode = ACO_CLI_MODE_DEMO;
+  options->mode = CLI_MODE_DEMO;
   options->instance_path = NULL;
   options->n = 5;
-  options->K = 2;
+  options->k = 2;
   options->m = 10;
   options->seed = 1234u;
   options->alpha = 1.0;
   options->beta = 2.0;
   options->rho = 0.5;
   options->tau0 = 1.0;
-  options->Q = 1.0;
+  options->q = 1.0;
 }
 
 static int cli_parse_numeric_options(int argc, char **argv, int start,
-                                     AcoCliOptions *options) {
+                                     t_cli_options *options) {
   for (int i = start; i < argc; i += 2) {
     if (i + 1 >= argc) {
       return 0;
@@ -102,18 +102,18 @@ static int cli_parse_numeric_options(int argc, char **argv, int start,
       options->rho = value;
     } else if (strcmp(argv[i], "--tau0") == 0) {
       options->tau0 = value;
-    } else if (strcmp(argv[i], "--Q") == 0) {
-      options->Q = value;
+    } else if (strcmp(argv[i], "--q") == 0) {
+      options->q = value;
     } else {
       return 0;
     }
   }
 
   return options->alpha > 0.0 && options->beta > 0.0 && options->rho > 0.0 &&
-         options->rho < 1.0 && options->tau0 > 0.0 && options->Q > 0.0;
+         options->rho < 1.0 && options->tau0 > 0.0 && options->q > 0.0;
 }
 
-int cli_parse_solver_options(int argc, char **argv, AcoCliOptions *options) {
+int cli_parse_solver_options(int argc, char **argv, t_cli_options *options) {
   int ok = 1;
   int first_value = 1;
 
@@ -127,31 +127,31 @@ int cli_parse_solver_options(int argc, char **argv, AcoCliOptions *options) {
   }
 
   if (cli_parse_int_arg(argv[1], &options->n)) {
-    options->mode = ACO_CLI_MODE_DEMO;
+    options->mode = CLI_MODE_DEMO;
     if (argc < 5) {
       return 0;
     }
-    ok = ok && cli_parse_int_arg(argv[2], &options->K);
+    ok = ok && cli_parse_int_arg(argv[2], &options->k);
     ok = ok && cli_parse_int_arg(argv[3], &options->m);
     options->seed = cli_parse_uint_arg(argv[4], &ok);
     first_value = 5;
-    if (!ok || options->n <= 0 || options->K <= 0 || options->m < 0) {
+    if (!ok || options->n <= 0 || options->k <= 0 || options->m < 0) {
       return 0;
     }
   } else {
-    options->mode = ACO_CLI_MODE_INSTANCE;
+    options->mode = CLI_MODE_INSTANCE;
     if (argc < 4) {
       return 0;
     }
     options->instance_path = argv[1];
-    ok = ok && cli_parse_int_arg(argv[2], &options->K);
+    ok = ok && cli_parse_int_arg(argv[2], &options->k);
     ok = ok && cli_parse_int_arg(argv[3], &options->m);
     first_value = 4;
     if (argc > 4 && argv[4][0] != '-') {
       options->seed = cli_parse_uint_arg(argv[4], &ok);
       first_value = 5;
     }
-    if (!ok || options->K <= 0 || options->m < 0) {
+    if (!ok || options->k <= 0 || options->m < 0) {
       return 0;
     }
   }
@@ -160,17 +160,17 @@ int cli_parse_solver_options(int argc, char **argv, AcoCliOptions *options) {
 }
 
 void cli_print_usage(const char *program_name) {
-  fprintf(stderr, "usage: %s [n K m seed] [--alpha v --beta v --rho v "
-                  "--tau0 v --Q v]\n",
+  fprintf(stderr, "usage: %s [n k m seed] [--alpha v --beta v --rho v "
+                  "--tau0 v --q v]\n",
           program_name);
-  fprintf(stderr, "usage: %s <instance.vrp> <K> <m> [seed] "
-                  "[--alpha v --beta v --rho v --tau0 v --Q v]\n",
+  fprintf(stderr, "usage: %s <instance.vrp> <k> <m> [seed] "
+                  "[--alpha v --beta v --rho v --tau0 v --q v]\n",
           program_name);
 }
 
-void cli_print_solution_routes(const Solution *best, int K) {
-  for (int i = 0; i < K; ++i) {
-    const Route *r = &best->routes[i];
+void cli_print_solution_routes(const t_solution *best, int k) {
+  for (int i = 0; i < k; ++i) {
+    const t_route *r = &best->routes[i];
     int printed = 0;
     printf("Route %d:", i + 1);
     for (int t = 0; t < r->len; ++t) {
@@ -189,7 +189,7 @@ void cli_print_solution_cost(double best_cost) {
   printf("best cost: %.3f\n", best_cost);
 }
 
-int cli_validate_solution_or_report(const Solution *best, int n, int K,
+int cli_validate_solution_or_report(const t_solution *best, int n, int k,
                                     const int *demands, int vehicle_capacity,
                                     double best_cost) {
   char err[160];
@@ -199,10 +199,10 @@ int cli_validate_solution_or_report(const Solution *best, int n, int K,
     return 0;
   }
 
-  int valid = demands ? solution_validate_cvrp(best, n, K, demands,
+  int valid = demands ? solution_validate_cvrp(best, n, k, demands,
                                               vehicle_capacity, err,
                                               sizeof(err))
-                      : solution_validate(best, n, K, err, sizeof(err));
+                      : solution_validate(best, n, k, err, sizeof(err));
   if (!valid) {
     fprintf(stderr, "invalid solution: %s\n", err);
     return 0;

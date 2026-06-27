@@ -1,4 +1,4 @@
-#include "aco.h"
+# include "solver.h"
 #include "cli_common.h"
 #include "instance_parser.h"
 #include "matrix.h"
@@ -37,12 +37,12 @@ static void fill_example_costs(double **c, int n) {
  */
 int main(int argc, char **argv) {
   int status = 0;
-  AcoCliOptions options;
-  VrpInstance instance;
+  t_cli_options options;
+  t_vrp_instance instance;
   double **c = NULL;
-  Solution *best = NULL;
+  t_solution *best = NULL;
   double best_cost = 0.0;
-  AcoStatus solver_status = ACO_OK;
+  t_status solver_status = SOLVER_OK;
   vrp_instance_init(&instance);
   cli_options_defaults(&options);
 
@@ -67,7 +67,7 @@ int main(int argc, char **argv) {
     goto cleanup;
   }
 
-  if (options.mode == ACO_CLI_MODE_INSTANCE) {
+  if (options.mode == CLI_MODE_INSTANCE) {
     if (vrp_load_tsplib_instance(options.instance_path, &instance) != 0 ||
         vrp_instance_create_euc2d_matrix(&instance, &c) != 0) {
 #ifdef USE_MPI
@@ -88,27 +88,27 @@ int main(int argc, char **argv) {
     fill_example_costs(c, options.n);
   }
 
-  best = solution_create(options.K, options.n);
+  best = solution_create(options.k, options.n);
   if (!best) {
     fprintf(stderr, "failed to allocate solution\n");
     status = 1;
     goto cleanup;
   }
 
-  if (options.mode == ACO_CLI_MODE_INSTANCE) {
-    if (instance.vehicles > 0 && instance.vehicles != options.K) {
-      fprintf(stderr, "instance VEHICLES mismatch: CLI K=%d, file VEHICLES=%d\n",
-              options.K, instance.vehicles);
+  if (options.mode == CLI_MODE_INSTANCE) {
+    if (instance.vehicles > 0 && instance.vehicles != options.k) {
+      fprintf(stderr, "instance VEHICLES mismatch: CLI k=%d, file VEHICLES=%d\n",
+              options.k, instance.vehicles);
       status = 1;
       goto cleanup;
     }
-    solver_status = aco_vrp_with_capacity(
-        options.n, options.K, instance.capacity, options.m, c, options.alpha,
-        options.beta, options.rho, options.tau0, options.Q, options.seed, best,
+    solver_status = vrp_solve_with_capacity(
+        options.n, options.k, instance.capacity, options.m, c, options.alpha,
+        options.beta, options.rho, options.tau0, options.q, options.seed, best,
         &best_cost);
   } else {
-    solver_status = aco_vrp(options.n, options.K, options.m, c, options.alpha,
-                            options.beta, options.rho, options.tau0, options.Q,
+    solver_status = vrp_solve(options.n, options.k, options.m, c, options.alpha,
+                            options.beta, options.rho, options.tau0, options.q,
                             options.seed, best, &best_cost);
   }
 
@@ -116,19 +116,19 @@ int main(int argc, char **argv) {
   if (mpi_rank == 0)
 #endif
   {
-    if (solver_status != ACO_OK) {
-      fprintf(stderr, "solver failed: %s\n", aco_status_string(solver_status));
+    if (solver_status != SOLVER_OK) {
+      fprintf(stderr, "solver failed: %s\n", status_string(solver_status));
       status = 1;
     } else if (!cli_validate_solution_or_report(
-                   best, options.n, options.K,
-                   options.mode == ACO_CLI_MODE_INSTANCE ? instance.demands
+                   best, options.n, options.k,
+                   options.mode == CLI_MODE_INSTANCE ? instance.demands
                                                          : NULL,
-                   options.mode == ACO_CLI_MODE_INSTANCE ? instance.capacity
+                   options.mode == CLI_MODE_INSTANCE ? instance.capacity
                                                          : 0,
                    best_cost)) {
       status = 1;
     } else {
-      cli_print_solution_routes(best, options.K);
+      cli_print_solution_routes(best, options.k);
       cli_print_solution_cost(best_cost);
     }
   }

@@ -1,4 +1,4 @@
-#include "aco.h"
+# include "solver.h"
 #include "config.h"
 #include "seq/internal.h"
 #include "matrix.h"
@@ -108,7 +108,7 @@ void	seq_shared_build_candidates(t_seq_shared *shared, double **c,
 					t--;
 				}
 				cand_row[insert_at] = node;
-				eta = 1.0 / (dist + ACO_EPS);
+				eta = 1.0 / (dist + SOLVER_EPS);
 				eta_row[insert_at] = (float)seq_fast_pow(eta, beta);
 			}
 			node++;

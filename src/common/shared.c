@@ -3,17 +3,17 @@
 #include <math.h>
 #include <stdlib.h>
 
-const char	*aco_status_string(AcoStatus status)
+const char	*status_string(t_status status)
 {
-	if (status == ACO_OK)
+	if (status == SOLVER_OK)
 		return ("ok");
-	if (status == ACO_ERR_INVALID_INPUT)
+	if (status == SOLVER_ERR_INVALID_INPUT)
 		return ("invalid input");
-	if (status == ACO_ERR_ALLOCATION)
+	if (status == SOLVER_ERR_ALLOCATION)
 		return ("allocation failure");
-	if (status == ACO_ERR_NO_SOLUTION)
+	if (status == SOLVER_ERR_NO_SOLUTION)
 		return ("no solution");
-	if (status == ACO_ERR_BACKEND)
+	if (status == SOLVER_ERR_BACKEND)
 		return ("backend failure");
 	return ("unknown status");
 }
@@ -34,7 +34,7 @@ static double	rand01(void)
 	return ((double)rand() / (double)RAND_MAX);
 }
 
-double	aco_rand01_state(unsigned int *state)
+double	rand01_state(unsigned int *state)
 {
 	unsigned int	x;
 
@@ -50,7 +50,7 @@ double	aco_rand01_state(unsigned int *state)
 	return ((double)x / (double)UINT_MAX);
 }
 
-unsigned int	aco_make_ant_seed(unsigned int base_seed, int iter,
+unsigned int	make_ant_seed(unsigned int base_seed, int iter,
 		int ant_index)
 {
 	unsigned int	x;

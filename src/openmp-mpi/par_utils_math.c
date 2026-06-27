@@ -1,4 +1,4 @@
-#include "aco.h"
+# include "solver.h"
 #include "openmp-mpi/mpi_internal.h"
 #include <float.h>
 #include <math.h>
@@ -26,7 +26,7 @@ static long	par_get_l3_cache_size(void)
 	unit = strpbrk(buf, "KMGTkmgt");
 	if (unit)
 	{
-		if (*unit == 'K' || *unit == 'k')
+		if (*unit == 'k' || *unit == 'k')
 			size *= 1024;
 		else if (*unit == 'M' || *unit == 'm')
 			size *= 1024 * 1024;

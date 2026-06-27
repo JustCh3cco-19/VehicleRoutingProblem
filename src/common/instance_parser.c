@@ -10,12 +10,12 @@ static double euc_2d(double x1, double y1, double x2, double y2) {
     return sqrt(pow(x1 - x2, 2) + pow(y1 - y2, 2));
 }
 
-void vrp_instance_init(VrpInstance *instance) {
+void vrp_instance_init(t_vrp_instance *instance) {
     if (!instance) return;
     memset(instance, 0, sizeof(*instance));
 }
 
-void vrp_instance_free(VrpInstance *instance) {
+void vrp_instance_free(t_vrp_instance *instance) {
     if (!instance) return;
     free(instance->coords_x);
     free(instance->coords_y);
@@ -23,7 +23,7 @@ void vrp_instance_free(VrpInstance *instance) {
     vrp_instance_init(instance);
 }
 
-int vrp_load_tsplib_instance(const char *path, VrpInstance *instance) {
+int vrp_load_tsplib_instance(const char *path, t_vrp_instance *instance) {
     if (!path || !instance) {
         return 1;
     }
@@ -36,7 +36,7 @@ int vrp_load_tsplib_instance(const char *path, VrpInstance *instance) {
     }
 
     int n = 0;
-    int K = 0;
+    int k = 0;
     int capacity = 0;
     char line[256];
     int have_coords = 0;
@@ -57,12 +57,12 @@ int vrp_load_tsplib_instance(const char *path, VrpInstance *instance) {
         } else if (strncmp(line, "VEHICLES", 8) == 0) {
             char *colon = strchr(line, ':');
             if (colon) {
-                K = atoi(colon + 1);
+                k = atoi(colon + 1);
             } else {
-                sscanf(line, "VEHICLES: %d", &K);
-                if (K == 0) sscanf(line, "VEHICLES %d", &K);
+                sscanf(line, "VEHICLES: %d", &k);
+                if (k == 0) sscanf(line, "VEHICLES %d", &k);
             }
-            have_vehicles = (K > 0);
+            have_vehicles = (k > 0);
         } else if (strncmp(line, "CAPACITY", 8) == 0) {
             char *colon = strchr(line, ':');
             if (colon) {
@@ -158,12 +158,12 @@ int vrp_load_tsplib_instance(const char *path, VrpInstance *instance) {
 
     fclose(f);
     instance->n = n;
-    instance->vehicles = K;
+    instance->vehicles = k;
     instance->capacity = capacity;
     return 0;
 }
 
-int vrp_instance_create_euc2d_matrix(const VrpInstance *instance,
+int vrp_instance_create_euc2d_matrix(const t_vrp_instance *instance,
                                      double ***c_out) {
     if (!instance || !c_out || instance->n <= 0 || !instance->coords_x ||
         !instance->coords_y) {
@@ -187,7 +187,7 @@ int vrp_instance_create_euc2d_matrix(const VrpInstance *instance,
     return 0;
 }
 
-int vrp_instance_create_float_coords(const VrpInstance *instance,
+int vrp_instance_create_float_coords(const t_vrp_instance *instance,
                                      float **coords_x_out,
                                      float **coords_y_out) {
     if (!instance || !coords_x_out || !coords_y_out || instance->n <= 0 ||

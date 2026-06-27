@@ -1,11 +1,11 @@
 #include "internal.h"
 #include "solution.h"
 
-int	aco_select_next(int current, const int *unvisited_nodes,
+int	shared_select_next(int current, const int *unvisited_nodes,
 		int unvisited_count, double **tau, double **eta,
 		double alpha, double beta, double roulette_r,
 		double *candidate_scores, int *selected_index,
-		t_aco_score_cache *score_cache)
+		t_score_cache *score_cache)
 {
 	const double	*score_row;
 	double			*tau_row;
@@ -61,9 +61,9 @@ int	aco_select_next(int current, const int *unvisited_nodes,
 	return (unvisited_nodes[chosen_idx]);
 }
 
-bool	aco_build_ant_solution(
-		t_solution *sol, int n, int K, double **tau, double **eta, double alpha,
-		double beta, int vehicle_capacity_customers, t_aco_score_cache *score_cache,
+bool	shared_build_ant_solution(
+		t_solution *sol, int n, int k, double **tau, double **eta, double alpha,
+		double beta, int vehicle_capacity_customers, t_score_cache *score_cache,
 		unsigned int *rng_state, int *unvisited_nodes, double *candidate_scores,
 		double *random_draws)
 {
@@ -72,7 +72,7 @@ bool	aco_build_ant_solution(
 	int		unvisited_count;
 	int		draw_index;
 	int		vehicle;
-	Route	*r;
+	t_route	*r;
 	int		current;
 	int		assigned_customers;
 	int		remaining_vehicles;
@@ -80,7 +80,7 @@ bool	aco_build_ant_solution(
 	double	roulette_r;
 	int		selected_idx;
 	int		next;
-	Route	*last;
+	t_route	*last;
 	int		last_customers;
 
 	solution_reset(sol);
@@ -91,27 +91,27 @@ bool	aco_build_ant_solution(
 	while (i < n)
 	{
 		unvisited_nodes[i] = i + 1;
-		random_draws[i] = aco_rand01_state(rng_state);
+		random_draws[i] = rand01_state(rng_state);
 		i++;
 	}
 	unvisited_count = n;
 	draw_index = 0;
 	vehicle = 1;
-	while (vehicle <= K)
+	while (vehicle <= k)
 	{
 		r = &sol->routes[vehicle - 1];
 		if (!route_append(r, 0))
 			return (false);
 		current = 0;
 		assigned_customers = 0;
-		remaining_vehicles = K - vehicle;
+		remaining_vehicles = k - vehicle;
 		future_capacity = remaining_vehicles * route_customer_cap;
 		while (unvisited_count > 0 && unvisited_count > future_capacity &&
 assigned_customers < route_customer_cap)
 		{
 			roulette_r = random_draws[draw_index++];
 			selected_idx = -1;
-			next = aco_select_next(current, unvisited_nodes, unvisited_count,
+			next = shared_select_next(current, unvisited_nodes, unvisited_count,
 					tau, eta, alpha, beta, roulette_r,
 					candidate_scores, &selected_idx, score_cache);
 			if (next <= 0)
@@ -129,7 +129,7 @@ assigned_customers < route_customer_cap)
 	}
 	if (unvisited_count > 0)
 	{
-		last = &sol->routes[K - 1];
+		last = &sol->routes[k - 1];
 		if (last->len > 0 && last->nodes[last->len - 1] == 0)
 			last->len--;
 		last_customers = last->len > 0 ? (last->len - 1) : 0;

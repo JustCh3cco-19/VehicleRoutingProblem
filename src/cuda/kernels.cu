@@ -185,9 +185,9 @@ __global__ void kernel_reset_ant_state(int *d_routes,
     l2_row[w] = 0ull;
   }
 
-  for (int v = 0; v < params.K; ++v) {
+  for (int v = 0; v < params.k; ++v) {
     d_routes[0 * params.m + ant] = 0;
-    d_route_lengths[ant * params.K + v] = 1;
+    d_route_lengths[ant * params.k + v] = 1;
   }
 
   d_rng_states[ant] = seed ^ (1664525u * (unsigned int)(ant + 1));
@@ -409,7 +409,7 @@ __global__ void kernel_construct_solutions(const float2 *d_coords,
     remaining = params.n;
   }
 
-  for (int vehicle = 0; vehicle < params.K; ++vehicle) {
+  for (int vehicle = 0; vehicle < params.k; ++vehicle) {
     int current = 0;
     int route_load = 0;
     int route_len = 1;
@@ -437,7 +437,7 @@ __global__ void kernel_construct_solutions(const float2 *d_coords,
         chosen_from_fallback = 1;
       }
 
-      int close_allowed = (remaining_b <= (params.K - vehicle - 1) * params.cap);
+      int close_allowed = (remaining_b <= (params.k - vehicle - 1) * params.cap);
       if (close_allowed && lane == 0 && d_iter_stats) {
         atomicAdd(&(d_iter_stats->depot_offer_calls), 1ULL);
       }
@@ -505,7 +505,7 @@ __global__ void kernel_construct_solutions(const float2 *d_coords,
       global_step++;
       d_routes[global_step * params.m + ant] = 0;
       total_cost += calc_dist(d_coords[current], d_coords[0]);
-      d_route_lengths[ant * params.K + vehicle] = route_len + 1;
+      d_route_lengths[ant * params.k + vehicle] = route_len + 1;
       if (d_iter_stats) {
         atomicAdd(&(d_iter_stats->depot_close_moves), 1ULL);
         if (route_len > 1) {
@@ -550,16 +550,16 @@ __global__ void kernel_deposit_solution(uint8_t *d_tau,
                                            CudaParams params) {
   int veh_idx = blockIdx.x * blockDim.x + threadIdx.x;
 
-  if (veh_idx >= params.K) {
+  if (veh_idx >= params.k) {
     return;
   }
 
-  int route_len = d_route_lengths[best_ant * params.K + veh_idx];
+  int route_len = d_route_lengths[best_ant * params.k + veh_idx];
   int prev = 0;
 
   int global_step = 0;
   for (int v = 0; v < veh_idx; ++v) {
-    global_step += d_route_lengths[best_ant * params.K + v] - 1;
+    global_step += d_route_lengths[best_ant * params.k + v] - 1;
   }
 
   for (int pos = 1; pos < route_len; ++pos) {
@@ -588,7 +588,7 @@ __global__ void kernel_deposit_flat_solution(uint8_t *d_tau,
                                                 CudaParams params) {
   int veh_idx = blockIdx.x * blockDim.x + threadIdx.x;
 
-  if (veh_idx >= params.K) {
+  if (veh_idx >= params.k) {
     return;
   }
 
@@ -671,7 +671,7 @@ void launch_construct_solutions(const float2 *d_coords, const uint8_t *d_tau,
 void launch_deposit_solution(uint8_t *d_tau, const int *d_routes,
                              const int *d_route_lengths, float deposit_amount,
                              int best_ant, CudaParams params) {
-  int blocks = (params.K + CUDA_THREADS_PER_BLOCK - 1) / CUDA_THREADS_PER_BLOCK;
+  int blocks = (params.k + CUDA_THREADS_PER_BLOCK - 1) / CUDA_THREADS_PER_BLOCK;
   kernel_deposit_solution<<<blocks, CUDA_THREADS_PER_BLOCK>>>(
       d_tau, d_routes, d_route_lengths, deposit_amount, best_ant, params);
 }
@@ -679,7 +679,7 @@ void launch_deposit_solution(uint8_t *d_tau, const int *d_routes,
 void launch_deposit_flat_solution(uint8_t *d_tau, const int *d_flat_routes,
                                   const int *d_flat_lengths,
                                   float deposit_amount, CudaParams params) {
-  int blocks = (params.K + CUDA_THREADS_PER_BLOCK - 1) / CUDA_THREADS_PER_BLOCK;
+  int blocks = (params.k + CUDA_THREADS_PER_BLOCK - 1) / CUDA_THREADS_PER_BLOCK;
   kernel_deposit_flat_solution<<<blocks, CUDA_THREADS_PER_BLOCK>>>(
       d_tau, d_flat_routes, d_flat_lengths, deposit_amount, params);
 }

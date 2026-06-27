@@ -1,4 +1,4 @@
-#include "aco.h"
+# include "solver.h"
 #include "config.h"
 #include "openmp-mpi/mpi_internal.h"
 #include "solution.h"
@@ -57,36 +57,36 @@ void	par_solver_thread_run(t_par_solver_ctx *ctx)
 	par_ws_free(&ws);
 }
 
-static AcoStatus	par_vrp_run(t_par_solver_ctx *ctx)
+static t_status	par_vrp_run(t_par_solver_ctx *ctx)
 {
 	if (!par_solver_alloc(ctx))
-		return (ACO_ERR_ALLOCATION);
+		return (SOLVER_ERR_ALLOCATION);
 	if (!par_solver_init(ctx))
 	{
 		par_solver_free(ctx);
-		return (ACO_ERR_ALLOCATION);
+		return (SOLVER_ERR_ALLOCATION);
 	}
 #pragma omp parallel default(shared) proc_bind(close)
 	par_solver_thread_run(ctx);
 	if (ctx->workspace_failed)
 	{
 		par_solver_free(ctx);
-		return (ACO_ERR_ALLOCATION);
+		return (SOLVER_ERR_ALLOCATION);
 	}
-	if (ctx->log_level > ACO_LOG_SILENT && ctx->mpi_rank == 0)
+	if (ctx->log_level > LOG_SILENT && ctx->mpi_rank == 0)
 	{
 		fprintf(stderr, "ACO Parallel Ultimate Completion. Best: %.3f. Time: %.3fs\n",
 			*ctx->best_cost, par_wall_time() - ctx->start_time);
 	}
 	par_solver_free(ctx);
 	if (*ctx->best_cost < DBL_MAX)
-		return (ACO_OK);
-	return (ACO_ERR_NO_SOLUTION);
+		return (SOLVER_OK);
+	return (SOLVER_ERR_NO_SOLUTION);
 }
 
-AcoStatus	aco_vrp(int n, int k, int m, double **c, double alpha, double beta,
+t_status	vrp_solve(int n, int k, int m, double **c, double alpha, double beta,
 		double rho, double tau0, double q, unsigned int seed,
-		Solution *best_solution, double *best_cost)
+		t_solution *best_solution, double *best_cost)
 {
 	int	cap;
 
@@ -94,19 +94,19 @@ AcoStatus	aco_vrp(int n, int k, int m, double **c, double alpha, double beta,
 		cap = (int)(((long long)120 * n + 100 * k - 1) / (100 * k));
 	else
 		cap = n;
-	return (aco_vrp_with_capacity(n, k, cap, m, c, alpha, beta, rho, tau0,
+	return (vrp_solve_with_capacity(n, k, cap, m, c, alpha, beta, rho, tau0,
 			q, seed, best_solution, best_cost));
 }
 
-AcoStatus	aco_vrp_with_capacity(int n, int k, int cap, int m, double **c,
+t_status	vrp_solve_with_capacity(int n, int k, int cap, int m, double **c,
 		double alpha, double beta, double rho, double tau0, double q,
-		unsigned int seed, Solution *best_solution, double *best_cost)
+		unsigned int seed, t_solution *best_solution, double *best_cost)
 {
 	t_par_solver_ctx	ctx;
-	t_aco_config		config;
+	t_config		config;
 
 	if (n <= 0 || k <= 0 || !c || !best_solution || !best_cost)
-		return (ACO_ERR_INVALID_INPUT);
+		return (SOLVER_ERR_INVALID_INPUT);
 	ctx.n = n;
 	ctx.k = k;
 	ctx.cap = cap;
@@ -131,7 +131,7 @@ AcoStatus	aco_vrp_with_capacity(int n, int k, int cap, int m, double **c,
 		MPI_Comm_size(MPI_COMM_WORLD, &ctx.mpi_size);
 	}
 #endif
-	aco_runtime_config_load_env(&config);
+	runtime_config_load_env(&config);
 	ctx.config = &config;
 	ctx.cand_k = par_choose_candidate_count(n, config.candidate_k);
 	ctx.total_m = (m <= 0) ? ((n / 2) * ctx.mpi_size) : m;

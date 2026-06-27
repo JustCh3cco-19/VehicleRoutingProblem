@@ -1,5 +1,5 @@
 #include "aco_v2.h"
-#include "aco.h"
+# include "solver.h"
 #include "matrix.h"
 #include "solution.h"
 
@@ -86,7 +86,7 @@ static long get_l3_cache_size(void) {
     long size = atol(buf);
     char *unit = strpbrk(buf, "KMGTkmgt");
     if (unit) {
-        if (*unit == 'K' || *unit == 'k') size *= 1024;
+        if (*unit == 'k' || *unit == 'k') size *= 1024;
         else if (*unit == 'M' || *unit == 'm') size *= 1024 * 1024;
         else if (*unit == 'G' || *unit == 'g') size *= 1024 * 1024 * 1024;
     }
@@ -160,12 +160,12 @@ static int v2_shared_init(V2RankShared *s, int n, int cand_k, const MatrixFloat 
 
 /* -- V2 Thread Workspace with Hierarchical Mask -- */
 typedef struct {
-    Solution *sol;
+    t_solution *sol;
     uint64_t *visited;
     uint64_t *meta_active; // 1 bit per parola di 'visited'
     int *route_loads;
     unsigned int rng_state;
-    Solution *thread_best;
+    t_solution *thread_best;
 } HierarchicalWorkspace;
 
 static void v2_ws_free(HierarchicalWorkspace *ws) {
@@ -174,11 +174,11 @@ static void v2_ws_free(HierarchicalWorkspace *ws) {
   solution_free(ws->thread_best); solution_free(ws->sol);
 }
 
-static int v2_ws_init(HierarchicalWorkspace *ws, int K, int n, int words, int meta_words) {
-  ws->sol = solution_create(K, n); ws->thread_best = solution_create(K, n);
+static int v2_ws_init(HierarchicalWorkspace *ws, int k, int n, int words, int meta_words) {
+  ws->sol = solution_create(k, n); ws->thread_best = solution_create(k, n);
   ws->visited = aligned_calloc_64((size_t)words * sizeof(uint64_t));
   ws->meta_active = aligned_calloc_64((size_t)meta_words * sizeof(uint64_t));
-  ws->route_loads = calloc((size_t)K, sizeof(int));
+  ws->route_loads = calloc((size_t)k, sizeof(int));
   if (!ws->sol || !ws->thread_best || !ws->visited || !ws->meta_active || !ws->route_loads) { v2_ws_free(ws); return 0; }
   return 1;
 }
@@ -215,18 +215,18 @@ static int find_nearest_unvisited_h(const V2RankShared *s, int curr, const Hiera
     return best;
 }
 
-static void build_ant_v2_h(HierarchicalWorkspace *ws, const V2RankShared *s, int K, int cap, const MatrixFloat *c, const float *scores) {
+static void build_ant_v2_h(HierarchicalWorkspace *ws, const V2RankShared *s, int k, int cap, const MatrixFloat *c, const float *scores) {
     solution_reset(ws->sol);
     memset(ws->visited, 0, (size_t)s->visited_words * sizeof(uint64_t));
     // Inizializza meta_active con tutti i bit a 1 (tutte le parole hanno nodi liberi)
     memset(ws->meta_active, 0xFF, (size_t)s->meta_words * sizeof(uint64_t));
-    memset(ws->route_loads, 0, (size_t)K * sizeof(int));
+    memset(ws->route_loads, 0, (size_t)k * sizeof(int));
     
     int rem = s->n;
-    for (int v = 0; v < K; v++) {
+    for (int v = 0; v < k; v++) {
         route_append(&ws->sol->routes[v], 0); int curr = 0;
         while (true) {
-            int rem_v = K - v - 1, fut_cap = rem_v * cap;
+            int rem_v = k - v - 1, fut_cap = rem_v * cap;
             if (!(rem > 0 && rem > fut_cap && ws->route_loads[v] < cap)) break;
 
             int next = 0; float denom = 0.0f;
@@ -239,7 +239,7 @@ static void build_ant_v2_h(HierarchicalWorkspace *ws, const V2RankShared *s, int
                 }
             }
             if (denom > 0.0f) {
-                float thres = (float)aco_rand01_state(&ws->rng_state) * denom, cum = 0.0f;
+                float thres = (float)rand01_state(&ws->rng_state) * denom, cum = 0.0f;
                 for (int t = 0; t < s->cand_k; t++) {
                     int node = cands[t];
                     if (node > 0 && !((ws->visited[(unsigned)node >> 6] >> ((unsigned)node & 63u)) & 1u)) {
@@ -264,16 +264,16 @@ static void build_ant_v2_h(HierarchicalWorkspace *ws, const V2RankShared *s, int
     }
 }
 
-static double solution_cost_f(const Solution *s, float **c) {
+static double solution_cost_f(const t_solution *s, float **c) {
     double total = 0.0;
-    for (int i = 0; i < s->K; i++) {
-        const Route *r = &s->routes[i];
+    for (int i = 0; i < s->k; i++) {
+        const t_route *r = &s->routes[i];
         for (int t = 0; t + 1 < r->len; t++) total += (double)c[r->nodes[t]][r->nodes[t+1]];
     }
     return total;
 }
 
-void aco_vrp_v2_run(int n, int K, int cap, int m, double **c, double alpha, double beta, double rho, double tau0, double Q, unsigned int seed, Solution *best_sol, double *best_cost) {
+void aco_vrp_v2_run(int n, int k, int cap, int m, double **c, double alpha, double beta, double rho, double tau0, double q, unsigned int seed, t_solution *best_sol, double *best_cost) {
     int mpi_rank = 0, mpi_size = 1;
 #ifdef USE_MPI
     int mpi_init = 0; MPI_Initialized(&mpi_init);
@@ -289,12 +289,12 @@ void aco_vrp_v2_run(int n, int K, int cap, int m, double **c, double alpha, doub
     for (int i = 0; i <= n; i++) for (int j = 0; j <= n; j++) { c_mat->rows[i][j] = (float)c[i][j]; tau_mat->rows[i][j] = (i==j) ? 0.0f : (float)tau0; }
     V2RankShared shared; v2_shared_init(&shared, n, cand_k, c_mat, beta);
     float *score_mat = aligned_alloc(V2_ALIGNMENT, (size_t)(n + 1) * (size_t)shared.stride * sizeof(float));
-    Solution *iter_best = solution_create(K, n); *best_cost = DBL_MAX; double start_time = wall_time();
+    t_solution *iter_best = solution_create(k, n); *best_cost = DBL_MAX; double start_time = wall_time();
     const char *s_fixed = getenv("ACO_SOLVER_FIXED_EPOCHS"); int fixed_epochs = (s_fixed && *s_fixed) ? atoi(s_fixed) : 100;
 
     #pragma omp parallel default(shared) proc_bind(close)
     {
-        HierarchicalWorkspace ws; v2_ws_init(&ws, K, n, shared.visited_words, shared.meta_words);
+        HierarchicalWorkspace ws; v2_ws_init(&ws, k, n, shared.visited_words, shared.meta_words);
         for (int iter = 0; iter < fixed_epochs; iter++) {
             #pragma omp for schedule(static) nowait
             for (int i = 0; i <= n; i++) {
@@ -306,8 +306,8 @@ void aco_vrp_v2_run(int n, int K, int cap, int m, double **c, double alpha, doub
             double t_best_c = DBL_MAX;
             #pragma omp for schedule(runtime) nowait
             for (int a = 0; a < local_m; a++) {
-                ws.rng_state = aco_make_ant_seed(seed, iter, ant_off + a);
-                build_ant_v2_h(&ws, &shared, K, cap, c_mat, score_mat);
+                ws.rng_state = make_ant_seed(seed, iter, ant_off + a);
+                build_ant_v2_h(&ws, &shared, k, cap, c_mat, score_mat);
                 double cost = solution_cost_f(ws.sol, c_mat->rows);
                 if (cost < t_best_c) { t_best_c = cost; solution_copy(ws.thread_best, ws.sol); }
             }
@@ -321,11 +321,11 @@ void aco_vrp_v2_run(int n, int K, int cap, int m, double **c, double alpha, doub
     matrix_free_float(tau_mat); matrix_free_float(c_mat); free(score_mat); solution_free(iter_best); v2_shared_free(&shared);
 }
 
-void aco_vrp_v2(int n, int K, int m, double **c, double alpha, double beta, double rho, double tau0, double Q, unsigned int seed, Solution *best_solution, double *best_cost) {
-    int cap = (K > 0) ? (int)(((long long)120 * n + 100 * K - 1) / (100 * K)) : n;
-    aco_vrp_v2_with_capacity(n, K, cap, m, c, alpha, beta, rho, tau0, Q, seed, best_solution, best_cost);
+void aco_vrp_v2(int n, int k, int m, double **c, double alpha, double beta, double rho, double tau0, double q, unsigned int seed, t_solution *best_solution, double *best_cost) {
+    int cap = (k > 0) ? (int)(((long long)120 * n + 100 * k - 1) / (100 * k)) : n;
+    aco_vrp_v2_with_capacity(n, k, cap, m, c, alpha, beta, rho, tau0, q, seed, best_solution, best_cost);
 }
 
-void aco_vrp_v2_with_capacity(int n, int K, int vehicle_capacity_customers, int m, double **c, double alpha, double beta, double rho, double tau0, double Q, unsigned int seed, Solution *best_solution, double *best_cost) {
-    aco_vrp_v2_run(n, K, vehicle_capacity_customers, m, c, alpha, beta, rho, tau0, Q, seed, best_solution, best_cost);
+void aco_vrp_v2_with_capacity(int n, int k, int vehicle_capacity_customers, int m, double **c, double alpha, double beta, double rho, double tau0, double q, unsigned int seed, t_solution *best_solution, double *best_cost) {
+    aco_vrp_v2_run(n, k, vehicle_capacity_customers, m, c, alpha, beta, rho, tau0, q, seed, best_solution, best_cost);
 }

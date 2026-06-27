@@ -10,14 +10,14 @@
  * di una singola formica, parallelizzando la scansione del Fallback
  * per massimizzare la banda di memoria e il prefetching.
  */
-void aco_vrp_v3(int n, int K, int m, double **c, double alpha,
-                double beta, double rho, double tau0, double Q,
-                unsigned int seed, Solution *best_solution, double *best_cost);
+void aco_vrp_v3(int n, int k, int m, double **c, double alpha,
+                double beta, double rho, double tau0, double q,
+                unsigned int seed, t_solution *best_solution, double *best_cost);
 
-void aco_vrp_v3_with_capacity(int n, int K, int vehicle_capacity_customers, int m,
+void aco_vrp_v3_with_capacity(int n, int k, int vehicle_capacity_customers, int m,
                               double **c, double alpha, double beta,
-                              double rho, double tau0, double Q,
-                              unsigned int seed, Solution *best_solution,
+                              double rho, double tau0, double q,
+                              unsigned int seed, t_solution *best_solution,
                               double *best_cost);
 
 #endif

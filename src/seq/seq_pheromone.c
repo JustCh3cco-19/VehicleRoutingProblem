@@ -1,4 +1,4 @@
-#include "aco.h"
+# include "solver.h"
 #include "seq/internal.h"
 #include "solution.h"
 
@@ -26,7 +26,7 @@ void	deposit_iter_best(t_seq_ctx *ctx)
 	int		i;
 	int		j;
 	double	dep;
-	Route	*r;
+	t_route	*r;
 
 	dep = (0.3 * ctx->q) / ctx->iter_best_cost;
 	i = 0;
@@ -49,7 +49,7 @@ void	deposit_global_best(t_seq_ctx *ctx)
 	int		i;
 	int		j;
 	double	dep;
-	Route	*r;
+	t_route	*r;
 
 	dep = (0.7 * ctx->q) / (*ctx->best_cost);
 	i = 0;

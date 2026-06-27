@@ -24,8 +24,6 @@ struct s_seq_workspace
 	unsigned int			rng_state;
 };
 typedef struct s_seq_workspace	t_seq_workspace;
-typedef t_seq_shared		SeqShared;
-typedef t_seq_workspace		SeqWorkspace;
 
 struct s_select_ctx
 {
@@ -57,7 +55,7 @@ struct s_aco_params
 	double					q;
 	unsigned int			seed;
 };
-typedef struct s_aco_params	t_aco_params;
+typedef struct s_aco_params	t_params;
 
 struct s_seq_ctx
 {
@@ -74,7 +72,7 @@ struct s_seq_ctx
 	unsigned int			seed;
 	t_solution				*best_sol;
 	double					*best_cost;
-	t_aco_config			params;
+	t_config			params;
 	double					**tau;
 	t_solution				*iter_best;
 	t_seq_shared			shared;

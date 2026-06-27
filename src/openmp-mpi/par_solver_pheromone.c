@@ -1,4 +1,4 @@
-#include "aco.h"
+# include "solver.h"
 #include "openmp-mpi/mpi_internal.h"
 #include "solution.h"
 #include <math.h>
@@ -18,7 +18,7 @@ void	par_solver_evaporate(t_par_solver_ctx *ctx)
 	}
 }
 
-static void	par_deposit_route(t_par_solver_ctx *ctx, Route *r,
+static void	par_deposit_route(t_par_solver_ctx *ctx, t_route *r,
 		float weighted_dep)
 {
 	int	t;

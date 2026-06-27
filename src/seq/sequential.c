@@ -1,4 +1,4 @@
-#include "aco.h"
+# include "solver.h"
 #include "config.h"
 #include "seq/internal.h"
 #include "solution.h"
@@ -7,10 +7,10 @@
 #include <math.h>
 #include <stdio.h>
 
-static AcoStatus	aco_vrp_run_with_config(struct s_seq_ctx *ctx)
+static t_status	aco_vrp_run_with_config(struct s_seq_ctx *ctx)
 {
 	if (!allocate_ctx(ctx))
-		return (ACO_ERR_ALLOCATION);
+		return (SOLVER_ERR_ALLOCATION);
 	init_ctx(ctx);
 	ctx->iter = 0;
 	while (1)
@@ -39,13 +39,13 @@ static AcoStatus	aco_vrp_run_with_config(struct s_seq_ctx *ctx)
 	}
 	cleanup_ctx(ctx);
 	if (*ctx->best_cost < DBL_MAX)
-		return (ACO_OK);
-	return (ACO_ERR_NO_SOLUTION);
+		return (SOLVER_OK);
+	return (SOLVER_ERR_NO_SOLUTION);
 }
 
-AcoStatus	aco_vrp(int n, int k, int m, double **c, double alpha, double beta,
+t_status	vrp_solve(int n, int k, int m, double **c, double alpha, double beta,
 		double rho, double tau0, double q, unsigned int seed,
-		Solution *best_solution, double *best_cost)
+		t_solution *best_solution, double *best_cost)
 {
 	int	cap;
 
@@ -53,13 +53,13 @@ AcoStatus	aco_vrp(int n, int k, int m, double **c, double alpha, double beta,
 		cap = (int)(((long long)120 * n + 100 * k - 1) / (100 * k));
 	else
 		cap = n;
-	return (aco_vrp_with_capacity(n, k, cap, m, c, alpha, beta, rho, tau0,
+	return (vrp_solve_with_capacity(n, k, cap, m, c, alpha, beta, rho, tau0,
 			q, seed, best_solution, best_cost));
 }
 
-AcoStatus	aco_vrp_with_capacity(int n, int k, int cap, int m, double **c,
+t_status	vrp_solve_with_capacity(int n, int k, int cap, int m, double **c,
 		double alpha, double beta, double rho, double tau0, double q,
-		unsigned int seed, Solution *best_solution, double *best_cost)
+		unsigned int seed, t_solution *best_solution, double *best_cost)
 {
 	struct s_seq_ctx	ctx;
 
@@ -76,7 +76,7 @@ AcoStatus	aco_vrp_with_capacity(int n, int k, int cap, int m, double **c,
 	ctx.seed = seed;
 	ctx.best_sol = best_solution;
 	ctx.best_cost = best_cost;
-	aco_runtime_config_load_env(&ctx.params);
+	runtime_config_load_env(&ctx.params);
 	ctx.params.ants = m;
 	ctx.params.seed = seed;
 	if (ctx.m <= 0)

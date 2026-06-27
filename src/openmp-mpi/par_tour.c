@@ -1,4 +1,4 @@
-#include "aco.h"
+# include "solver.h"
 #include "openmp-mpi/mpi_internal.h"
 #include "solution.h"
 #include <float.h>
@@ -265,16 +265,16 @@ bool	par_build_ant(aco_mpi_workspace_t *ws, const aco_mpi_rank_shared_t *s,
 	return (true);
 }
 
-double	par_solution_cost(const Solution *s, float **c)
+double	par_solution_cost(const t_solution *s, float **c)
 {
 	double			total;
 	int				i;
 	int				t;
-	const Route		*r;
+	const t_route		*r;
 
 	total = 0.0;
 	i = 0;
-	while (i < s->K)
+	while (i < s->k)
 	{
 		r = &s->routes[i];
 		if (r->len > 2)

@@ -1,13 +1,11 @@
 #ifndef MPI_INTERNAL_H
 # define MPI_INTERNAL_H
 
-# include "aco.h"
+# include "solver.h"
 # include "config.h"
 # include <stddef.h>
 # include <stdint.h>
 
-typedef Solution			t_solution;
-typedef AcoRuntimeConfig	t_aco_config;
 
 # ifdef USE_MPI
 #  include <mpi.h>
@@ -77,7 +75,7 @@ void				*par_aligned_calloc(size_t bytes);
 double				par_wall_time(void);
 float				par_fast_powf(float base, float exp);
 double				par_rand01(unsigned int *state);
-bool				par_route_append(Route *r, int node);
+bool				par_route_append(t_route *r, int node);
 int					par_is_improvement(double prev_best, double new_best,
 						double min_rel_improvement);
 t_par_matrix		*par_matrix_create(int n);
@@ -94,7 +92,7 @@ int					par_nearest_unvisited(const t_par_shared *s, int curr,
 						const t_par_workspace *ws, const t_par_matrix *c);
 bool				par_build_ant(t_par_workspace *ws, const t_par_shared *s,
 						int k, int cap, const t_par_matrix *c, const float *scores);
-double				par_solution_cost(const Solution *s, float **c);
+double				par_solution_cost(const t_solution *s, float **c);
 
 # ifdef USE_MPI
 void				par_async_init(t_par_async_context *ctx, int mpi_size);
@@ -121,7 +119,7 @@ struct s_par_solver_ctx
 	unsigned int			seed;
 	t_solution				*best_sol;
 	double					*best_cost;
-	const t_aco_config		*config;
+	const t_config		*config;
 	int						mpi_rank;
 	int						mpi_size;
 	int						cand_k;

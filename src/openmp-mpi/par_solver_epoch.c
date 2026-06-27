@@ -1,4 +1,4 @@
-#include "aco.h"
+# include "solver.h"
 #include "openmp-mpi/mpi_internal.h"
 #include "solution.h"
 #include <float.h>
@@ -42,7 +42,7 @@ static void	par_solver_ant_step(t_par_solver_ctx *ctx, t_par_workspace *ws,
 {
 	double	cost;
 
-	ws->rng_state = aco_make_ant_seed(ctx->seed, iter, ctx->ant_off + a);
+	ws->rng_state = make_ant_seed(ctx->seed, iter, ctx->ant_off + a);
 	if (!par_build_ant(ws, &ctx->shared, ctx->k, ctx->cap, ctx->c_mat,
 			ctx->score_mat))
 		return ;
@@ -82,7 +82,7 @@ static void	par_log_iter(t_par_solver_ctx *ctx, int iter)
 	double	elapsed;
 
 	now = par_wall_time();
-	if (ctx->log_level > ACO_LOG_SILENT && ctx->mpi_rank == 0
+	if (ctx->log_level > LOG_SILENT && ctx->mpi_rank == 0
 		&& ctx->progress_interval_sec > 0.0 && now >= ctx->next_progress_time)
 	{
 		elapsed = now - ctx->start_time;

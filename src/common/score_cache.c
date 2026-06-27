@@ -27,17 +27,17 @@ static void	score_cache_compute_row(double *dst, int current, int n,
 	}
 }
 
-static double	*score_cache_get_l1_line(t_aco_score_cache *cache, int idx)
+static double	*score_cache_get_l1_line(t_score_cache *cache, int idx)
 {
 	return (cache->l1_rows + (size_t)idx * (size_t)cache->line_len);
 }
 
-static double	*score_cache_get_l2_line(t_aco_score_cache *cache, int idx)
+static double	*score_cache_get_l2_line(t_score_cache *cache, int idx)
 {
 	return (cache->l2_rows + (size_t)idx * (size_t)cache->line_len);
 }
 
-const double	*score_cache_get_row(t_aco_score_cache *cache, int current,
+const double	*score_cache_get_row(t_score_cache *cache, int current,
 		double **tau, double **eta, double alpha, double beta)
 {
 	int		l1_idx;

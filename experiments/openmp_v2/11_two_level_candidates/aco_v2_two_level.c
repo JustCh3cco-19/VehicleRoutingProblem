@@ -1,5 +1,5 @@
 #include "aco_v2.h"
-#include "aco.h"
+# include "solver.h"
 #include "matrix.h"
 #include "solution.h"
 
@@ -85,7 +85,7 @@ static long get_l3_cache_size(void) {
     long size = atol(buf);
     char *unit = strpbrk(buf, "KMGTkmgt");
     if (unit) {
-        if (*unit == 'K' || *unit == 'k') size *= 1024;
+        if (*unit == 'k' || *unit == 'k') size *= 1024;
         else if (*unit == 'M' || *unit == 'm') size *= 1024 * 1024;
         else if (*unit == 'G' || *unit == 'g') size *= 1024 * 1024 * 1024;
     }
@@ -149,16 +149,16 @@ static int v2_shared_init(V2RankShared *s, int n, int l1_k, int l2_k, const Matr
     return 1;
 }
 
-static void v2_ws_free(AcoThreadWorkspace *ws) {
+static void v2_ws_free(t_thread_workspace *ws) {
   if (!ws) return;
   free(ws->route_loads); free(ws->visited);
   solution_free(ws->thread_best); solution_free(ws->sol);
 }
 
-static int v2_ws_init(AcoThreadWorkspace *ws, int K, int n, int words) {
-  ws->sol = solution_create(K, n); ws->thread_best = solution_create(K, n);
+static int v2_ws_init(t_thread_workspace *ws, int k, int n, int words) {
+  ws->sol = solution_create(k, n); ws->thread_best = solution_create(k, n);
   ws->visited = aligned_calloc_64((size_t)words * sizeof(uint64_t));
-  ws->route_loads = calloc((size_t)K, sizeof(int));
+  ws->route_loads = calloc((size_t)k, sizeof(int));
   if (!ws->sol || !ws->thread_best || !ws->visited || !ws->route_loads) { v2_ws_free(ws); return 0; }
   return 1;
 }
@@ -181,14 +181,14 @@ static int find_nearest_unvisited(const V2RankShared *s, int curr, const uint64_
     return best;
 }
 
-static void build_ant_v2_two_level(AcoThreadWorkspace *ws, const V2RankShared *s, int K, int cap, const MatrixFloat *c, const float *scores) {
+static void build_ant_v2_two_level(t_thread_workspace *ws, const V2RankShared *s, int k, int cap, const MatrixFloat *c, const float *scores) {
     solution_reset(ws->sol); memset(ws->visited, 0, (size_t)s->visited_words * sizeof(uint64_t));
-    memset(ws->route_loads, 0, (size_t)K * sizeof(int));
+    memset(ws->route_loads, 0, (size_t)k * sizeof(int));
     int rem = s->n;
-    for (int v = 0; v < K; v++) {
+    for (int v = 0; v < k; v++) {
         route_append(&ws->sol->routes[v], 0); int curr = 0;
         while (true) {
-            int rem_v = K - v - 1, fut_cap = rem_v * cap;
+            int rem_v = k - v - 1, fut_cap = rem_v * cap;
             if (!(rem > 0 && rem > fut_cap && ws->route_loads[v] < cap)) break;
 
             int next = 0;
@@ -204,7 +204,7 @@ static void build_ant_v2_two_level(AcoThreadWorkspace *ws, const V2RankShared *s
                 } else weights[t] = 0.0f;
             }
             if (denom > 0.0f) {
-                float thres = (float)aco_rand01_state(&ws->rng_state) * denom, cum = 0.0f;
+                float thres = (float)rand01_state(&ws->rng_state) * denom, cum = 0.0f;
                 for (int t = 0; t < s->l1_k; t++) { if (weights[t] <= 0.0f) continue; cum += weights[t]; if (cum >= thres) { next = cands[t]; break; } }
             }
 
@@ -229,7 +229,7 @@ static void build_ant_v2_two_level(AcoThreadWorkspace *ws, const V2RankShared *s
     }
 }
 
-void aco_vrp_v2_run(int n, int K, int cap, int m, double **c, double alpha, double beta, double rho, double tau0, double Q, unsigned int seed, Solution *best_sol, double *best_cost) {
+void aco_vrp_v2_run(int n, int k, int cap, int m, double **c, double alpha, double beta, double rho, double tau0, double q, unsigned int seed, t_solution *best_sol, double *best_cost) {
     int mpi_rank = 0, mpi_size = 1;
 #ifdef USE_MPI
     int mpi_init = 0; MPI_Initialized(&mpi_init);
@@ -247,12 +247,12 @@ void aco_vrp_v2_run(int n, int K, int cap, int m, double **c, double alpha, doub
     
     // score_mat memorizza solo L1 per risparmiare spazio in cache
     float *score_mat = aligned_alloc(V2_ALIGNMENT, (size_t)(n + 1) * (size_t)shared.l1_k * sizeof(float));
-    Solution *iter_best = solution_create(K, n); *best_cost = DBL_MAX; double start_time = wall_time();
+    t_solution *iter_best = solution_create(k, n); *best_cost = DBL_MAX; double start_time = wall_time();
     const char *s_fixed = getenv("ACO_SOLVER_FIXED_EPOCHS"); int fixed_epochs = (s_fixed && *s_fixed) ? atoi(s_fixed) : 100;
 
     #pragma omp parallel default(shared) proc_bind(close)
     {
-        AcoThreadWorkspace ws; v2_ws_init(&ws, K, n, shared.visited_words);
+        t_thread_workspace ws; v2_ws_init(&ws, k, n, shared.visited_words);
         for (int iter = 0; iter < fixed_epochs; iter++) {
             #pragma omp for schedule(static) nowait
             for (int i = 0; i <= n; i++) {
@@ -264,8 +264,8 @@ void aco_vrp_v2_run(int n, int K, int cap, int m, double **c, double alpha, doub
             double t_best_c = DBL_MAX;
             #pragma omp for schedule(runtime) nowait
             for (int a = 0; a < local_m; a++) {
-                ws.rng_state = aco_make_ant_seed(seed, iter, ant_off + a);
-                build_ant_v2_two_level(&ws, &shared, K, cap, c_mat, score_mat);
+                ws.rng_state = make_ant_seed(seed, iter, ant_off + a);
+                build_ant_v2_two_level(&ws, &shared, k, cap, c_mat, score_mat);
                 double cost = solution_cost(ws.sol, c);
                 if (cost < t_best_c) { t_best_c = cost; solution_copy(ws.thread_best, ws.sol); }
             }
@@ -280,11 +280,11 @@ void aco_vrp_v2_run(int n, int K, int cap, int m, double **c, double alpha, doub
     matrix_free_float(tau_mat); matrix_free_float(c_mat); free(score_mat); solution_free(iter_best); v2_shared_free(&shared);
 }
 
-void aco_vrp_v2(int n, int K, int m, double **c, double alpha, double beta, double rho, double tau0, double Q, unsigned int seed, Solution *best_solution, double *best_cost) {
-    int cap = (K > 0) ? (int)(((long long)120 * n + 100 * K - 1) / (100 * K)) : n;
-    aco_vrp_v2_with_capacity(n, K, cap, m, c, alpha, beta, rho, tau0, Q, seed, best_solution, best_cost);
+void aco_vrp_v2(int n, int k, int m, double **c, double alpha, double beta, double rho, double tau0, double q, unsigned int seed, t_solution *best_solution, double *best_cost) {
+    int cap = (k > 0) ? (int)(((long long)120 * n + 100 * k - 1) / (100 * k)) : n;
+    aco_vrp_v2_with_capacity(n, k, cap, m, c, alpha, beta, rho, tau0, q, seed, best_solution, best_cost);
 }
 
-void aco_vrp_v2_with_capacity(int n, int K, int vehicle_capacity_customers, int m, double **c, double alpha, double beta, double rho, double tau0, double Q, unsigned int seed, Solution *best_solution, double *best_cost) {
-    aco_vrp_v2_run(n, K, vehicle_capacity_customers, m, c, alpha, beta, rho, tau0, Q, seed, best_solution, best_cost);
+void aco_vrp_v2_with_capacity(int n, int k, int vehicle_capacity_customers, int m, double **c, double alpha, double beta, double rho, double tau0, double q, unsigned int seed, t_solution *best_solution, double *best_cost) {
+    aco_vrp_v2_run(n, k, vehicle_capacity_customers, m, c, alpha, beta, rho, tau0, q, seed, best_solution, best_cost);
 }

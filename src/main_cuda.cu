@@ -1,5 +1,5 @@
 extern "C" {
-#include "aco.h"
+# include "solver.h"
 #include "cli_common.h"
 #include "instance_parser.h"
 #include "solution.h"
@@ -11,7 +11,7 @@ extern "C" {
 /**
  * @brief Runs the CUDA ACO backend with explicit vehicle capacity.
  * @param n Number of customers.
- * @param K Number of vehicles.
+ * @param k Number of vehicles.
  * @param vehicle_capacity_customers Per-vehicle customer capacity.
  * @param m Number of ants.
  * @param coords_x X coordinates.
@@ -20,18 +20,18 @@ extern "C" {
  * @param beta Heuristic exponent.
  * @param rho Evaporation factor.
  * @param tau0 Initial pheromone value.
- * @param Q Deposit factor.
+ * @param q Deposit factor.
  * @param seed RNG seed.
  * @param best_solution Output best solution.
  * @param best_cost Output best cost.
  * @return 0 on success, non-zero on failure.
  */
-AcoStatus aco_vrp_cuda_with_capacity(int n, int K,
+t_status aco_vrp_cuda_with_capacity(int n, int k,
                                      int vehicle_capacity_customers, int m,
                                      float *coords_x, float *coords_y,
                                      double alpha, double beta, double rho,
-                                     double tau0, double Q, unsigned int seed,
-                                     Solution *best_solution,
+                                     double tau0, double q, unsigned int seed,
+                                     t_solution *best_solution,
                                      double *best_cost);
 
 /**
@@ -42,18 +42,18 @@ AcoStatus aco_vrp_cuda_with_capacity(int n, int K,
  */
 int main(int argc, char **argv) {
   int status = 0;
-  AcoCliOptions options;
-  VrpInstance instance;
+  t_cli_options options;
+  t_vrp_instance instance;
   float *coords_x = NULL;
   float *coords_y = NULL;
-  Solution *best = NULL;
+  t_solution *best = NULL;
   double best_cost = 0.0;
-  AcoStatus solver_status = ACO_OK;
+  t_status solver_status = SOLVER_OK;
   vrp_instance_init(&instance);
   cli_options_defaults(&options);
 
   if (!cli_parse_solver_options(argc, argv, &options) ||
-      options.mode != ACO_CLI_MODE_INSTANCE) {
+      options.mode != CLI_MODE_INSTANCE) {
     cli_print_usage(argv[0]);
     status = 1;
     goto cleanup;
@@ -66,15 +66,15 @@ int main(int argc, char **argv) {
   }
   options.n = instance.n;
 
-  if (instance.vehicles > 0 && instance.vehicles != options.K) {
+  if (instance.vehicles > 0 && instance.vehicles != options.k) {
     fprintf(stderr,
-            "instance VEHICLES mismatch: CLI K=%d, file VEHICLES=%d\n",
-            options.K, instance.vehicles);
+            "instance VEHICLES mismatch: CLI k=%d, file VEHICLES=%d\n",
+            options.k, instance.vehicles);
     status = 1;
     goto cleanup;
   }
 
-  best = solution_create(options.K, options.n);
+  best = solution_create(options.k, options.n);
   if (!best) {
     fprintf(stderr, "failed to allocate solution\n");
     status = 1;
@@ -82,24 +82,24 @@ int main(int argc, char **argv) {
   }
 
   solver_status = aco_vrp_cuda_with_capacity(
-      options.n, options.K, instance.capacity, options.m, coords_x, coords_y,
-      options.alpha, options.beta, options.rho, options.tau0, options.Q,
+      options.n, options.k, instance.capacity, options.m, coords_x, coords_y,
+      options.alpha, options.beta, options.rho, options.tau0, options.q,
       options.seed, best, &best_cost);
-  if (solver_status != ACO_OK) {
+  if (solver_status != SOLVER_OK) {
     fprintf(stderr, "CUDA solver failed: %s\n",
-            aco_status_string(solver_status));
+            status_string(solver_status));
     status = 1;
     goto cleanup;
   }
 
-  if (!cli_validate_solution_or_report(best, options.n, options.K,
+  if (!cli_validate_solution_or_report(best, options.n, options.k,
                                        instance.demands,
                                        instance.capacity, best_cost)) {
     status = 1;
     goto cleanup;
   }
 
-  cli_print_solution_routes(best, options.K);
+  cli_print_solution_routes(best, options.k);
   cli_print_solution_cost(best_cost);
 
 cleanup:

@@ -48,7 +48,7 @@ void *matrix_aligned_calloc(size_t bytes, size_t alignment) {
 }
 
 
-Matrix *matrix_create(int n) {
+t_matrix *matrix_create(int n) {
   if (n < 0) {
     return NULL;
   }
@@ -74,7 +74,7 @@ Matrix *matrix_create(int n) {
     return NULL;
   }
 
-  Matrix *m = malloc(sizeof(*m));
+  t_matrix *m = malloc(sizeof(*m));
   if (!m) {
     return NULL;
   }
@@ -101,7 +101,7 @@ Matrix *matrix_create(int n) {
   return m;
 }
 
-void matrix_free_handle(Matrix *m) {
+void matrix_free_handle(t_matrix *m) {
   if (!m) {
     return;
   }
@@ -111,7 +111,7 @@ void matrix_free_handle(Matrix *m) {
 }
 
 double **matrix_alloc(int n) {
-  Matrix *m = matrix_create(n);
+  t_matrix *m = matrix_create(n);
   if (!m) {
     return NULL;
   }

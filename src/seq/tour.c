@@ -1,4 +1,4 @@
-#include "aco.h"
+# include "solver.h"
 #include "seq/internal.h"
 #include "solution.h"
 #include <stdbool.h>
@@ -16,7 +16,7 @@ struct s_tour_ctx
 
 static bool	build_vehicle_route(struct s_tour_ctx *ctx, int vehicle)
 {
-	Route	*r;
+	t_route	*r;
 	int		current;
 	int		next;
 	int		fut_cap;
@@ -50,7 +50,7 @@ static bool	fill_remaining(struct s_tour_ctx *ctx)
 	int		v;
 	int		current;
 	int		next;
-	Route	*r;
+	t_route	*r;
 
 	v = ctx->k - 1;
 	while (v >= 0 && ctx->remaining > 0)

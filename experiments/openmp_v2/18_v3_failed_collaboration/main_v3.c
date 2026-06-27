@@ -1,4 +1,4 @@
-#include "aco.h"
+# include "solver.h"
 #include "aco_v3.h"
 #include "instance_parser.h"
 #include "matrix.h"
@@ -14,11 +14,11 @@
 #include <mpi.h>
 #endif
 
-static void print_solution_routes(const Solution *best, int K) {
-  for (int i = 0; i < K; ++i) {
-    const Route *r = &best->routes[i];
+static void print_solution_routes(const t_solution *best, int k) {
+  for (int i = 0; i < k; ++i) {
+    const t_route *r = &best->routes[i];
     int printed = 0;
-    printf("Route %d:", i + 1);
+    printf("t_route %d:", i + 1);
     for (int t = 0; t < r->len; ++t) {
       int node = r->nodes[t];
       if (node != 0) {
@@ -69,29 +69,29 @@ int main(int argc, char **argv) {
   MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
 #endif
 
-  int n = 5, K = 2, m = 10;
+  int n = 5, k = 2, m = 10;
   if (argc == 5 && parse_int_arg(argv[1], &n)) {
     int ok = 1;
-    ok = ok && parse_int_arg(argv[2], &K);
+    ok = ok && parse_int_arg(argv[2], &k);
     ok = ok && parse_int_arg(argv[3], &m);
     seed = parse_uint_arg(argv[4], &ok);
-    if (!ok || n <= 0 || K <= 0 || m < 0) {
+    if (!ok || n <= 0 || k <= 0 || m < 0) {
 #ifdef USE_MPI
       if (mpi_rank == 0)
 #endif
-        fprintf(stderr, "usage: %s [n K m seed]\n", argv[0]);
+        fprintf(stderr, "usage: %s [n k m seed]\n", argv[0]);
       status = 1; goto cleanup_mpi;
     }
   } else if ((argc == 4 || argc == 5) && argv[1] != NULL) {
     int ok = 1; instance_path = argv[1];
-    ok = ok && parse_int_arg(argv[2], &K);
+    ok = ok && parse_int_arg(argv[2], &k);
     ok = ok && parse_int_arg(argv[3], &m);
     if (argc == 5) seed = parse_uint_arg(argv[4], &ok);
-    if (!ok || K <= 0 || m < 0) {
+    if (!ok || k <= 0 || m < 0) {
 #ifdef USE_MPI
       if (mpi_rank == 0)
 #endif
-        fprintf(stderr, "usage: %s <instance.vrp> <K> <m> [seed]\n", argv[0]);
+        fprintf(stderr, "usage: %s <instance.vrp> <k> <m> [seed]\n", argv[0]);
       status = 1; goto cleanup_mpi;
     }
     use_instance_file = 1;
@@ -99,11 +99,11 @@ int main(int argc, char **argv) {
 #ifdef USE_MPI
     if (mpi_rank == 0)
 #endif
-      fprintf(stderr, "V3 Dedicated Main: Requires instance file or n K m parameters.\n");
+      fprintf(stderr, "V3 Dedicated Main: Requires instance file or n k m parameters.\n");
     status = 1; goto cleanup_mpi;
   }
 
-  double alpha = 1.0, beta = 2.0, rho = 0.5, tau0 = 1.0, Q = 1.0;
+  double alpha = 1.0, beta = 2.0, rho = 0.5, tau0 = 1.0, q = 1.0;
   double **c = NULL;
   if (use_instance_file) {
     if (vrp_load_tsplib_euc2d_matrix_ex(instance_path, &n, &c, &instance_meta) != 0) {
@@ -119,22 +119,22 @@ int main(int argc, char **argv) {
     for(int i=0; i<=n; i++) for(int j=0; j<=n; j++) c[i][j] = (i==j)?0.0:(1.0+fabs((double)i-(double)j));
   }
 
-  Solution *best = solution_create(K, n);
+  t_solution *best = solution_create(k, n);
   double best_cost = DBL_MAX;
 
-  if (mpi_rank == 0) printf("--- Launching V3 COLLABORATIVE (N=%d, K=%d, M=%d) ---\n", n, K, m);
+  if (mpi_rank == 0) printf("--- Launching V3 COLLABORATIVE (N=%d, k=%d, M=%d) ---\n", n, k, m);
 
   if (use_instance_file) {
-    aco_vrp_v3_with_capacity(n, K, instance_meta.capacity, m, c, alpha, beta, rho, tau0, Q, seed, best, &best_cost);
+    aco_vrp_v3_with_capacity(n, k, instance_meta.capacity, m, c, alpha, beta, rho, tau0, q, seed, best, &best_cost);
   } else {
-    aco_vrp_v3(n, K, m, c, alpha, beta, rho, tau0, Q, seed, best, &best_cost);
+    aco_vrp_v3(n, k, m, c, alpha, beta, rho, tau0, q, seed, best, &best_cost);
   }
 
 #ifdef USE_MPI
   if (mpi_rank == 0)
 #endif
   {
-    print_solution_routes(best, K);
+    print_solution_routes(best, k);
     printf("best cost: %.3f\n", best_cost);
   }
 

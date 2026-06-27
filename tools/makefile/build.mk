@@ -2,13 +2,13 @@ all: $(BIN) $(OPENMP_MPI_BIN) $(CUDA_BIN)
 
 seq: $(BIN)
 
-src/main.o: src/main.c include/aco.h include/cli_common.h include/instance_parser.h include/matrix.h include/solution.h
+src/main.o: src/main.c include/solver.h include/cli_common.h include/instance_parser.h include/matrix.h include/solution.h
 	$(CC) $(EXTRA_FLAGS) $(FLAGS) $(FORCE_OPT) $(PERF_FLAGS) -c $< -o $@
 
-$(SEQ_OBJ): $(SEQ_DIR)/%.o: $(SEQ_DIR)/%.c include/aco.h include/config.h include/internal.h include/seq/internal.h include/matrix.h include/solution.h
+$(SEQ_OBJ): $(SEQ_DIR)/%.o: $(SEQ_DIR)/%.c include/solver.h include/config.h include/internal.h include/seq/internal.h include/matrix.h include/solution.h
 	$(CC) $(EXTRA_FLAGS) $(FLAGS) $(FORCE_OPT) $(PERF_FLAGS) -c $< -o $@
 
-$(ACO_SHARED_OBJ): $(COMMON_DIR)/%.o: $(COMMON_DIR)/%.c include/aco.h include/internal.h include/solution.h
+$(ACO_SHARED_OBJ): $(COMMON_DIR)/%.o: $(COMMON_DIR)/%.c include/solver.h include/internal.h include/solution.h
 	$(CC) $(EXTRA_FLAGS) $(FLAGS) $(FORCE_OPT) $(PERF_FLAGS) -c $< -o $@
 
 $(ACO_CONFIG_OBJ): $(COMMON_DIR)/%.o: $(COMMON_DIR)/%.c include/config.h
@@ -31,15 +31,15 @@ $(BIN): $(OBJ)
 
 openmp_mpi: $(OPENMP_MPI_BIN)
 
-$(OPENMP_MPI_BIN): $(OPENMP_MPI_SRC) include/aco.h include/config.h include/openmp-mpi/mpi_internal.h include/instance_parser.h include/matrix.h include/solution.h
+$(OPENMP_MPI_BIN): $(OPENMP_MPI_SRC) include/solver.h include/config.h include/openmp-mpi/mpi_internal.h include/instance_parser.h include/matrix.h include/solution.h
 	$(MPICC) $(EXTRA_FLAGS) $(FLAGS) $(FORCE_OPT) $(PERF_FLAGS) $(OMPFLAG) -DUSE_MPI $(OPENMP_MPI_SRC) $(LIBS) -o $@
 
 cuda: $(CUDA_BIN)
 
-$(CUDA_MAIN_OBJ): $(CUDA_MAIN_SRC) include/aco.h include/cli_common.h include/instance_parser.h include/matrix.h include/solution.h
+$(CUDA_MAIN_OBJ): $(CUDA_MAIN_SRC) include/solver.h include/cli_common.h include/instance_parser.h include/matrix.h include/solution.h
 	$(NVCC) $(NVCC_FLAGS) $(CUDA_ARCH_FLAG) -c $< -o $@
 
-$(CUDA_ACO_OBJ): $(CUDA_ACO_SRC) include/aco.h include/config.h include/cuda/cuda_kernels.h include/matrix.h include/solution.h
+$(CUDA_ACO_OBJ): $(CUDA_ACO_SRC) include/solver.h include/config.h include/cuda/cuda_kernels.h include/matrix.h include/solution.h
 	$(NVCC) $(NVCC_FLAGS) $(CUDA_ARCH_FLAG) -c $< -o $@
 
 $(CUDA_KERNELS_OBJ): $(CUDA_KERNELS_SRC) include/cuda/cuda_kernels.h
