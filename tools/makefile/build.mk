@@ -1,5 +1,14 @@
 all: $(BIN) $(OPENMP_MPI_BIN) $(CUDA_BIN)
 
+portatile:
+	$(MAKE) CUDA_ARCH=sm_75 all
+
+cluster:
+	$(MAKE) CUDA_ARCH=sm_86 all
+
+workstation:
+	$(MAKE) CUDA_ARCH=sm_75 all
+
 seq: $(BIN)
 
 src/main.o: src/main.c include/solver.h include/cli_common.h include/instance_parser.h include/matrix.h include/solution.h

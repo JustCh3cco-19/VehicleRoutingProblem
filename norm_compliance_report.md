@@ -27,8 +27,11 @@ Several previously listed violations have already been addressed:
   issues have received an initial cleanup pass.
 * Core C return syntax has been scanned; no `return value;` occurrences remain
   in `include/`, `src/common/`, `src/seq/`, or `src/openmp-mpi/`.
-* Core C line-width scan is clean for `src/common`, `src/seq`,
-  `src/openmp-mpi`, and non-CUDA `include` headers.
+* CUDA has been fully refactored, formatted, and validated against the local norm style.
+* CUDA public structs were renamed to `struct s_*` / `t_*`.
+* CUDA header guards, constants, prototypes, return syntax, and line-width have been cleaned and verified.
+* All CUDA-related functions now accept at most 4 parameters, declare at most 5 local variables, and are strictly under 25 lines of length.
+* Space-based indentation in CUDA files has been fully converted to real tab characters.
 
 ---
 
@@ -36,55 +39,23 @@ Several previously listed violations have already been addressed:
 
 | Category | Remaining Issue | Priority |
 | :--- | :--- | :--- |
-| **Function signatures** | Some helper APIs still exceed 4 parameters, especially CUDA-related functions. | High |
-| **Function length** | Algorithm/orchestrator functions in sequential, OpenMP/MPI, CUDA, and parser/helper paths still need line-count review. | High |
-| **Variable count** | Several functions still declare more than 5 local variables. | High |
-| **Formatting** | Some files still contain declaration+initialization, inconsistent blank lines, or non-tab indentation. | Medium |
-| **Return style** | Core C is clean; CUDA comments still mention return values in prose. | Low |
-| **Line width** | Core C is clean; CUDA sources need a final verification scan after each CUDA edit. | Medium |
-| **Naming** | CUDA PascalCase typedefs have been renamed; continue watching new CUDA API additions. | Low |
+| **Function signatures** | Core C helper signatures are clean; CUDA helper signatures are fully compliant. | - |
+| **Function length** | Core C and CUDA functions are fully compliant (no functions exceed 25 lines). | - |
+| **Variable count** | Core C and CUDA functions are fully compliant (no functions exceed 5 variables). | - |
+| **Formatting** | Space indentation in CUDA files was converted to real tab characters. Inconsistent blank lines and combined declarations have been cleaned. | - |
+| **Return style** | Core C and CUDA are clean (using parenthesized return statements). | - |
+| **Line width** | Core C and CUDA are clean. | - |
+| **Naming** | Naming conforms to snake_case and `s_` / `t_` prefix rules. | - |
 
 ---
 
 ## 3. Remaining Refactoring Plan
 
-### Phase 1: Finish Signature Cleanup
+All phases of the refactoring plan have been successfully executed:
+1. **Phase 1 (Signature Cleanup)**: Complete. Struct bundling was introduced for high-arity CUDA parameters, ensuring all functions have <= 4 parameters.
+2. **Phase 2 (Function Length and Variables)**: Complete. All functions in `src/cuda` and `src/main_cuda.cu` have been decomposed into smaller helpers under 25 lines and with <= 5 local variables.
+3. **Phase 3 (Formatting Pass)**: Complete. Tabulation formatting, Allman brace style, return statements, and variable declaration placement/alignment rules have been fully satisfied.
+4. **Phase 4 (Scope Decision)**: Complete. Core C and CUDA scopes are fully compliant.
 
-1. Bundle remaining high-arity validation parameters into small context structs.
-2. Finish remaining core C helper signatures that exceed 4 parameters.
-3. Keep CUDA APIs on the new `struct s_*` / `t_*` naming convention.
+All targets in the chosen norm scope compile and run successfully.
 
-### Phase 2: Audit Function Length and Variables
-
-1. Re-scan `src/seq`, `src/openmp-mpi`, and `src/common` for functions over 25
-   lines. Current core C hits include:
-   * `src/common/instance_parser.c`: parser helpers require final verification
-   * `src/seq`: primary runner/epoch/context/tour functions have been split
-     and no longer appear in the >25-line scan
-   * `src/openmp-mpi`: solver loop, init, epoch, tour, and math helpers have
-     been split and no longer appear in the >25-line scan
-   * Current core C >25-line scan is clean
-2. Split only large or complex files/functions; do not split compact utility
-   files solely because they exceed 5 functions.
-3. Reduce local variable count where functions still exceed 5 declarations.
-
-### Phase 3: Formatting Pass
-
-1. Replace remaining declaration+initialization patterns where they violate
-   `norm.md`.
-2. Normalize return syntax to `return (...)`.
-3. Keep CUDA line-width checks clean during the CUDA phase.
-4. Normalize indentation to real tab characters in C files under the chosen
-   norm scope.
-
-### Phase 4: Scope Decision
-
-Current scope decision:
-
-* `experiments/` is excluded.
-* Core C code is cleaned first: `include/`, `src/common/`, `src/seq/`, and
-  `src/openmp-mpi/`.
-* CUDA is handled after the core C pass: `src/cuda/` and `include/cuda/`.
-
-Generated or benchmark utilities should be explicitly classified before any
-norm cleanup is attempted there.
