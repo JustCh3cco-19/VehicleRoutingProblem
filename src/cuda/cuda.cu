@@ -1,12 +1,12 @@
 extern "C" {
 #include "aco.h"
-#include "aco_config.h"
+#include "config.h"
 #include "instance_parser.h"
 #include "matrix.h"
 #include "solution.h"
 }
 
-#include "aco_cuda_kernels.h"
+#include "cuda/cuda_kernels.h"
 
 #include <cuda_runtime.h>
 #include <float.h>

@@ -1,0 +1,153 @@
+#include "aco.h"
+#include "config.h"
+#include "openmp-mpi/mpi_internal.h"
+#include "solution.h"
+#include <float.h>
+#include <stdio.h>
+#include <stdlib.h>
+
+#ifdef USE_MPI
+# include <mpi.h>
+#endif
+
+static void	par_solver_epoch_loop(t_par_solver_ctx *ctx, t_par_workspace *ws)
+{
+	int	iter;
+
+	iter = 0;
+	while (1)
+	{
+		if (ctx->fixed_epochs > 0 && iter >= ctx->fixed_epochs)
+			break ;
+		if (ctx->fixed_epochs <= 0 && ctx->iter_since_best >= ctx->max_stagnation_epochs)
+			break ;
+		if (ctx->max_runtime_sec > 0.0 && (par_wall_time() - ctx->start_time)
+			>= ctx->max_runtime_sec)
+			break ;
+#ifdef USE_MPI
+#pragma omp master
+		par_async_wait_and_apply(&ctx->async_ctx, ctx->tau_mat, ctx->mpi_rank,
+			ctx->mpi_size);
+#pragma omp barrier
+#endif
+		par_solver_scores(ctx);
+		par_solver_ants(ctx, ws, iter);
+		par_solver_reduce_best(ctx, iter);
+		par_solver_evaporate(ctx);
+		par_solver_deposit(ctx);
+		iter++;
+	}
+}
+
+void	par_solver_thread_run(t_par_solver_ctx *ctx)
+{
+	t_par_workspace	ws;
+
+	if (!par_ws_init(&ws, ctx->k, ctx->n, ctx->shared.visited_words,
+			ctx->shared.meta_words))
+	{
+#pragma omp atomic write
+		ctx->workspace_failed = 1;
+	}
+#pragma omp barrier
+	if (ctx->workspace_failed)
+		return ;
+	par_solver_log_start(ctx);
+	par_solver_epoch_loop(ctx, &ws);
+	par_ws_free(&ws);
+}
+
+static AcoStatus	par_vrp_run(t_par_solver_ctx *ctx)
+{
+	if (!par_solver_alloc(ctx))
+		return (ACO_ERR_ALLOCATION);
+	if (!par_solver_init(ctx))
+	{
+		par_solver_free(ctx);
+		return (ACO_ERR_ALLOCATION);
+	}
+#pragma omp parallel default(shared) proc_bind(close)
+	par_solver_thread_run(ctx);
+	if (ctx->workspace_failed)
+	{
+		par_solver_free(ctx);
+		return (ACO_ERR_ALLOCATION);
+	}
+	if (ctx->log_level > ACO_LOG_SILENT && ctx->mpi_rank == 0)
+	{
+		fprintf(stderr, "ACO Parallel Ultimate Completion. Best: %.3f. Time: %.3fs\n",
+			*ctx->best_cost, par_wall_time() - ctx->start_time);
+	}
+	par_solver_free(ctx);
+	if (*ctx->best_cost < DBL_MAX)
+		return (ACO_OK);
+	return (ACO_ERR_NO_SOLUTION);
+}
+
+AcoStatus	aco_vrp(int n, int k, int m, double **c, double alpha, double beta,
+		double rho, double tau0, double q, unsigned int seed,
+		Solution *best_solution, double *best_cost)
+{
+	int	cap;
+
+	if (k > 0)
+		cap = (int)(((long long)120 * n + 100 * k - 1) / (100 * k));
+	else
+		cap = n;
+	return (aco_vrp_with_capacity(n, k, cap, m, c, alpha, beta, rho, tau0,
+			q, seed, best_solution, best_cost));
+}
+
+AcoStatus	aco_vrp_with_capacity(int n, int k, int cap, int m, double **c,
+		double alpha, double beta, double rho, double tau0, double q,
+		unsigned int seed, Solution *best_solution, double *best_cost)
+{
+	t_par_solver_ctx	ctx;
+	t_aco_config		config;
+
+	if (n <= 0 || k <= 0 || !c || !best_solution || !best_cost)
+		return (ACO_ERR_INVALID_INPUT);
+	ctx.n = n;
+	ctx.k = k;
+	ctx.cap = cap;
+	ctx.m = m;
+	ctx.c = c;
+	ctx.alpha = alpha;
+	ctx.beta = beta;
+	ctx.rho = rho;
+	ctx.tau0 = tau0;
+	ctx.q = q;
+	ctx.seed = seed;
+	ctx.best_sol = best_solution;
+	ctx.best_cost = best_cost;
+	ctx.mpi_rank = 0;
+	ctx.mpi_size = 1;
+#ifdef USE_MPI
+	int mpi_init = 0;
+	MPI_Initialized(&mpi_init);
+	if (mpi_init)
+	{
+		MPI_Comm_rank(MPI_COMM_WORLD, &ctx.mpi_rank);
+		MPI_Comm_size(MPI_COMM_WORLD, &ctx.mpi_size);
+	}
+#endif
+	aco_runtime_config_load_env(&config);
+	ctx.config = &config;
+	ctx.cand_k = par_choose_candidate_count(n, config.candidate_k);
+	ctx.total_m = (m <= 0) ? ((n / 2) * ctx.mpi_size) : m;
+	if (m <= 0 && config.ants > 0)
+		ctx.total_m = config.ants;
+	int rank_extra = (ctx.mpi_rank < (ctx.total_m % ctx.mpi_size)) ? ctx.mpi_rank
+		: (ctx.total_m % ctx.mpi_size);
+	ctx.ant_off = ctx.mpi_rank * (ctx.total_m / ctx.mpi_size) + rank_extra;
+	ctx.local_m = ctx.total_m / ctx.mpi_size + (ctx.mpi_rank < (ctx.total_m % ctx.mpi_size));
+	ctx.max_runtime_sec = config.timeout_seconds;
+	ctx.max_stagnation_epochs = config.stagnation_epochs;
+	ctx.min_rel_improvement = config.min_rel_improvement;
+	ctx.progress_interval_sec = config.progress_interval_seconds;
+	ctx.log_level = config.log_level;
+	ctx.fixed_epochs = config.fixed_epochs;
+	if (ctx.max_stagnation_epochs <= 0)
+		ctx.max_stagnation_epochs = 100;
+	return (par_vrp_run(&ctx));
+}
