@@ -6,7 +6,7 @@ help:
 	@printf "\033[1;34m[1] TARGET DI COMPILAZIONE (BUILD)\033[0m\n"
 	@printf "  \033[32mmake all\033[0m             - Compila tutti per l'architettura Nvidia locale (auto-detect)\n"
 	@printf "  \033[32mmake portatile\033[0m       - Compila tutti i solver per Laptop 1650Ti (sm_75)\n"
-	@printf "  \033[32mmake cluster\033[0m         - Compila tutti i solver per Cluster Quadro RTX 6000 (sm_86)\n"
+	@printf "  \033[32mmake cluster\033[0m         - Compila tutti i solver per Cluster Quadro RTX 6000 (sm_75)\n"
 	@printf "  \033[32mmake workstation\033[0m     - Compila tutti i solver per Workstation 2070SUPER (sm_75)\n"
 	@printf "  \033[32mmake seq\033[0m             - Compila solo il solver sequenziale -> \033[33mseq.out\033[0m\n"
 	@printf "  \033[32mmake openmp_mpi\033[0m      - Compila solo il solver MPI+OpenMP -> \033[33mopenmp_mpi.out\033[0m\n"

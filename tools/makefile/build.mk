@@ -4,7 +4,7 @@ portatile:
 	$(MAKE) CUDA_ARCH=sm_75 all
 
 cluster:
-	$(MAKE) CUDA_ARCH=sm_86 all
+	$(MAKE) CUDA_ARCH=sm_75 all
 
 workstation:
 	$(MAKE) CUDA_ARCH=sm_75 all
