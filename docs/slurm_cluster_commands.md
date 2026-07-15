@@ -55,6 +55,12 @@ all'inizializzazione e alla scrittura dei risultati, ogni singolo run del solver
 15 minuti; con cinque ripetizioni può durare al massimo 25 minuti. Il limite
 disponibile è di 32 GB di RAM e 32 CPU per task.
 
+Le submission CPU richiedono uniformemente `--cpus 32`. Questa è
+l'allocazione SLURM: il sequenziale continua a usare un solo core e nei punti
+OpenMP con 1–16 thread restano inutilizzate le CPU allocate in eccesso. MPI usa
+32 thread OpenMP per ciascun task. I job CUDA restano invece a `--cpus 1`,
+perché il lavoro principale viene eseguito sulla GPU.
+
 I backend sequenziale e OpenMP+MPI conservano matrici dense con memoria
 quadratica. A 64.000 clienti un singolo processo richiede oltre 60 GiB, e il
 sequenziale necessita di ulteriore memoria per le tabelle ausiliarie. Quel caso
@@ -65,43 +71,43 @@ fermano a 32.000 clienti; CUDA usa una sola GPU e arriva a 64.000.
 
 ```bash
 tools/batch/submit_solve.sh \
-  --target solve_seq --time 00:30:00 --nodes 1 --ntasks 1 --cpus 1 --mem 32G \
+  --target solve_seq --time 00:30:00 --nodes 1 --ntasks 1 --cpus 32 --mem 32G \
   --make-args "SOLVE_CLIENTS=500 SOLVE_SEQ_REPEATS=3 SOLVE_SEQ_RUNTIME_S=300 SOLVE_SEQ_STAGNATION_EPOCHS=500 SOLVE_SEQ_MIN_REL_IMPROVEMENT=0.001 SOLVE_CSV_DIR=results/manual_campaign/backend_sizes/seq/n500/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/backend_sizes/seq/n500/solutions"
 ```
 
 ```bash
 tools/batch/submit_solve.sh \
-  --target solve_seq --time 00:30:00 --nodes 1 --ntasks 1 --cpus 1 --mem 32G \
+  --target solve_seq --time 00:30:00 --nodes 1 --ntasks 1 --cpus 32 --mem 32G \
   --make-args "SOLVE_CLIENTS=1000 SOLVE_SEQ_REPEATS=3 SOLVE_SEQ_RUNTIME_S=300 SOLVE_SEQ_STAGNATION_EPOCHS=500 SOLVE_SEQ_MIN_REL_IMPROVEMENT=0.001 SOLVE_CSV_DIR=results/manual_campaign/backend_sizes/seq/n1000/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/backend_sizes/seq/n1000/solutions"
 ```
 
 ```bash
 tools/batch/submit_solve.sh \
-  --target solve_seq --time 00:30:00 --nodes 1 --ntasks 1 --cpus 1 --mem 32G \
+  --target solve_seq --time 00:30:00 --nodes 1 --ntasks 1 --cpus 32 --mem 32G \
   --make-args "SOLVE_CLIENTS=2000 SOLVE_SEQ_REPEATS=3 SOLVE_SEQ_RUNTIME_S=300 SOLVE_SEQ_STAGNATION_EPOCHS=500 SOLVE_SEQ_MIN_REL_IMPROVEMENT=0.001 SOLVE_CSV_DIR=results/manual_campaign/backend_sizes/seq/n2000/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/backend_sizes/seq/n2000/solutions"
 ```
 
 ```bash
 tools/batch/submit_solve.sh \
-  --target solve_seq --time 00:30:00 --nodes 1 --ntasks 1 --cpus 1 --mem 32G \
+  --target solve_seq --time 00:30:00 --nodes 1 --ntasks 1 --cpus 32 --mem 32G \
   --make-args "SOLVE_CLIENTS=4000 SOLVE_SEQ_REPEATS=3 SOLVE_SEQ_RUNTIME_S=300 SOLVE_SEQ_STAGNATION_EPOCHS=500 SOLVE_SEQ_MIN_REL_IMPROVEMENT=0.001 SOLVE_CSV_DIR=results/manual_campaign/backend_sizes/seq/n4000/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/backend_sizes/seq/n4000/solutions"
 ```
 
 ```bash
 tools/batch/submit_solve.sh \
-  --target solve_seq --time 00:30:00 --nodes 1 --ntasks 1 --cpus 1 --mem 32G \
+  --target solve_seq --time 00:30:00 --nodes 1 --ntasks 1 --cpus 32 --mem 32G \
   --make-args "SOLVE_CLIENTS=8000 SOLVE_SEQ_REPEATS=3 SOLVE_SEQ_RUNTIME_S=300 SOLVE_SEQ_STAGNATION_EPOCHS=500 SOLVE_SEQ_MIN_REL_IMPROVEMENT=0.001 SOLVE_CSV_DIR=results/manual_campaign/backend_sizes/seq/n8000/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/backend_sizes/seq/n8000/solutions"
 ```
 
 ```bash
 tools/batch/submit_solve.sh \
-  --target solve_seq --time 00:30:00 --nodes 1 --ntasks 1 --cpus 1 --mem 32G \
+  --target solve_seq --time 00:30:00 --nodes 1 --ntasks 1 --cpus 32 --mem 32G \
   --make-args "SOLVE_CLIENTS=16000 SOLVE_SEQ_REPEATS=3 SOLVE_SEQ_RUNTIME_S=300 SOLVE_SEQ_STAGNATION_EPOCHS=500 SOLVE_SEQ_MIN_REL_IMPROVEMENT=0.001 SOLVE_CSV_DIR=results/manual_campaign/backend_sizes/seq/n16000/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/backend_sizes/seq/n16000/solutions"
 ```
 
 ```bash
 tools/batch/submit_solve.sh \
-  --target solve_seq --time 00:30:00 --nodes 1 --ntasks 1 --cpus 1 --mem 32G \
+  --target solve_seq --time 00:30:00 --nodes 1 --ntasks 1 --cpus 32 --mem 32G \
   --make-args "SOLVE_CLIENTS=32000 SOLVE_SEQ_REPEATS=3 SOLVE_SEQ_RUNTIME_S=300 SOLVE_SEQ_STAGNATION_EPOCHS=500 SOLVE_SEQ_MIN_REL_IMPROVEMENT=0.001 SOLVE_CSV_DIR=results/manual_campaign/backend_sizes/seq/n32000/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/backend_sizes/seq/n32000/solutions"
 ```
 
@@ -153,7 +159,8 @@ tools/batch/submit_solve.sh \
 ```
 
 Il valore di `--ntasks` deve essere almeno pari a `SOLVE_MPI_RANKS`, mentre
-`--cpus` deve essere pari a `SOLVE_MPI_OMP_THREADS`.
+`--cpus` deve essere maggiore o uguale a `SOLVE_MPI_OMP_THREADS`. Nei comandi
+di questa guida è sempre fissato a 32.
 
 Se il cluster non supporta PMIx tramite `srun`, sostituire
 `SOLVE_MPI_LAUNCHER=srun` con `SOLVE_MPI_LAUNCHER=mpirun`.
@@ -276,31 +283,31 @@ due. Vengono usati un rank MPI e cinque run per configurazione:
 
 ```bash
 tools/batch/submit_solve.sh \
-  --target solve_mpi --time 00:30:00 --nodes 1 --ntasks 1 --cpus 1 --mem 32G \
+  --target solve_mpi --time 00:30:00 --nodes 1 --ntasks 1 --cpus 32 --mem 32G \
   --make-args "SOLVE_CLIENTS=32000 SOLVE_MPI_RANKS=1 SOLVE_MPI_OMP_THREADS=1 SOLVE_MPI_LAUNCHER=srun SOLVE_MPI_REPEATS=5 SOLVE_MPI_RUNTIME_S=300 SOLVE_MPI_STAGNATION_EPOCHS=500 SOLVE_MPI_MIN_REL_IMPROVEMENT=0.001 SOLVE_BATCH_ID=strong_openmp_t1 SOLVE_CSV_DIR=results/manual_campaign/strong_openmp/t1/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/strong_openmp/t1/solutions"
 ```
 
 ```bash
 tools/batch/submit_solve.sh \
-  --target solve_mpi --time 00:30:00 --nodes 1 --ntasks 1 --cpus 2 --mem 32G \
+  --target solve_mpi --time 00:30:00 --nodes 1 --ntasks 1 --cpus 32 --mem 32G \
   --make-args "SOLVE_CLIENTS=32000 SOLVE_MPI_RANKS=1 SOLVE_MPI_OMP_THREADS=2 SOLVE_MPI_LAUNCHER=srun SOLVE_MPI_REPEATS=5 SOLVE_MPI_RUNTIME_S=300 SOLVE_MPI_STAGNATION_EPOCHS=500 SOLVE_MPI_MIN_REL_IMPROVEMENT=0.001 SOLVE_BATCH_ID=strong_openmp_t2 SOLVE_CSV_DIR=results/manual_campaign/strong_openmp/t2/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/strong_openmp/t2/solutions"
 ```
 
 ```bash
 tools/batch/submit_solve.sh \
-  --target solve_mpi --time 00:30:00 --nodes 1 --ntasks 1 --cpus 4 --mem 32G \
+  --target solve_mpi --time 00:30:00 --nodes 1 --ntasks 1 --cpus 32 --mem 32G \
   --make-args "SOLVE_CLIENTS=32000 SOLVE_MPI_RANKS=1 SOLVE_MPI_OMP_THREADS=4 SOLVE_MPI_LAUNCHER=srun SOLVE_MPI_REPEATS=5 SOLVE_MPI_RUNTIME_S=300 SOLVE_MPI_STAGNATION_EPOCHS=500 SOLVE_MPI_MIN_REL_IMPROVEMENT=0.001 SOLVE_BATCH_ID=strong_openmp_t4 SOLVE_CSV_DIR=results/manual_campaign/strong_openmp/t4/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/strong_openmp/t4/solutions"
 ```
 
 ```bash
 tools/batch/submit_solve.sh \
-  --target solve_mpi --time 00:30:00 --nodes 1 --ntasks 1 --cpus 8 --mem 32G \
+  --target solve_mpi --time 00:30:00 --nodes 1 --ntasks 1 --cpus 32 --mem 32G \
   --make-args "SOLVE_CLIENTS=32000 SOLVE_MPI_RANKS=1 SOLVE_MPI_OMP_THREADS=8 SOLVE_MPI_LAUNCHER=srun SOLVE_MPI_REPEATS=5 SOLVE_MPI_RUNTIME_S=300 SOLVE_MPI_STAGNATION_EPOCHS=500 SOLVE_MPI_MIN_REL_IMPROVEMENT=0.001 SOLVE_BATCH_ID=strong_openmp_t8 SOLVE_CSV_DIR=results/manual_campaign/strong_openmp/t8/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/strong_openmp/t8/solutions"
 ```
 
 ```bash
 tools/batch/submit_solve.sh \
-  --target solve_mpi --time 00:30:00 --nodes 1 --ntasks 1 --cpus 16 --mem 32G \
+  --target solve_mpi --time 00:30:00 --nodes 1 --ntasks 1 --cpus 32 --mem 32G \
   --make-args "SOLVE_CLIENTS=32000 SOLVE_MPI_RANKS=1 SOLVE_MPI_OMP_THREADS=16 SOLVE_MPI_LAUNCHER=srun SOLVE_MPI_REPEATS=5 SOLVE_MPI_RUNTIME_S=300 SOLVE_MPI_STAGNATION_EPOCHS=500 SOLVE_MPI_MIN_REL_IMPROVEMENT=0.001 SOLVE_BATCH_ID=strong_openmp_t16 SOLVE_CSV_DIR=results/manual_campaign/strong_openmp/t16/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/strong_openmp/t16/solutions"
 ```
 
@@ -380,31 +387,31 @@ una protezione. La configurazione debole è quindi:
 
 ```bash
 tools/batch/submit_solve.sh \
-  --target solve_mpi --time 00:30:00 --nodes 1 --ntasks 1 --cpus 1 --mem 32G \
+  --target solve_mpi --time 00:30:00 --nodes 1 --ntasks 1 --cpus 32 --mem 32G \
   --make-args "SOLVE_CLIENTS=8000 SOLVE_MPI_RANKS=1 SOLVE_MPI_OMP_THREADS=1 SOLVE_MPI_M=32 SOLVE_MPI_FIXED_EPOCHS=10 SOLVE_MPI_LAUNCHER=srun SOLVE_MPI_REPEATS=5 SOLVE_MPI_RUNTIME_S=300 SOLVE_MPI_STAGNATION_EPOCHS=0 SOLVE_MPI_MIN_REL_IMPROVEMENT=0.001 SOLVE_BATCH_ID=weak_openmp_c1_m32 SOLVE_CSV_DIR=results/manual_campaign/weak_openmp/c1_m32/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/weak_openmp/c1_m32/solutions"
 ```
 
 ```bash
 tools/batch/submit_solve.sh \
-  --target solve_mpi --time 00:30:00 --nodes 1 --ntasks 1 --cpus 2 --mem 32G \
+  --target solve_mpi --time 00:30:00 --nodes 1 --ntasks 1 --cpus 32 --mem 32G \
   --make-args "SOLVE_CLIENTS=8000 SOLVE_MPI_RANKS=1 SOLVE_MPI_OMP_THREADS=2 SOLVE_MPI_M=64 SOLVE_MPI_FIXED_EPOCHS=10 SOLVE_MPI_LAUNCHER=srun SOLVE_MPI_REPEATS=5 SOLVE_MPI_RUNTIME_S=300 SOLVE_MPI_STAGNATION_EPOCHS=0 SOLVE_MPI_MIN_REL_IMPROVEMENT=0.001 SOLVE_BATCH_ID=weak_openmp_c2_m64 SOLVE_CSV_DIR=results/manual_campaign/weak_openmp/c2_m64/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/weak_openmp/c2_m64/solutions"
 ```
 
 ```bash
 tools/batch/submit_solve.sh \
-  --target solve_mpi --time 00:30:00 --nodes 1 --ntasks 1 --cpus 4 --mem 32G \
+  --target solve_mpi --time 00:30:00 --nodes 1 --ntasks 1 --cpus 32 --mem 32G \
   --make-args "SOLVE_CLIENTS=8000 SOLVE_MPI_RANKS=1 SOLVE_MPI_OMP_THREADS=4 SOLVE_MPI_M=128 SOLVE_MPI_FIXED_EPOCHS=10 SOLVE_MPI_LAUNCHER=srun SOLVE_MPI_REPEATS=5 SOLVE_MPI_RUNTIME_S=300 SOLVE_MPI_STAGNATION_EPOCHS=0 SOLVE_MPI_MIN_REL_IMPROVEMENT=0.001 SOLVE_BATCH_ID=weak_openmp_c4_m128 SOLVE_CSV_DIR=results/manual_campaign/weak_openmp/c4_m128/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/weak_openmp/c4_m128/solutions"
 ```
 
 ```bash
 tools/batch/submit_solve.sh \
-  --target solve_mpi --time 00:30:00 --nodes 1 --ntasks 1 --cpus 8 --mem 32G \
+  --target solve_mpi --time 00:30:00 --nodes 1 --ntasks 1 --cpus 32 --mem 32G \
   --make-args "SOLVE_CLIENTS=8000 SOLVE_MPI_RANKS=1 SOLVE_MPI_OMP_THREADS=8 SOLVE_MPI_M=256 SOLVE_MPI_FIXED_EPOCHS=10 SOLVE_MPI_LAUNCHER=srun SOLVE_MPI_REPEATS=5 SOLVE_MPI_RUNTIME_S=300 SOLVE_MPI_STAGNATION_EPOCHS=0 SOLVE_MPI_MIN_REL_IMPROVEMENT=0.001 SOLVE_BATCH_ID=weak_openmp_c8_m256 SOLVE_CSV_DIR=results/manual_campaign/weak_openmp/c8_m256/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/weak_openmp/c8_m256/solutions"
 ```
 
 ```bash
 tools/batch/submit_solve.sh \
-  --target solve_mpi --time 00:30:00 --nodes 1 --ntasks 1 --cpus 16 --mem 32G \
+  --target solve_mpi --time 00:30:00 --nodes 1 --ntasks 1 --cpus 32 --mem 32G \
   --make-args "SOLVE_CLIENTS=8000 SOLVE_MPI_RANKS=1 SOLVE_MPI_OMP_THREADS=16 SOLVE_MPI_M=512 SOLVE_MPI_FIXED_EPOCHS=10 SOLVE_MPI_LAUNCHER=srun SOLVE_MPI_REPEATS=5 SOLVE_MPI_RUNTIME_S=300 SOLVE_MPI_STAGNATION_EPOCHS=0 SOLVE_MPI_MIN_REL_IMPROVEMENT=0.001 SOLVE_BATCH_ID=weak_openmp_c16_m512 SOLVE_CSV_DIR=results/manual_campaign/weak_openmp/c16_m512/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/weak_openmp/c16_m512/solutions"
 ```
 
@@ -494,7 +501,7 @@ tools/batch/submit_solve.sh \
   --time 00:30:00 \
   --nodes 1 \
   --ntasks 1 \
-  --cpus 1 \
+  --cpus 32 \
   --mem 32G \
   --make-args "SOLVE_CLIENTS=16000 SOLVE_SEQ_REPEATS=3 SOLVE_SEQ_RUNTIME_S=300 SOLVE_SEQ_STAGNATION_EPOCHS=500 SOLVE_SEQ_MIN_REL_IMPROVEMENT=0.001" \
   --dry-run
