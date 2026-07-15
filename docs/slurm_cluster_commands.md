@@ -30,11 +30,15 @@ capability differente:
 
 ```bash
 CUDA_ARCH=sm_75
-TAG=${TAG:-$(date +%Y%m%d_%H%M%S)}
 ```
 
 Se il cluster non possiede una partizione chiamata `gpu`, sostituire o
 rimuovere `--partition gpu` nei comandi successivi.
+
+I risultati usano percorsi fissi sotto `results/manual_campaign/` e non
+richiedono variabili come `TAG`. Prima di iniziare una nuova campagna completa,
+archiviare la directory precedente se non si vogliono mescolare vecchi e nuovi
+risultati.
 
 ## Avvio separato dei tre backend
 
@@ -59,49 +63,45 @@ fermano a 32.000 clienti; CUDA usa una sola GPU e arriva a 64.000.
 ### Backend sequenziale
 
 ```bash
-TAG=${TAG:-$(date +%Y%m%d_%H%M%S)}
+tools/batch/submit_solve.sh \
+  --target solve_seq --time 00:30:00 --nodes 1 --ntasks 1 --cpus 1 --mem 32G \
+  --make-args "SOLVE_CLIENTS=500 SOLVE_SEQ_REPEATS=3 SOLVE_SEQ_RUNTIME_S=300 SOLVE_SEQ_STAGNATION_EPOCHS=500 SOLVE_SEQ_MIN_REL_IMPROVEMENT=0.001 SOLVE_CSV_DIR=results/manual_campaign/backend_sizes/seq/n500/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/backend_sizes/seq/n500/solutions"
 ```
 
 ```bash
 tools/batch/submit_solve.sh \
   --target solve_seq --time 00:30:00 --nodes 1 --ntasks 1 --cpus 1 --mem 32G \
-  --make-args "SOLVE_CLIENTS=500 SOLVE_SEQ_REPEATS=3 SOLVE_SEQ_RUNTIME_S=300 SOLVE_SEQ_STAGNATION_EPOCHS=500 SOLVE_SEQ_MIN_REL_IMPROVEMENT=0.001 SOLVE_CSV_DIR=results/manual_campaign/$TAG/backend_sizes/seq/n500/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/$TAG/backend_sizes/seq/n500/solutions"
+  --make-args "SOLVE_CLIENTS=1000 SOLVE_SEQ_REPEATS=3 SOLVE_SEQ_RUNTIME_S=300 SOLVE_SEQ_STAGNATION_EPOCHS=500 SOLVE_SEQ_MIN_REL_IMPROVEMENT=0.001 SOLVE_CSV_DIR=results/manual_campaign/backend_sizes/seq/n1000/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/backend_sizes/seq/n1000/solutions"
 ```
 
 ```bash
 tools/batch/submit_solve.sh \
   --target solve_seq --time 00:30:00 --nodes 1 --ntasks 1 --cpus 1 --mem 32G \
-  --make-args "SOLVE_CLIENTS=1000 SOLVE_SEQ_REPEATS=3 SOLVE_SEQ_RUNTIME_S=300 SOLVE_SEQ_STAGNATION_EPOCHS=500 SOLVE_SEQ_MIN_REL_IMPROVEMENT=0.001 SOLVE_CSV_DIR=results/manual_campaign/$TAG/backend_sizes/seq/n1000/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/$TAG/backend_sizes/seq/n1000/solutions"
+  --make-args "SOLVE_CLIENTS=2000 SOLVE_SEQ_REPEATS=3 SOLVE_SEQ_RUNTIME_S=300 SOLVE_SEQ_STAGNATION_EPOCHS=500 SOLVE_SEQ_MIN_REL_IMPROVEMENT=0.001 SOLVE_CSV_DIR=results/manual_campaign/backend_sizes/seq/n2000/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/backend_sizes/seq/n2000/solutions"
 ```
 
 ```bash
 tools/batch/submit_solve.sh \
   --target solve_seq --time 00:30:00 --nodes 1 --ntasks 1 --cpus 1 --mem 32G \
-  --make-args "SOLVE_CLIENTS=2000 SOLVE_SEQ_REPEATS=3 SOLVE_SEQ_RUNTIME_S=300 SOLVE_SEQ_STAGNATION_EPOCHS=500 SOLVE_SEQ_MIN_REL_IMPROVEMENT=0.001 SOLVE_CSV_DIR=results/manual_campaign/$TAG/backend_sizes/seq/n2000/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/$TAG/backend_sizes/seq/n2000/solutions"
+  --make-args "SOLVE_CLIENTS=4000 SOLVE_SEQ_REPEATS=3 SOLVE_SEQ_RUNTIME_S=300 SOLVE_SEQ_STAGNATION_EPOCHS=500 SOLVE_SEQ_MIN_REL_IMPROVEMENT=0.001 SOLVE_CSV_DIR=results/manual_campaign/backend_sizes/seq/n4000/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/backend_sizes/seq/n4000/solutions"
 ```
 
 ```bash
 tools/batch/submit_solve.sh \
   --target solve_seq --time 00:30:00 --nodes 1 --ntasks 1 --cpus 1 --mem 32G \
-  --make-args "SOLVE_CLIENTS=4000 SOLVE_SEQ_REPEATS=3 SOLVE_SEQ_RUNTIME_S=300 SOLVE_SEQ_STAGNATION_EPOCHS=500 SOLVE_SEQ_MIN_REL_IMPROVEMENT=0.001 SOLVE_CSV_DIR=results/manual_campaign/$TAG/backend_sizes/seq/n4000/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/$TAG/backend_sizes/seq/n4000/solutions"
+  --make-args "SOLVE_CLIENTS=8000 SOLVE_SEQ_REPEATS=3 SOLVE_SEQ_RUNTIME_S=300 SOLVE_SEQ_STAGNATION_EPOCHS=500 SOLVE_SEQ_MIN_REL_IMPROVEMENT=0.001 SOLVE_CSV_DIR=results/manual_campaign/backend_sizes/seq/n8000/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/backend_sizes/seq/n8000/solutions"
 ```
 
 ```bash
 tools/batch/submit_solve.sh \
   --target solve_seq --time 00:30:00 --nodes 1 --ntasks 1 --cpus 1 --mem 32G \
-  --make-args "SOLVE_CLIENTS=8000 SOLVE_SEQ_REPEATS=3 SOLVE_SEQ_RUNTIME_S=300 SOLVE_SEQ_STAGNATION_EPOCHS=500 SOLVE_SEQ_MIN_REL_IMPROVEMENT=0.001 SOLVE_CSV_DIR=results/manual_campaign/$TAG/backend_sizes/seq/n8000/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/$TAG/backend_sizes/seq/n8000/solutions"
+  --make-args "SOLVE_CLIENTS=16000 SOLVE_SEQ_REPEATS=3 SOLVE_SEQ_RUNTIME_S=300 SOLVE_SEQ_STAGNATION_EPOCHS=500 SOLVE_SEQ_MIN_REL_IMPROVEMENT=0.001 SOLVE_CSV_DIR=results/manual_campaign/backend_sizes/seq/n16000/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/backend_sizes/seq/n16000/solutions"
 ```
 
 ```bash
 tools/batch/submit_solve.sh \
   --target solve_seq --time 00:30:00 --nodes 1 --ntasks 1 --cpus 1 --mem 32G \
-  --make-args "SOLVE_CLIENTS=16000 SOLVE_SEQ_REPEATS=3 SOLVE_SEQ_RUNTIME_S=300 SOLVE_SEQ_STAGNATION_EPOCHS=500 SOLVE_SEQ_MIN_REL_IMPROVEMENT=0.001 SOLVE_CSV_DIR=results/manual_campaign/$TAG/backend_sizes/seq/n16000/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/$TAG/backend_sizes/seq/n16000/solutions"
-```
-
-```bash
-tools/batch/submit_solve.sh \
-  --target solve_seq --time 00:30:00 --nodes 1 --ntasks 1 --cpus 1 --mem 32G \
-  --make-args "SOLVE_CLIENTS=32000 SOLVE_SEQ_REPEATS=3 SOLVE_SEQ_RUNTIME_S=300 SOLVE_SEQ_STAGNATION_EPOCHS=500 SOLVE_SEQ_MIN_REL_IMPROVEMENT=0.001 SOLVE_CSV_DIR=results/manual_campaign/$TAG/backend_sizes/seq/n32000/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/$TAG/backend_sizes/seq/n32000/solutions"
+  --make-args "SOLVE_CLIENTS=32000 SOLVE_SEQ_REPEATS=3 SOLVE_SEQ_RUNTIME_S=300 SOLVE_SEQ_STAGNATION_EPOCHS=500 SOLVE_SEQ_MIN_REL_IMPROVEMENT=0.001 SOLVE_CSV_DIR=results/manual_campaign/backend_sizes/seq/n32000/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/backend_sizes/seq/n32000/solutions"
 ```
 
 ### Backend OpenMP + MPI
@@ -112,43 +112,43 @@ thread OpenMP:
 ```bash
 tools/batch/submit_solve.sh \
   --target solve_mpi --time 00:30:00 --nodes 4 --ntasks 4 --cpus 32 --mem 32G \
-  --make-args "SOLVE_CLIENTS=500 SOLVE_MPI_RANKS=4 SOLVE_MPI_OMP_THREADS=32 SOLVE_MPI_LAUNCHER=srun SOLVE_MPI_REPEATS=3 SOLVE_MPI_RUNTIME_S=300 SOLVE_MPI_STAGNATION_EPOCHS=500 SOLVE_MPI_MIN_REL_IMPROVEMENT=0.001 SOLVE_BATCH_ID=backend_mpi_n500 SOLVE_CSV_DIR=results/manual_campaign/$TAG/backend_sizes/mpi/n500/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/$TAG/backend_sizes/mpi/n500/solutions"
+  --make-args "SOLVE_CLIENTS=500 SOLVE_MPI_RANKS=4 SOLVE_MPI_OMP_THREADS=32 SOLVE_MPI_LAUNCHER=srun SOLVE_MPI_REPEATS=3 SOLVE_MPI_RUNTIME_S=300 SOLVE_MPI_STAGNATION_EPOCHS=500 SOLVE_MPI_MIN_REL_IMPROVEMENT=0.001 SOLVE_BATCH_ID=backend_mpi_n500 SOLVE_CSV_DIR=results/manual_campaign/backend_sizes/mpi/n500/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/backend_sizes/mpi/n500/solutions"
 ```
 
 ```bash
 tools/batch/submit_solve.sh \
   --target solve_mpi --time 00:30:00 --nodes 4 --ntasks 4 --cpus 32 --mem 32G \
-  --make-args "SOLVE_CLIENTS=1000 SOLVE_MPI_RANKS=4 SOLVE_MPI_OMP_THREADS=32 SOLVE_MPI_LAUNCHER=srun SOLVE_MPI_REPEATS=3 SOLVE_MPI_RUNTIME_S=300 SOLVE_MPI_STAGNATION_EPOCHS=500 SOLVE_MPI_MIN_REL_IMPROVEMENT=0.001 SOLVE_BATCH_ID=backend_mpi_n1000 SOLVE_CSV_DIR=results/manual_campaign/$TAG/backend_sizes/mpi/n1000/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/$TAG/backend_sizes/mpi/n1000/solutions"
+  --make-args "SOLVE_CLIENTS=1000 SOLVE_MPI_RANKS=4 SOLVE_MPI_OMP_THREADS=32 SOLVE_MPI_LAUNCHER=srun SOLVE_MPI_REPEATS=3 SOLVE_MPI_RUNTIME_S=300 SOLVE_MPI_STAGNATION_EPOCHS=500 SOLVE_MPI_MIN_REL_IMPROVEMENT=0.001 SOLVE_BATCH_ID=backend_mpi_n1000 SOLVE_CSV_DIR=results/manual_campaign/backend_sizes/mpi/n1000/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/backend_sizes/mpi/n1000/solutions"
 ```
 
 ```bash
 tools/batch/submit_solve.sh \
   --target solve_mpi --time 00:30:00 --nodes 4 --ntasks 4 --cpus 32 --mem 32G \
-  --make-args "SOLVE_CLIENTS=2000 SOLVE_MPI_RANKS=4 SOLVE_MPI_OMP_THREADS=32 SOLVE_MPI_LAUNCHER=srun SOLVE_MPI_REPEATS=3 SOLVE_MPI_RUNTIME_S=300 SOLVE_MPI_STAGNATION_EPOCHS=500 SOLVE_MPI_MIN_REL_IMPROVEMENT=0.001 SOLVE_BATCH_ID=backend_mpi_n2000 SOLVE_CSV_DIR=results/manual_campaign/$TAG/backend_sizes/mpi/n2000/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/$TAG/backend_sizes/mpi/n2000/solutions"
+  --make-args "SOLVE_CLIENTS=2000 SOLVE_MPI_RANKS=4 SOLVE_MPI_OMP_THREADS=32 SOLVE_MPI_LAUNCHER=srun SOLVE_MPI_REPEATS=3 SOLVE_MPI_RUNTIME_S=300 SOLVE_MPI_STAGNATION_EPOCHS=500 SOLVE_MPI_MIN_REL_IMPROVEMENT=0.001 SOLVE_BATCH_ID=backend_mpi_n2000 SOLVE_CSV_DIR=results/manual_campaign/backend_sizes/mpi/n2000/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/backend_sizes/mpi/n2000/solutions"
 ```
 
 ```bash
 tools/batch/submit_solve.sh \
   --target solve_mpi --time 00:30:00 --nodes 4 --ntasks 4 --cpus 32 --mem 32G \
-  --make-args "SOLVE_CLIENTS=4000 SOLVE_MPI_RANKS=4 SOLVE_MPI_OMP_THREADS=32 SOLVE_MPI_LAUNCHER=srun SOLVE_MPI_REPEATS=3 SOLVE_MPI_RUNTIME_S=300 SOLVE_MPI_STAGNATION_EPOCHS=500 SOLVE_MPI_MIN_REL_IMPROVEMENT=0.001 SOLVE_BATCH_ID=backend_mpi_n4000 SOLVE_CSV_DIR=results/manual_campaign/$TAG/backend_sizes/mpi/n4000/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/$TAG/backend_sizes/mpi/n4000/solutions"
+  --make-args "SOLVE_CLIENTS=4000 SOLVE_MPI_RANKS=4 SOLVE_MPI_OMP_THREADS=32 SOLVE_MPI_LAUNCHER=srun SOLVE_MPI_REPEATS=3 SOLVE_MPI_RUNTIME_S=300 SOLVE_MPI_STAGNATION_EPOCHS=500 SOLVE_MPI_MIN_REL_IMPROVEMENT=0.001 SOLVE_BATCH_ID=backend_mpi_n4000 SOLVE_CSV_DIR=results/manual_campaign/backend_sizes/mpi/n4000/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/backend_sizes/mpi/n4000/solutions"
 ```
 
 ```bash
 tools/batch/submit_solve.sh \
   --target solve_mpi --time 00:30:00 --nodes 4 --ntasks 4 --cpus 32 --mem 32G \
-  --make-args "SOLVE_CLIENTS=8000 SOLVE_MPI_RANKS=4 SOLVE_MPI_OMP_THREADS=32 SOLVE_MPI_LAUNCHER=srun SOLVE_MPI_REPEATS=3 SOLVE_MPI_RUNTIME_S=300 SOLVE_MPI_STAGNATION_EPOCHS=500 SOLVE_MPI_MIN_REL_IMPROVEMENT=0.001 SOLVE_BATCH_ID=backend_mpi_n8000 SOLVE_CSV_DIR=results/manual_campaign/$TAG/backend_sizes/mpi/n8000/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/$TAG/backend_sizes/mpi/n8000/solutions"
+  --make-args "SOLVE_CLIENTS=8000 SOLVE_MPI_RANKS=4 SOLVE_MPI_OMP_THREADS=32 SOLVE_MPI_LAUNCHER=srun SOLVE_MPI_REPEATS=3 SOLVE_MPI_RUNTIME_S=300 SOLVE_MPI_STAGNATION_EPOCHS=500 SOLVE_MPI_MIN_REL_IMPROVEMENT=0.001 SOLVE_BATCH_ID=backend_mpi_n8000 SOLVE_CSV_DIR=results/manual_campaign/backend_sizes/mpi/n8000/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/backend_sizes/mpi/n8000/solutions"
 ```
 
 ```bash
 tools/batch/submit_solve.sh \
   --target solve_mpi --time 00:30:00 --nodes 4 --ntasks 4 --cpus 32 --mem 32G \
-  --make-args "SOLVE_CLIENTS=16000 SOLVE_MPI_RANKS=4 SOLVE_MPI_OMP_THREADS=32 SOLVE_MPI_LAUNCHER=srun SOLVE_MPI_REPEATS=3 SOLVE_MPI_RUNTIME_S=300 SOLVE_MPI_STAGNATION_EPOCHS=500 SOLVE_MPI_MIN_REL_IMPROVEMENT=0.001 SOLVE_BATCH_ID=backend_mpi_n16000 SOLVE_CSV_DIR=results/manual_campaign/$TAG/backend_sizes/mpi/n16000/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/$TAG/backend_sizes/mpi/n16000/solutions"
+  --make-args "SOLVE_CLIENTS=16000 SOLVE_MPI_RANKS=4 SOLVE_MPI_OMP_THREADS=32 SOLVE_MPI_LAUNCHER=srun SOLVE_MPI_REPEATS=3 SOLVE_MPI_RUNTIME_S=300 SOLVE_MPI_STAGNATION_EPOCHS=500 SOLVE_MPI_MIN_REL_IMPROVEMENT=0.001 SOLVE_BATCH_ID=backend_mpi_n16000 SOLVE_CSV_DIR=results/manual_campaign/backend_sizes/mpi/n16000/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/backend_sizes/mpi/n16000/solutions"
 ```
 
 ```bash
 tools/batch/submit_solve.sh \
   --target solve_mpi --time 00:30:00 --nodes 4 --ntasks 4 --cpus 32 --mem 32G \
-  --make-args "SOLVE_CLIENTS=32000 SOLVE_MPI_RANKS=4 SOLVE_MPI_OMP_THREADS=32 SOLVE_MPI_LAUNCHER=srun SOLVE_MPI_REPEATS=3 SOLVE_MPI_RUNTIME_S=300 SOLVE_MPI_STAGNATION_EPOCHS=500 SOLVE_MPI_MIN_REL_IMPROVEMENT=0.001 SOLVE_BATCH_ID=backend_mpi_n32000 SOLVE_CSV_DIR=results/manual_campaign/$TAG/backend_sizes/mpi/n32000/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/$TAG/backend_sizes/mpi/n32000/solutions"
+  --make-args "SOLVE_CLIENTS=32000 SOLVE_MPI_RANKS=4 SOLVE_MPI_OMP_THREADS=32 SOLVE_MPI_LAUNCHER=srun SOLVE_MPI_REPEATS=3 SOLVE_MPI_RUNTIME_S=300 SOLVE_MPI_STAGNATION_EPOCHS=500 SOLVE_MPI_MIN_REL_IMPROVEMENT=0.001 SOLVE_BATCH_ID=backend_mpi_n32000 SOLVE_CSV_DIR=results/manual_campaign/backend_sizes/mpi/n32000/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/backend_sizes/mpi/n32000/solutions"
 ```
 
 Il valore di `--ntasks` deve essere almeno pari a `SOLVE_MPI_RANKS`, mentre
@@ -169,7 +169,7 @@ tools/batch/submit_solve.sh \
   --cpus 1 \
   --mem 32G \
   --gres gpu:1 \
-  --make-args "SOLVE_CLIENTS=500 SOLVE_CUDA_REPEATS=3 SOLVE_CUDA_RUNTIME_S=300 SOLVE_CUDA_STAGNATION_EPOCHS=500 SOLVE_CUDA_MIN_REL_IMPROVEMENT=0.001 CUDA_ARCH=$CUDA_ARCH SOLVE_CSV_DIR=results/manual_campaign/$TAG/backend_sizes/cuda/n500/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/$TAG/backend_sizes/cuda/n500/solutions"
+  --make-args "SOLVE_CLIENTS=500 SOLVE_CUDA_REPEATS=3 SOLVE_CUDA_RUNTIME_S=300 SOLVE_CUDA_STAGNATION_EPOCHS=500 SOLVE_CUDA_MIN_REL_IMPROVEMENT=0.001 CUDA_ARCH=$CUDA_ARCH SOLVE_CSV_DIR=results/manual_campaign/backend_sizes/cuda/n500/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/backend_sizes/cuda/n500/solutions"
 ```
 
 ```bash
@@ -182,7 +182,7 @@ tools/batch/submit_solve.sh \
   --cpus 1 \
   --mem 32G \
   --gres gpu:1 \
-  --make-args "SOLVE_CLIENTS=1000 SOLVE_CUDA_REPEATS=3 SOLVE_CUDA_RUNTIME_S=300 SOLVE_CUDA_STAGNATION_EPOCHS=500 SOLVE_CUDA_MIN_REL_IMPROVEMENT=0.001 CUDA_ARCH=$CUDA_ARCH SOLVE_CSV_DIR=results/manual_campaign/$TAG/backend_sizes/cuda/n1000/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/$TAG/backend_sizes/cuda/n1000/solutions"
+  --make-args "SOLVE_CLIENTS=1000 SOLVE_CUDA_REPEATS=3 SOLVE_CUDA_RUNTIME_S=300 SOLVE_CUDA_STAGNATION_EPOCHS=500 SOLVE_CUDA_MIN_REL_IMPROVEMENT=0.001 CUDA_ARCH=$CUDA_ARCH SOLVE_CSV_DIR=results/manual_campaign/backend_sizes/cuda/n1000/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/backend_sizes/cuda/n1000/solutions"
 ```
 
 ```bash
@@ -195,7 +195,7 @@ tools/batch/submit_solve.sh \
   --cpus 1 \
   --mem 32G \
   --gres gpu:1 \
-  --make-args "SOLVE_CLIENTS=2000 SOLVE_CUDA_REPEATS=3 SOLVE_CUDA_RUNTIME_S=300 SOLVE_CUDA_STAGNATION_EPOCHS=500 SOLVE_CUDA_MIN_REL_IMPROVEMENT=0.001 CUDA_ARCH=$CUDA_ARCH SOLVE_CSV_DIR=results/manual_campaign/$TAG/backend_sizes/cuda/n2000/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/$TAG/backend_sizes/cuda/n2000/solutions"
+  --make-args "SOLVE_CLIENTS=2000 SOLVE_CUDA_REPEATS=3 SOLVE_CUDA_RUNTIME_S=300 SOLVE_CUDA_STAGNATION_EPOCHS=500 SOLVE_CUDA_MIN_REL_IMPROVEMENT=0.001 CUDA_ARCH=$CUDA_ARCH SOLVE_CSV_DIR=results/manual_campaign/backend_sizes/cuda/n2000/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/backend_sizes/cuda/n2000/solutions"
 ```
 
 ```bash
@@ -208,7 +208,7 @@ tools/batch/submit_solve.sh \
   --cpus 1 \
   --mem 32G \
   --gres gpu:1 \
-  --make-args "SOLVE_CLIENTS=4000 SOLVE_CUDA_REPEATS=3 SOLVE_CUDA_RUNTIME_S=300 SOLVE_CUDA_STAGNATION_EPOCHS=500 SOLVE_CUDA_MIN_REL_IMPROVEMENT=0.001 CUDA_ARCH=$CUDA_ARCH SOLVE_CSV_DIR=results/manual_campaign/$TAG/backend_sizes/cuda/n4000/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/$TAG/backend_sizes/cuda/n4000/solutions"
+  --make-args "SOLVE_CLIENTS=4000 SOLVE_CUDA_REPEATS=3 SOLVE_CUDA_RUNTIME_S=300 SOLVE_CUDA_STAGNATION_EPOCHS=500 SOLVE_CUDA_MIN_REL_IMPROVEMENT=0.001 CUDA_ARCH=$CUDA_ARCH SOLVE_CSV_DIR=results/manual_campaign/backend_sizes/cuda/n4000/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/backend_sizes/cuda/n4000/solutions"
 ```
 
 ```bash
@@ -221,7 +221,7 @@ tools/batch/submit_solve.sh \
   --cpus 1 \
   --mem 32G \
   --gres gpu:1 \
-  --make-args "SOLVE_CLIENTS=8000 SOLVE_CUDA_REPEATS=3 SOLVE_CUDA_RUNTIME_S=300 SOLVE_CUDA_STAGNATION_EPOCHS=500 SOLVE_CUDA_MIN_REL_IMPROVEMENT=0.001 CUDA_ARCH=$CUDA_ARCH SOLVE_CSV_DIR=results/manual_campaign/$TAG/backend_sizes/cuda/n8000/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/$TAG/backend_sizes/cuda/n8000/solutions"
+  --make-args "SOLVE_CLIENTS=8000 SOLVE_CUDA_REPEATS=3 SOLVE_CUDA_RUNTIME_S=300 SOLVE_CUDA_STAGNATION_EPOCHS=500 SOLVE_CUDA_MIN_REL_IMPROVEMENT=0.001 CUDA_ARCH=$CUDA_ARCH SOLVE_CSV_DIR=results/manual_campaign/backend_sizes/cuda/n8000/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/backend_sizes/cuda/n8000/solutions"
 ```
 
 ```bash
@@ -234,7 +234,7 @@ tools/batch/submit_solve.sh \
   --cpus 1 \
   --mem 32G \
   --gres gpu:1 \
-  --make-args "SOLVE_CLIENTS=16000 SOLVE_CUDA_REPEATS=3 SOLVE_CUDA_RUNTIME_S=300 SOLVE_CUDA_STAGNATION_EPOCHS=500 SOLVE_CUDA_MIN_REL_IMPROVEMENT=0.001 CUDA_ARCH=$CUDA_ARCH SOLVE_CSV_DIR=results/manual_campaign/$TAG/backend_sizes/cuda/n16000/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/$TAG/backend_sizes/cuda/n16000/solutions"
+  --make-args "SOLVE_CLIENTS=16000 SOLVE_CUDA_REPEATS=3 SOLVE_CUDA_RUNTIME_S=300 SOLVE_CUDA_STAGNATION_EPOCHS=500 SOLVE_CUDA_MIN_REL_IMPROVEMENT=0.001 CUDA_ARCH=$CUDA_ARCH SOLVE_CSV_DIR=results/manual_campaign/backend_sizes/cuda/n16000/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/backend_sizes/cuda/n16000/solutions"
 ```
 
 ```bash
@@ -247,7 +247,7 @@ tools/batch/submit_solve.sh \
   --cpus 1 \
   --mem 32G \
   --gres gpu:1 \
-  --make-args "SOLVE_CLIENTS=32000 SOLVE_CUDA_REPEATS=3 SOLVE_CUDA_RUNTIME_S=300 SOLVE_CUDA_STAGNATION_EPOCHS=500 SOLVE_CUDA_MIN_REL_IMPROVEMENT=0.001 CUDA_ARCH=$CUDA_ARCH SOLVE_CSV_DIR=results/manual_campaign/$TAG/backend_sizes/cuda/n32000/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/$TAG/backend_sizes/cuda/n32000/solutions"
+  --make-args "SOLVE_CLIENTS=32000 SOLVE_CUDA_REPEATS=3 SOLVE_CUDA_RUNTIME_S=300 SOLVE_CUDA_STAGNATION_EPOCHS=500 SOLVE_CUDA_MIN_REL_IMPROVEMENT=0.001 CUDA_ARCH=$CUDA_ARCH SOLVE_CSV_DIR=results/manual_campaign/backend_sizes/cuda/n32000/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/backend_sizes/cuda/n32000/solutions"
 ```
 
 ```bash
@@ -260,7 +260,7 @@ tools/batch/submit_solve.sh \
   --cpus 1 \
   --mem 32G \
   --gres gpu:1 \
-  --make-args "SOLVE_CLIENTS=64000 SOLVE_CUDA_REPEATS=3 SOLVE_CUDA_RUNTIME_S=300 SOLVE_CUDA_STAGNATION_EPOCHS=500 SOLVE_CUDA_MIN_REL_IMPROVEMENT=0.001 CUDA_ARCH=$CUDA_ARCH SOLVE_CSV_DIR=results/manual_campaign/$TAG/backend_sizes/cuda/n64000/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/$TAG/backend_sizes/cuda/n64000/solutions"
+  --make-args "SOLVE_CLIENTS=64000 SOLVE_CUDA_REPEATS=3 SOLVE_CUDA_RUNTIME_S=300 SOLVE_CUDA_STAGNATION_EPOCHS=500 SOLVE_CUDA_MIN_REL_IMPROVEMENT=0.001 CUDA_ARCH=$CUDA_ARCH SOLVE_CSV_DIR=results/manual_campaign/backend_sizes/cuda/n64000/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/backend_sizes/cuda/n64000/solutions"
 ```
 
 La GPU e le altre risorse CUDA rimangono fisse per tutte le istanze: questo è
@@ -276,12 +276,6 @@ Come indicato nella [guida Scaling di HPC Wiki](https://hpc-wiki.info/hpc/Scalin
 la dimensione del problema resta identica, i core crescono per potenze di due
 e lo speedup della curva finale usa il punto a un core come baseline.
 
-Creare un tag comune:
-
-```bash
-TAG=${TAG:-$(date +%Y%m%d_%H%M%S)}
-```
-
 ### Strong scaling OpenMP
 
 Il problema rimane fisso a 32.000 clienti e i thread crescono per potenze di
@@ -290,37 +284,37 @@ due. Vengono usati un rank MPI e cinque run per configurazione:
 ```bash
 tools/batch/submit_solve.sh \
   --target solve_mpi --time 00:30:00 --nodes 1 --ntasks 1 --cpus 1 --mem 32G \
-  --make-args "SOLVE_CLIENTS=32000 SOLVE_MPI_RANKS=1 SOLVE_MPI_OMP_THREADS=1 SOLVE_MPI_LAUNCHER=srun SOLVE_MPI_REPEATS=5 SOLVE_MPI_RUNTIME_S=300 SOLVE_MPI_STAGNATION_EPOCHS=500 SOLVE_MPI_MIN_REL_IMPROVEMENT=0.001 SOLVE_BATCH_ID=strong_openmp_t1 SOLVE_CSV_DIR=results/manual_campaign/$TAG/strong_openmp/t1/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/$TAG/strong_openmp/t1/solutions"
+  --make-args "SOLVE_CLIENTS=32000 SOLVE_MPI_RANKS=1 SOLVE_MPI_OMP_THREADS=1 SOLVE_MPI_LAUNCHER=srun SOLVE_MPI_REPEATS=5 SOLVE_MPI_RUNTIME_S=300 SOLVE_MPI_STAGNATION_EPOCHS=500 SOLVE_MPI_MIN_REL_IMPROVEMENT=0.001 SOLVE_BATCH_ID=strong_openmp_t1 SOLVE_CSV_DIR=results/manual_campaign/strong_openmp/t1/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/strong_openmp/t1/solutions"
 ```
 
 ```bash
 tools/batch/submit_solve.sh \
   --target solve_mpi --time 00:30:00 --nodes 1 --ntasks 1 --cpus 2 --mem 32G \
-  --make-args "SOLVE_CLIENTS=32000 SOLVE_MPI_RANKS=1 SOLVE_MPI_OMP_THREADS=2 SOLVE_MPI_LAUNCHER=srun SOLVE_MPI_REPEATS=5 SOLVE_MPI_RUNTIME_S=300 SOLVE_MPI_STAGNATION_EPOCHS=500 SOLVE_MPI_MIN_REL_IMPROVEMENT=0.001 SOLVE_BATCH_ID=strong_openmp_t2 SOLVE_CSV_DIR=results/manual_campaign/$TAG/strong_openmp/t2/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/$TAG/strong_openmp/t2/solutions"
+  --make-args "SOLVE_CLIENTS=32000 SOLVE_MPI_RANKS=1 SOLVE_MPI_OMP_THREADS=2 SOLVE_MPI_LAUNCHER=srun SOLVE_MPI_REPEATS=5 SOLVE_MPI_RUNTIME_S=300 SOLVE_MPI_STAGNATION_EPOCHS=500 SOLVE_MPI_MIN_REL_IMPROVEMENT=0.001 SOLVE_BATCH_ID=strong_openmp_t2 SOLVE_CSV_DIR=results/manual_campaign/strong_openmp/t2/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/strong_openmp/t2/solutions"
 ```
 
 ```bash
 tools/batch/submit_solve.sh \
   --target solve_mpi --time 00:30:00 --nodes 1 --ntasks 1 --cpus 4 --mem 32G \
-  --make-args "SOLVE_CLIENTS=32000 SOLVE_MPI_RANKS=1 SOLVE_MPI_OMP_THREADS=4 SOLVE_MPI_LAUNCHER=srun SOLVE_MPI_REPEATS=5 SOLVE_MPI_RUNTIME_S=300 SOLVE_MPI_STAGNATION_EPOCHS=500 SOLVE_MPI_MIN_REL_IMPROVEMENT=0.001 SOLVE_BATCH_ID=strong_openmp_t4 SOLVE_CSV_DIR=results/manual_campaign/$TAG/strong_openmp/t4/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/$TAG/strong_openmp/t4/solutions"
+  --make-args "SOLVE_CLIENTS=32000 SOLVE_MPI_RANKS=1 SOLVE_MPI_OMP_THREADS=4 SOLVE_MPI_LAUNCHER=srun SOLVE_MPI_REPEATS=5 SOLVE_MPI_RUNTIME_S=300 SOLVE_MPI_STAGNATION_EPOCHS=500 SOLVE_MPI_MIN_REL_IMPROVEMENT=0.001 SOLVE_BATCH_ID=strong_openmp_t4 SOLVE_CSV_DIR=results/manual_campaign/strong_openmp/t4/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/strong_openmp/t4/solutions"
 ```
 
 ```bash
 tools/batch/submit_solve.sh \
   --target solve_mpi --time 00:30:00 --nodes 1 --ntasks 1 --cpus 8 --mem 32G \
-  --make-args "SOLVE_CLIENTS=32000 SOLVE_MPI_RANKS=1 SOLVE_MPI_OMP_THREADS=8 SOLVE_MPI_LAUNCHER=srun SOLVE_MPI_REPEATS=5 SOLVE_MPI_RUNTIME_S=300 SOLVE_MPI_STAGNATION_EPOCHS=500 SOLVE_MPI_MIN_REL_IMPROVEMENT=0.001 SOLVE_BATCH_ID=strong_openmp_t8 SOLVE_CSV_DIR=results/manual_campaign/$TAG/strong_openmp/t8/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/$TAG/strong_openmp/t8/solutions"
+  --make-args "SOLVE_CLIENTS=32000 SOLVE_MPI_RANKS=1 SOLVE_MPI_OMP_THREADS=8 SOLVE_MPI_LAUNCHER=srun SOLVE_MPI_REPEATS=5 SOLVE_MPI_RUNTIME_S=300 SOLVE_MPI_STAGNATION_EPOCHS=500 SOLVE_MPI_MIN_REL_IMPROVEMENT=0.001 SOLVE_BATCH_ID=strong_openmp_t8 SOLVE_CSV_DIR=results/manual_campaign/strong_openmp/t8/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/strong_openmp/t8/solutions"
 ```
 
 ```bash
 tools/batch/submit_solve.sh \
   --target solve_mpi --time 00:30:00 --nodes 1 --ntasks 1 --cpus 16 --mem 32G \
-  --make-args "SOLVE_CLIENTS=32000 SOLVE_MPI_RANKS=1 SOLVE_MPI_OMP_THREADS=16 SOLVE_MPI_LAUNCHER=srun SOLVE_MPI_REPEATS=5 SOLVE_MPI_RUNTIME_S=300 SOLVE_MPI_STAGNATION_EPOCHS=500 SOLVE_MPI_MIN_REL_IMPROVEMENT=0.001 SOLVE_BATCH_ID=strong_openmp_t16 SOLVE_CSV_DIR=results/manual_campaign/$TAG/strong_openmp/t16/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/$TAG/strong_openmp/t16/solutions"
+  --make-args "SOLVE_CLIENTS=32000 SOLVE_MPI_RANKS=1 SOLVE_MPI_OMP_THREADS=16 SOLVE_MPI_LAUNCHER=srun SOLVE_MPI_REPEATS=5 SOLVE_MPI_RUNTIME_S=300 SOLVE_MPI_STAGNATION_EPOCHS=500 SOLVE_MPI_MIN_REL_IMPROVEMENT=0.001 SOLVE_BATCH_ID=strong_openmp_t16 SOLVE_CSV_DIR=results/manual_campaign/strong_openmp/t16/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/strong_openmp/t16/solutions"
 ```
 
 ```bash
 tools/batch/submit_solve.sh \
   --target solve_mpi --time 00:30:00 --nodes 1 --ntasks 1 --cpus 32 --mem 32G \
-  --make-args "SOLVE_CLIENTS=32000 SOLVE_MPI_RANKS=1 SOLVE_MPI_OMP_THREADS=32 SOLVE_MPI_LAUNCHER=srun SOLVE_MPI_REPEATS=5 SOLVE_MPI_RUNTIME_S=300 SOLVE_MPI_STAGNATION_EPOCHS=500 SOLVE_MPI_MIN_REL_IMPROVEMENT=0.001 SOLVE_BATCH_ID=strong_openmp_t32 SOLVE_CSV_DIR=results/manual_campaign/$TAG/strong_openmp/t32/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/$TAG/strong_openmp/t32/solutions"
+  --make-args "SOLVE_CLIENTS=32000 SOLVE_MPI_RANKS=1 SOLVE_MPI_OMP_THREADS=32 SOLVE_MPI_LAUNCHER=srun SOLVE_MPI_REPEATS=5 SOLVE_MPI_RUNTIME_S=300 SOLVE_MPI_STAGNATION_EPOCHS=500 SOLVE_MPI_MIN_REL_IMPROVEMENT=0.001 SOLVE_BATCH_ID=strong_openmp_t32 SOLVE_CSV_DIR=results/manual_campaign/strong_openmp/t32/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/strong_openmp/t32/solutions"
 ```
 
 ### Strong scaling MPI
@@ -331,19 +325,19 @@ occupa un nodo; i punti sono quindi 32, 64 e 128 core totali:
 ```bash
 tools/batch/submit_solve.sh \
   --target solve_mpi --time 00:30:00 --nodes 1 --ntasks 1 --cpus 32 --mem 32G \
-  --make-args "SOLVE_CLIENTS=32000 SOLVE_MPI_RANKS=1 SOLVE_MPI_OMP_THREADS=32 SOLVE_MPI_LAUNCHER=srun SOLVE_MPI_REPEATS=5 SOLVE_MPI_RUNTIME_S=300 SOLVE_MPI_STAGNATION_EPOCHS=500 SOLVE_MPI_MIN_REL_IMPROVEMENT=0.001 SOLVE_BATCH_ID=strong_mpi_r1_t32 SOLVE_CSV_DIR=results/manual_campaign/$TAG/strong_mpi/r1_t32/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/$TAG/strong_mpi/r1_t32/solutions"
+  --make-args "SOLVE_CLIENTS=32000 SOLVE_MPI_RANKS=1 SOLVE_MPI_OMP_THREADS=32 SOLVE_MPI_LAUNCHER=srun SOLVE_MPI_REPEATS=5 SOLVE_MPI_RUNTIME_S=300 SOLVE_MPI_STAGNATION_EPOCHS=500 SOLVE_MPI_MIN_REL_IMPROVEMENT=0.001 SOLVE_BATCH_ID=strong_mpi_r1_t32 SOLVE_CSV_DIR=results/manual_campaign/strong_mpi/r1_t32/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/strong_mpi/r1_t32/solutions"
 ```
 
 ```bash
 tools/batch/submit_solve.sh \
   --target solve_mpi --time 00:30:00 --nodes 2 --ntasks 2 --cpus 32 --mem 32G \
-  --make-args "SOLVE_CLIENTS=32000 SOLVE_MPI_RANKS=2 SOLVE_MPI_OMP_THREADS=32 SOLVE_MPI_LAUNCHER=srun SOLVE_MPI_REPEATS=5 SOLVE_MPI_RUNTIME_S=300 SOLVE_MPI_STAGNATION_EPOCHS=500 SOLVE_MPI_MIN_REL_IMPROVEMENT=0.001 SOLVE_BATCH_ID=strong_mpi_r2_t32 SOLVE_CSV_DIR=results/manual_campaign/$TAG/strong_mpi/r2_t32/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/$TAG/strong_mpi/r2_t32/solutions"
+  --make-args "SOLVE_CLIENTS=32000 SOLVE_MPI_RANKS=2 SOLVE_MPI_OMP_THREADS=32 SOLVE_MPI_LAUNCHER=srun SOLVE_MPI_REPEATS=5 SOLVE_MPI_RUNTIME_S=300 SOLVE_MPI_STAGNATION_EPOCHS=500 SOLVE_MPI_MIN_REL_IMPROVEMENT=0.001 SOLVE_BATCH_ID=strong_mpi_r2_t32 SOLVE_CSV_DIR=results/manual_campaign/strong_mpi/r2_t32/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/strong_mpi/r2_t32/solutions"
 ```
 
 ```bash
 tools/batch/submit_solve.sh \
   --target solve_mpi --time 00:30:00 --nodes 4 --ntasks 4 --cpus 32 --mem 32G \
-  --make-args "SOLVE_CLIENTS=32000 SOLVE_MPI_RANKS=4 SOLVE_MPI_OMP_THREADS=32 SOLVE_MPI_LAUNCHER=srun SOLVE_MPI_REPEATS=5 SOLVE_MPI_RUNTIME_S=300 SOLVE_MPI_STAGNATION_EPOCHS=500 SOLVE_MPI_MIN_REL_IMPROVEMENT=0.001 SOLVE_BATCH_ID=strong_mpi_r4_t32 SOLVE_CSV_DIR=results/manual_campaign/$TAG/strong_mpi/r4_t32/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/$TAG/strong_mpi/r4_t32/solutions"
+  --make-args "SOLVE_CLIENTS=32000 SOLVE_MPI_RANKS=4 SOLVE_MPI_OMP_THREADS=32 SOLVE_MPI_LAUNCHER=srun SOLVE_MPI_REPEATS=5 SOLVE_MPI_RUNTIME_S=300 SOLVE_MPI_STAGNATION_EPOCHS=500 SOLVE_MPI_MIN_REL_IMPROVEMENT=0.001 SOLVE_BATCH_ID=strong_mpi_r4_t32 SOLVE_CSV_DIR=results/manual_campaign/strong_mpi/r4_t32/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/strong_mpi/r4_t32/solutions"
 ```
 
 Questa campagna e i grafici finali descritti qui sono di **strong scaling**:
