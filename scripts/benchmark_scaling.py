@@ -182,10 +182,15 @@ def summarize(raw_rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 row["speedup"] = ""
                 row["efficiency"] = ""
                 continue
-            speedup = baseline_time / float(row["mean_s"])
+            time_ratio = baseline_time / float(row["mean_s"])
             normalized_scale = scale / baseline_scale
-            efficiency = speedup / normalized_scale if normalized_scale > 0.0 else 0.0
-            row["speedup"] = speedup
+            is_weak = str(row["experiment"]).endswith("_weak")
+            efficiency = (
+                time_ratio
+                if is_weak
+                else time_ratio / normalized_scale if normalized_scale > 0.0 else 0.0
+            )
+            row["speedup"] = "" if is_weak else time_ratio
             row["efficiency"] = efficiency
 
     summary_rows.sort(key=lambda r: (r["experiment"], int(r["scale"])))

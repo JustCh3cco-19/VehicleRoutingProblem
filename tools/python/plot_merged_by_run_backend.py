@@ -191,6 +191,60 @@ def weak_generic(df: pd.DataFrame, x_col: str, title: str, outname: str) -> None
     savefig(outname)
 
 
+def weak_combined(openmp_df: pd.DataFrame, mpi_df: pd.DataFrame) -> None:
+    frames = []
+    for source, df in (("openmp", openmp_df), ("mpi", mpi_df)):
+        if df.empty or "m" not in df.columns:
+            continue
+        d = df.copy()
+        d["total_cores"] = d["mpi_ranks"] * d["omp_threads"]
+        d = d[d["m"] == 32 * d["total_cores"]]
+        d = d[d["total_cores"] <= 32] if source == "openmp" else d[d["total_cores"] > 32]
+        frames.append(d)
+    if not frames:
+        return
+    data = pd.concat(frames, ignore_index=True)
+    g = data.groupby(["n", "total_cores"], as_index=False)["elapsed_s"].mean()
+
+    plt.figure(figsize=(10, 5))
+    efficiency_rows = []
+    for n, sub in g.groupby("n"):
+        sub = sub.sort_values("total_cores").copy()
+        if 1 not in set(sub["total_cores"].astype(int)):
+            continue
+        baseline = float(sub[sub["total_cores"] == 1]["elapsed_s"].iloc[0])
+        sub["weak_efficiency"] = baseline / sub["elapsed_s"]
+        efficiency_rows.append(sub)
+        plt.plot(sub["total_cores"], sub["elapsed_s"], marker="o", label=f"n={int(n)}")
+    if not efficiency_rows:
+        plt.close()
+        return
+    configure_core_axis()
+    plt.ylabel("Elapsed time [s]")
+    plt.title("Weak Scaling Combinato (32 formiche/core)")
+    plt.grid(alpha=0.3)
+    plt.legend()
+    savefig("weak_combined_elapsed.png")
+
+    efficiency = pd.concat(efficiency_rows, ignore_index=True)
+    plt.figure(figsize=(10, 5))
+    for n, sub in efficiency.groupby("n"):
+        sub = sub.sort_values("total_cores")
+        plt.plot(
+            sub["total_cores"],
+            sub["weak_efficiency"],
+            marker="o",
+            label=f"n={int(n)}",
+        )
+    plt.axhline(1.0, color="k", linestyle="--", alpha=0.4, label="ideale")
+    configure_core_axis()
+    plt.ylabel("Efficienza weak T(1)/T(N)")
+    plt.title("Weak Scaling Combinato: Efficienza")
+    plt.grid(alpha=0.3)
+    plt.legend()
+    savefig("weak_combined_efficiency.png")
+
+
 def seq_vs_cuda(seq_df: pd.DataFrame, cuda_df: pd.DataFrame) -> None:
     if seq_df.empty and cuda_df.empty:
         return
@@ -306,6 +360,8 @@ def main():
         h = hyb_w.copy()
         h["total_cores"] = h["mpi_ranks"] * h["omp_threads"]
         weak_generic(h, "total_cores", "Hybrid Weak Scaling", "weak_hybrid_elapsed.png")
+
+    weak_combined(omp_w, mpi_w)
 
     seq_vs_cuda(seq_p, cuda_p)
     quality_plot(seq_q, mpi_q, cuda_q)

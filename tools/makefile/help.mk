@@ -83,6 +83,8 @@ help:
 	@printf "  %-60s | %s\n" "SOLVE_MPI_STAGNATION_EPOCHS=0" "Stop MPI dopo N epoche senza miglioramento relativo significativo (0=off)"
 	@printf "  %-60s | %s\n" "SOLVE_MPI_MIN_REL_IMPROVEMENT=0.1" "Percentuale minima di miglioramento relativo per epoca MPI (0.1 = 0.1%%)"
 	@printf "  %-60s | %s\n" "SOLVE_MPI_REPEATS=1" "Ripetizioni per istanza nel solve_mpi"
+	@printf "  %-60s | %s\n" "SOLVE_MPI_M=0" "Override formiche MPI (0=usa il manifest)"
+	@printf "  %-60s | %s\n" "SOLVE_MPI_FIXED_EPOCHS=0" "Epoche fisse MPI per benchmark riproducibili"
 	@printf "  %-60s | %s\n" "SOLVE_PYVRP_SEED=1234" "Seed PyVRP"
 	@printf "  %-60s | %s\n" "SOLVE_MPI_RANKS=2" "Numero processi MPI per solve_mpi"
 	@printf "  %-60s | %s\n" "SOLVE_MPI_OMP_THREADS=2" "Thread OpenMP per rank MPI"

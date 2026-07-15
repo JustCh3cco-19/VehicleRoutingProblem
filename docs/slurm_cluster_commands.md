@@ -340,10 +340,6 @@ tools/batch/submit_solve.sh \
   --make-args "SOLVE_CLIENTS=32000 SOLVE_MPI_RANKS=4 SOLVE_MPI_OMP_THREADS=32 SOLVE_MPI_LAUNCHER=srun SOLVE_MPI_REPEATS=5 SOLVE_MPI_RUNTIME_S=300 SOLVE_MPI_STAGNATION_EPOCHS=500 SOLVE_MPI_MIN_REL_IMPROVEMENT=0.001 SOLVE_BATCH_ID=strong_mpi_r4_t32 SOLVE_CSV_DIR=results/manual_campaign/strong_mpi/r4_t32/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/strong_mpi/r4_t32/solutions"
 ```
 
-Questa campagna e i grafici finali descritti qui sono di **strong scaling**:
-la dimensione del problema resta fissa. Il weak scaling non viene sottomesso
-da questi comandi.
-
 ### Curva strong combinata finale
 
 Non servono job aggiuntivi: la curva finale unisce i sei risultati OpenMP e
@@ -364,6 +360,94 @@ Il punto MPI `r1_t32` serve come controllo di coerenza con il punto OpenMP a
 32 core; per la curva combinata si usa il punto OpenMP.
 
 CUDA non fa parte delle campagne di scaling.
+
+## Weak scaling CPU
+
+La guida HPC richiede di aumentare il lavoro insieme alle risorse, mantenendo
+costante il lavoro per processing element. Per questo solver si mantiene fissa
+l'istanza a 8.000 clienti e si scala la popolazione ACO a **32 formiche per
+core**. In questo modo non si confonde il weak scaling con il costo
+superlineare delle matrici rispetto al numero di clienti.
+
+Tutti i punti eseguono 10 epoche fisse; il limite di 300 secondi resta soltanto
+una protezione. La configurazione debole è quindi:
+
+| Core totali | Configurazione | Formiche totali |
+| ---: | --- | ---: |
+| 1 | 1 rank × 1 thread | 32 |
+| 2 | 1 rank × 2 thread | 64 |
+| 4 | 1 rank × 4 thread | 128 |
+| 8 | 1 rank × 8 thread | 256 |
+| 16 | 1 rank × 16 thread | 512 |
+| 32 | 1 rank × 32 thread | 1024 |
+| 64 | 2 rank × 32 thread | 2048 |
+| 128 | 4 rank × 32 thread | 4096 |
+
+### Weak scaling OpenMP, intra-nodo
+
+```bash
+tools/batch/submit_solve.sh \
+  --target solve_mpi --time 00:30:00 --nodes 1 --ntasks 1 --cpus 1 --mem 32G \
+  --make-args "SOLVE_CLIENTS=8000 SOLVE_MPI_RANKS=1 SOLVE_MPI_OMP_THREADS=1 SOLVE_MPI_M=32 SOLVE_MPI_FIXED_EPOCHS=10 SOLVE_MPI_LAUNCHER=srun SOLVE_MPI_REPEATS=5 SOLVE_MPI_RUNTIME_S=300 SOLVE_MPI_STAGNATION_EPOCHS=0 SOLVE_MPI_MIN_REL_IMPROVEMENT=0.001 SOLVE_BATCH_ID=weak_openmp_c1_m32 SOLVE_CSV_DIR=results/manual_campaign/weak_openmp/c1_m32/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/weak_openmp/c1_m32/solutions"
+```
+
+```bash
+tools/batch/submit_solve.sh \
+  --target solve_mpi --time 00:30:00 --nodes 1 --ntasks 1 --cpus 2 --mem 32G \
+  --make-args "SOLVE_CLIENTS=8000 SOLVE_MPI_RANKS=1 SOLVE_MPI_OMP_THREADS=2 SOLVE_MPI_M=64 SOLVE_MPI_FIXED_EPOCHS=10 SOLVE_MPI_LAUNCHER=srun SOLVE_MPI_REPEATS=5 SOLVE_MPI_RUNTIME_S=300 SOLVE_MPI_STAGNATION_EPOCHS=0 SOLVE_MPI_MIN_REL_IMPROVEMENT=0.001 SOLVE_BATCH_ID=weak_openmp_c2_m64 SOLVE_CSV_DIR=results/manual_campaign/weak_openmp/c2_m64/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/weak_openmp/c2_m64/solutions"
+```
+
+```bash
+tools/batch/submit_solve.sh \
+  --target solve_mpi --time 00:30:00 --nodes 1 --ntasks 1 --cpus 4 --mem 32G \
+  --make-args "SOLVE_CLIENTS=8000 SOLVE_MPI_RANKS=1 SOLVE_MPI_OMP_THREADS=4 SOLVE_MPI_M=128 SOLVE_MPI_FIXED_EPOCHS=10 SOLVE_MPI_LAUNCHER=srun SOLVE_MPI_REPEATS=5 SOLVE_MPI_RUNTIME_S=300 SOLVE_MPI_STAGNATION_EPOCHS=0 SOLVE_MPI_MIN_REL_IMPROVEMENT=0.001 SOLVE_BATCH_ID=weak_openmp_c4_m128 SOLVE_CSV_DIR=results/manual_campaign/weak_openmp/c4_m128/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/weak_openmp/c4_m128/solutions"
+```
+
+```bash
+tools/batch/submit_solve.sh \
+  --target solve_mpi --time 00:30:00 --nodes 1 --ntasks 1 --cpus 8 --mem 32G \
+  --make-args "SOLVE_CLIENTS=8000 SOLVE_MPI_RANKS=1 SOLVE_MPI_OMP_THREADS=8 SOLVE_MPI_M=256 SOLVE_MPI_FIXED_EPOCHS=10 SOLVE_MPI_LAUNCHER=srun SOLVE_MPI_REPEATS=5 SOLVE_MPI_RUNTIME_S=300 SOLVE_MPI_STAGNATION_EPOCHS=0 SOLVE_MPI_MIN_REL_IMPROVEMENT=0.001 SOLVE_BATCH_ID=weak_openmp_c8_m256 SOLVE_CSV_DIR=results/manual_campaign/weak_openmp/c8_m256/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/weak_openmp/c8_m256/solutions"
+```
+
+```bash
+tools/batch/submit_solve.sh \
+  --target solve_mpi --time 00:30:00 --nodes 1 --ntasks 1 --cpus 16 --mem 32G \
+  --make-args "SOLVE_CLIENTS=8000 SOLVE_MPI_RANKS=1 SOLVE_MPI_OMP_THREADS=16 SOLVE_MPI_M=512 SOLVE_MPI_FIXED_EPOCHS=10 SOLVE_MPI_LAUNCHER=srun SOLVE_MPI_REPEATS=5 SOLVE_MPI_RUNTIME_S=300 SOLVE_MPI_STAGNATION_EPOCHS=0 SOLVE_MPI_MIN_REL_IMPROVEMENT=0.001 SOLVE_BATCH_ID=weak_openmp_c16_m512 SOLVE_CSV_DIR=results/manual_campaign/weak_openmp/c16_m512/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/weak_openmp/c16_m512/solutions"
+```
+
+```bash
+tools/batch/submit_solve.sh \
+  --target solve_mpi --time 00:30:00 --nodes 1 --ntasks 1 --cpus 32 --mem 32G \
+  --make-args "SOLVE_CLIENTS=8000 SOLVE_MPI_RANKS=1 SOLVE_MPI_OMP_THREADS=32 SOLVE_MPI_M=1024 SOLVE_MPI_FIXED_EPOCHS=10 SOLVE_MPI_LAUNCHER=srun SOLVE_MPI_REPEATS=5 SOLVE_MPI_RUNTIME_S=300 SOLVE_MPI_STAGNATION_EPOCHS=0 SOLVE_MPI_MIN_REL_IMPROVEMENT=0.001 SOLVE_BATCH_ID=weak_openmp_c32_m1024 SOLVE_CSV_DIR=results/manual_campaign/weak_openmp/c32_m1024/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/weak_openmp/c32_m1024/solutions"
+```
+
+### Weak scaling MPI, inter-nodo
+
+Il punto a 32 core con un rank serve come controllo rispetto a OpenMP. Per la
+curva weak combinata si usano poi i punti MPI a 64 e 128 core.
+
+```bash
+tools/batch/submit_solve.sh \
+  --target solve_mpi --time 00:30:00 --nodes 1 --ntasks 1 --cpus 32 --mem 32G \
+  --make-args "SOLVE_CLIENTS=8000 SOLVE_MPI_RANKS=1 SOLVE_MPI_OMP_THREADS=32 SOLVE_MPI_M=1024 SOLVE_MPI_FIXED_EPOCHS=10 SOLVE_MPI_LAUNCHER=srun SOLVE_MPI_REPEATS=5 SOLVE_MPI_RUNTIME_S=300 SOLVE_MPI_STAGNATION_EPOCHS=0 SOLVE_MPI_MIN_REL_IMPROVEMENT=0.001 SOLVE_BATCH_ID=weak_mpi_c32_r1_t32_m1024 SOLVE_CSV_DIR=results/manual_campaign/weak_mpi/c32_r1_t32_m1024/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/weak_mpi/c32_r1_t32_m1024/solutions"
+```
+
+```bash
+tools/batch/submit_solve.sh \
+  --target solve_mpi --time 00:30:00 --nodes 2 --ntasks 2 --cpus 32 --mem 32G \
+  --make-args "SOLVE_CLIENTS=8000 SOLVE_MPI_RANKS=2 SOLVE_MPI_OMP_THREADS=32 SOLVE_MPI_M=2048 SOLVE_MPI_FIXED_EPOCHS=10 SOLVE_MPI_LAUNCHER=srun SOLVE_MPI_REPEATS=5 SOLVE_MPI_RUNTIME_S=300 SOLVE_MPI_STAGNATION_EPOCHS=0 SOLVE_MPI_MIN_REL_IMPROVEMENT=0.001 SOLVE_BATCH_ID=weak_mpi_c64_r2_t32_m2048 SOLVE_CSV_DIR=results/manual_campaign/weak_mpi/c64_r2_t32_m2048/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/weak_mpi/c64_r2_t32_m2048/solutions"
+```
+
+```bash
+tools/batch/submit_solve.sh \
+  --target solve_mpi --time 00:30:00 --nodes 4 --ntasks 4 --cpus 32 --mem 32G \
+  --make-args "SOLVE_CLIENTS=8000 SOLVE_MPI_RANKS=4 SOLVE_MPI_OMP_THREADS=32 SOLVE_MPI_M=4096 SOLVE_MPI_FIXED_EPOCHS=10 SOLVE_MPI_LAUNCHER=srun SOLVE_MPI_REPEATS=5 SOLVE_MPI_RUNTIME_S=300 SOLVE_MPI_STAGNATION_EPOCHS=0 SOLVE_MPI_MIN_REL_IMPROVEMENT=0.001 SOLVE_BATCH_ID=weak_mpi_c128_r4_t32_m4096 SOLVE_CSV_DIR=results/manual_campaign/weak_mpi/c128_r4_t32_m4096/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/weak_mpi/c128_r4_t32_m4096/solutions"
+```
+
+Per il grafico weak finale usare i punti OpenMP da 1 a 32 core e i punti MPI
+da 64 e 128 core. L'efficienza weak è `T(1)/T(N)`: idealmente il tempo resta
+costante perché ogni core continua a gestire 32 formiche.
+
 
 ## Benchmark CUDA a configurazione fissa
 

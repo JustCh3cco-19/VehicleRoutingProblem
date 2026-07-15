@@ -7,6 +7,8 @@ manifest="${SOLVE_MANIFEST_MPI}"
 clients="${SOLVE_CLIENTS:-}"
 limit="${SOLVE_LIMIT:-0}"
 repeats="${SOLVE_MPI_REPEATS:-1}"
+mpi_m="${SOLVE_MPI_M:-0}"
+fixed_epochs="${SOLVE_MPI_FIXED_EPOCHS:-0}"
 runtime_s="${SOLVE_MPI_RUNTIME_S:-0}"
 stag_iters="${SOLVE_MPI_STAGNATION_EPOCHS:-0}"
 improve_rel_pct="${SOLVE_MPI_MIN_REL_IMPROVEMENT:-0.001}"
@@ -24,6 +26,14 @@ if [[ ! "$mpi_ranks" =~ ^[1-9][0-9]*$ ]] || [ "$mpi_ranks" -gt 4 ]; then
 fi
 if [[ ! "$omp_threads" =~ ^[1-9][0-9]*$ ]] || [ "$omp_threads" -gt 32 ]; then
   echo "[ERROR] SOLVE_MPI_OMP_THREADS deve essere compreso tra 1 e 32" >&2
+  exit 2
+fi
+if [[ ! "$mpi_m" =~ ^[0-9]+$ ]]; then
+  echo "[ERROR] SOLVE_MPI_M deve essere un intero >= 0" >&2
+  exit 2
+fi
+if [[ ! "$fixed_epochs" =~ ^[0-9]+$ ]]; then
+  echo "[ERROR] SOLVE_MPI_FIXED_EPOCHS deve essere un intero >= 0" >&2
   exit 2
 fi
 if [ "$repeats" -lt 1 ]; then
@@ -83,6 +93,10 @@ tail -n +2 "$manifest" \
   | { if [ -n "$clients" ]; then awk -F, -v list="$clients" 'BEGIN{split(list,a,","); for(i in a) wanted[a[i]]=1} ($4 in wanted)'; else cat; fi; } \
   | { if [ "$limit" -gt 0 ]; then head -n "$limit"; else cat; fi; } \
   | while IFS=, read -r profile name instance_path n K m solver_seed instance_seed layout_id capacity_formula; do
+      m_run="$m"
+      if [ "$mpi_m" -gt 0 ]; then
+        m_run="$mpi_m"
+      fi
       for run_id in $(seq 1 "$repeats"); do
         seed_run=$((solver_seed + run_id - 1))
         done_runs=$((done_runs + 1))
@@ -107,10 +121,11 @@ tail -n +2 "$manifest" \
 
         /usr/bin/time -f "%e,%M" -o "$stats_file" env \
           ACO_SOLVER_TIMEOUT_SECONDS="$runtime_s" \
+          ACO_SOLVER_FIXED_EPOCHS="$fixed_epochs" \
           ACO_SOLVER_STAGNATION_EPOCHS="$stag_iters" \
           ACO_SOLVER_MIN_REL_IMPROVEMENT="$improve_rel" \
           OMP_NUM_THREADS="$omp_threads" \
-          "${launcher_cmd[@]}" ./aco_vrp_openmp_mpi.out "$instance_path" "$K" "$m" "$seed_run" </dev/null 2>&1 \
+          "${launcher_cmd[@]}" ./aco_vrp_openmp_mpi.out "$instance_path" "$K" "$m_run" "$seed_run" </dev/null 2>&1 \
           | tee "$output_file" \
           | awk '/^\[progress\]/ { print; fflush(); }'
         rc=${PIPESTATUS[0]}
@@ -142,10 +157,10 @@ tail -n +2 "$manifest" \
         printf '%s\n' "$out" > "$sol_file"
         if [ "$rc" -eq 0 ]; then
           cost="$(printf '%s\n' "$out" | sed -n 's/^best cost: //p' | tail -n1)"
-          echo "$name,$profile,$instance_path,$n,$K,$m,$seed_run,$instance_seed,$layout_id,$run_id,ok,$elapsed,$rss_gb,$cost,,$mpi_ranks,$omp_threads,$batch_id" >> "$csv"
+          echo "$name,$profile,$instance_path,$n,$K,$m_run,$seed_run,$instance_seed,$layout_id,$run_id,ok,$elapsed,$rss_gb,$cost,,$mpi_ranks,$omp_threads,$batch_id" >> "$csv"
         else
           err="$(printf '%s' "$out" | tr '\n' ' ' | tr ',' ';')"
-          echo "$name,$profile,$instance_path,$n,$K,$m,$seed_run,$instance_seed,$layout_id,$run_id,error,$elapsed,$rss_gb,,$err,$mpi_ranks,$omp_threads,$batch_id" >> "$csv"
+          echo "$name,$profile,$instance_path,$n,$K,$m_run,$seed_run,$instance_seed,$layout_id,$run_id,error,$elapsed,$rss_gb,,$err,$mpi_ranks,$omp_threads,$batch_id" >> "$csv"
         fi
         if [ "$rc" -eq 0 ]; then
           echo "[mpi][completato] tempo_trascorso=${elapsed:-n/a}s | tempo_rimanente=0s | best_cost=${cost:-n/a} | stato=ok | memoria=${rss_gb:-n/a}GiB"
