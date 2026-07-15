@@ -1,0 +1,52 @@
+\section{CUDA Implementation}
+
+The GPU implementation of the ACO solver represents a fundamental paradigm shift from the sequential and hybrid baselines. To scale beyond 100,000 nodes on consumer-grade hardware, the implementation transitions from a \textbf{memory-centric} model to a \textbf{compute-centric} model, optimizing the \textbf{Memory Hierarchy} to maximize \textbf{SIMT (Single Instruction, Multiple Thread)} efficiency.
+
+\subsection{Paradigm Shift: From Memory-Centric to Compute-Centric}
+
+Traditional ACO implementations rely on a precalculated distance matrix $c_{ij}$ to evaluate the heuristic term $\eta_{ij} = 1/c_{ij}$. While this approach minimizes arithmetic operations, it creates a catastrophic bottleneck on GPU architectures due to the high latency and finite bandwidth of Global Memory (DRAM).
+
+\subsubsection{The Memory-Bound Bottleneck}
+In a memory-centric model, every ant decision requires fetching a 32-bit float from Global Memory. On modern GPUs, while ALU throughput (TFLOPS) has grown exponentially, Global Memory bandwidth (GB/s) has lagged behind. This results in a near-zero \textbf{Compute-to-Global-Memory-Access (CGMA)} ratio, capping the execution rate at a small fraction of the hardware's theoretical peak. Furthermore, the $O(N^2)$ memory requirement creates a physical limit: for $N=100,000$, a float matrix would require 40\,GB of VRAM, exceeding the capacity of consumer hardware.
+
+\subsubsection{The Compute-Centric Advantage}
+The v6 architecture replaces the distance matrix with \textbf{on-the-fly Euclidean distance calculation} from an $O(N)$ array of \texttt{float2} coordinates. This transition exploits the fact that modern GPUs dedicate the vast majority of their silicon area to Energy-efficient Arithmetic Logic Units (ALUs). By replacing a high-latency DRAM lookup with a sequence of arithmetic operations (\texttt{sub}, \texttt{mul}, \texttt{add}, and hardware-accelerated \texttt{rsqrtf}), we dramatically increase the CGMA ratio, shifting the kernel from being \textbf{memory-bound} to \textbf{compute-bound}.
+
+\subsubsection{Experimental Validation}
+Preliminary benchmarks confirm that calculating distances on-the-fly is orders of magnitude more efficient than Global Memory lookups as $N$ increases. The advantage already exceeds three orders of magnitude at $N=1{,}000$, grows beyond four orders of magnitude by $N=10{,}000$, and reaches approximately \textbf{12,500$\times$} at $N=30{,}000$. At $N=100{,}000$, the lookup-based approach no longer fits in memory, while the compute-centric version remains executable.
+
+\subsection{Memory Hierarchy Strategy}
+
+The architecture adopts a tiered memory management strategy to balance extreme capacity requirements with single-cycle execution speeds.
+
+\subsubsection{Registers: Ant Operational State}
+The most critical optimization is keeping the entire \textbf{Ant Operational State} entirely within \textbf{Registers}. Verification via \texttt{cuobjdump} confirms that each thread utilizes exactly \textbf{48 registers}, storing 64-bit pointers, PRNG states, and candidate scores. This allocation maintains the exploration "on-chip," avoiding the performance cliff of register spilling. By limiting usage to 48 registers, the kernel achieves an \textbf{SM Occupancy of 66\%} (42 active warps per SM), providing sufficient overhead for \textbf{latency hiding} during pheromone matrix fetches.
+
+\subsubsection{Exclusion of Shared Memory}
+A significant architectural choice is the \textbf{avoidance of Shared Memory} for intermediate calculations or route storage.
+\begin{itemize}
+    \item \textbf{Capacity}: Vehicle routes for $N=100,000$ are too large to fit in the few dozen KB of Shared Memory per SM.
+    \item \textbf{Synchronization}: Coordinating Shared Memory requires \texttt{\_\_syncthreads()} barriers, which stall the entire block. Our approach uses \textbf{Warp Shuffles} for lock-free register-to-register communication.
+    \item \textbf{Throughput}: Since on-the-fly computation frees up Global Memory bandwidth, using Shared Memory to "save" bandwidth would introduce unnecessary synchronization cycles without tangible gains.
+\end{itemize}
+
+\subsubsection{Constant Memory: Invariant Parameters}
+Algorithmic parameters ($\alpha, \beta, \rho, Q$) are stored in \textbf{Constant Memory}. This utilizes a dedicated on-chip cache and a \textbf{broadcast mechanism}, serving the entire warp in a single cycle and saving DRAM bandwidth for the dense pheromone updates.
+
+\subsection{Thread Mapping: Static Warp-per-Ant}
+
+The v6 architecture assigns exactly \textbf{one 32-thread warp to each ant}. This strategy was chosen over dynamic work queues or block-level mapping for several hardware-level reasons:
+\begin{itemize}
+    \item \textbf{Divergence Control}: CVRP customer selection is stochastic. A warp-per-ant model ensures all 32 threads evaluate the same ant's candidate set simultaneously, maintaining perfect \textbf{control-flow convergence} and SIMT efficiency.
+    \item \textbf{Memory Coalescing and Temporal Sync}: Route storage uses a \textbf{Step-Interleaved Structure of Arrays (SoA)} layout (\texttt{routes[step][ant]}). This establishes a "temporal contract" between warps: at simulation step $T$, all warps write their chosen nodes into contiguous addresses. A dynamic mapping would destroy this synchronization, leading to scattered, uncoalesced writes that would saturate the memory bus.
+\end{itemize}
+
+\subsection{Algorithmic Innovations}
+
+\begin{itemize}
+    \item \textbf{Single-Pass Fallback}: We implement \textbf{Weighted Reservoir Sampling} to evaluate the entire graph in a single $O(N)$ pass. This resolves the ALU saturation caused by traditional two-pass roulette wheels, utilizing hardware \texttt{rsqrtf} for single-cycle distance processing.
+    \item \textbf{AtomicCAS Workaround}: Since CUDA lacks 8-bit atomics, pheromone reinforcement is implemented via a \textbf{32-bit AtomicCAS loop} with bit-masking, ensuring race-free updates to the log-quantized matrix.
+\end{itemize}
+
+\subsection{Performance Analysis}
+The analysis identifies a crossover point around $N=4000$. Below this, the CPU's cache locality prevails; above it, the GPU's exponential throughput and the compute-centric v6 architecture provide a scalable solution for ultra-large CVRP instances.
