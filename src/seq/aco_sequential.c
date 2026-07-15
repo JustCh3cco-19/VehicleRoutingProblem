@@ -158,6 +158,41 @@ static double wall_time_seconds(void) {
 #endif
 }
 
+static void print_seq_progress(int epoch, double elapsed_s,
+                               double max_runtime_s, int no_improve_epochs,
+                               int max_stagnation_epochs, double best_cost) {
+  char time_remaining[32];
+  char epochs_remaining[32];
+  char best_cost_text[64];
+
+  if (max_runtime_s > 0.0) {
+    snprintf(time_remaining, sizeof(time_remaining), "%.1fs",
+             fmax(0.0, max_runtime_s - elapsed_s));
+  } else {
+    snprintf(time_remaining, sizeof(time_remaining), "senza limite");
+  }
+  if (max_stagnation_epochs > 0) {
+    int remaining = max_stagnation_epochs - no_improve_epochs;
+    snprintf(epochs_remaining, sizeof(epochs_remaining), "%d",
+             remaining > 0 ? remaining : 0);
+    if (remaining <= 0) {
+      snprintf(time_remaining, sizeof(time_remaining), "0.0s");
+    }
+  } else {
+    snprintf(epochs_remaining, sizeof(epochs_remaining), "senza limite");
+  }
+  if (best_cost < DBL_MAX) {
+    snprintf(best_cost_text, sizeof(best_cost_text), "%.3f", best_cost);
+  } else {
+    snprintf(best_cost_text, sizeof(best_cost_text), "non disponibile");
+  }
+
+  printf("[progress][seq] epoca=%d | epoche_rimanenti_prima_stop=%s | "
+         "tempo_trascorso=%.1fs | tempo_rimanente=%s | best_cost=%s\n",
+         epoch, epochs_remaining, elapsed_s, time_remaining, best_cost_text);
+  fflush(stdout);
+}
+
 /**
  * @brief Executes `load_timer_directives`.
  * @param max_runtime_sec Function parameter.
@@ -836,12 +871,21 @@ static void aco_vrp_run_with_timer(int n, int K, int vehicle_capacity_customers,
     }
 
     double iter_end_wall = wall_time_seconds();
-    if (max_runtime_sec > 0.0 &&
-        (iter_end_wall - start_wall) >= max_runtime_sec) {
+    double elapsed_s = iter_end_wall - start_wall;
+    int reached_time_limit = max_runtime_sec > 0.0 &&
+                             elapsed_s >= max_runtime_sec;
+    int reached_epoch_limit = max_stagnation_epochs > 0 &&
+                              no_improve_epochs >= max_stagnation_epochs;
+    if (iter == 0 || (iter + 1) % 10 == 0 || improved_global ||
+        reached_time_limit || reached_epoch_limit) {
+      print_seq_progress(iter + 1, elapsed_s, max_runtime_sec,
+                         no_improve_epochs, max_stagnation_epochs,
+                         *best_cost);
+    }
+    if (reached_time_limit) {
       break;
     }
-    if (!improved_global && max_stagnation_epochs > 0 &&
-        no_improve_epochs >= max_stagnation_epochs) {
+    if (!improved_global && reached_epoch_limit) {
       break;
     }
   }

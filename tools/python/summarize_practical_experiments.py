@@ -11,6 +11,10 @@ import math
 from pathlib import Path
 from statistics import mean, pstdev
 
+MAX_NODES = 4
+MAX_CPUS_PER_TASK = 32
+MAX_TOTAL_CORES = 128
+
 
 def read_rows(path: Path) -> list[dict[str, str]]:
     if not path.exists():
@@ -46,6 +50,14 @@ def summarize_scaling(rows: list[dict[str, str]], scale_mode: str) -> list[dict[
         n = ival(r.get("n", "0"), 0)
         ranks = ival(r.get("mpi_ranks", "1"), 1)
         threads = ival(r.get("omp_threads", "1"), 1)
+        if (
+            ranks <= 0
+            or ranks > MAX_NODES
+            or threads <= 0
+            or threads > MAX_CPUS_PER_TASK
+            or ranks * threads > MAX_TOTAL_CORES
+        ):
+            continue
         groups.setdefault((n, ranks, threads), []).append(r)
 
     out: list[dict[str, str]] = []
@@ -59,9 +71,8 @@ def summarize_scaling(rows: list[dict[str, str]], scale_mode: str) -> list[dict[
 
         if scale_mode == "openmp":
             scale = threads
-        elif scale_mode == "mpi":
-            scale = ranks
         else:
+            # MPI and combined hybrid curves use total allocated CPU cores.
             scale = ranks * threads
 
         out.append(
@@ -303,8 +314,8 @@ def main() -> int:
 
     scaling_cfg: list[tuple[str, str, str, str]] = [
         ("Strong OpenMP", "exp_strong_openmp_practical", "manifest_openmp_mpi_per_instance_results.csv", "openmp"),
-        ("Strong MPI", "exp_strong_mpi_practical", "manifest_openmp_mpi_per_instance_results.csv", "mpi"),
-        ("Strong Hybrid", "exp_strong_hybrid_practical", "manifest_openmp_mpi_per_instance_results.csv", "hybrid"),
+        ("Strong MPI (speedup relativo al punto a 32 core)", "exp_strong_mpi_practical", "manifest_openmp_mpi_per_instance_results.csv", "mpi"),
+        ("Strong Combined (OpenMP + MPI)", "exp_strong_hybrid_practical", "manifest_openmp_mpi_per_instance_results.csv", "hybrid"),
         ("Weak OpenMP", "exp_weak_openmp_practical", "manifest_openmp_mpi_per_instance_results.csv", "openmp"),
         ("Weak MPI", "exp_weak_mpi_practical", "manifest_openmp_mpi_per_instance_results.csv", "mpi"),
         ("Weak Hybrid", "exp_weak_hybrid_practical", "manifest_openmp_mpi_per_instance_results.csv", "hybrid"),

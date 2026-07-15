@@ -11,8 +11,8 @@ Sottomette automaticamente due job Slurm:
 
 Opzioni:
   --tag TAG                Tag risultati (default: YYYYMMDD_HHMMSS)
-  --cpu-time HH:MM:SS      Tempo job CPU (default: 24:00:00)
-  --gpu-time HH:MM:SS      Tempo job GPU (default: 24:00:00)
+  --cpu-time HH:MM:SS      Tempo job CPU (default: 00:30:00)
+  --gpu-time HH:MM:SS      Tempo job GPU (default: 00:30:00)
   --module-loads "LIST"    Moduli da caricare (es: "gcc/13.2 openmpi/4.1 cuda/12.2")
   --dry-run                Mostra i comandi senza inviare job
   -h, --help               Mostra help
@@ -20,8 +20,8 @@ EOF
 }
 
 tag="$(date +%Y%m%d_%H%M%S)"
-cpu_time="24:00:00"
-gpu_time="24:00:00"
+cpu_time="00:30:00"
+gpu_time="00:30:00"
 module_loads=""
 dry_run=0
 
@@ -74,6 +74,7 @@ cpu_cmd=(
   --nodes 4
   --ntasks 4
   --cpus 32
+  --mem 32G
   --make-args "PRACTICAL_TAG=${tag}"
 )
 gpu_cmd=(
@@ -83,6 +84,7 @@ gpu_cmd=(
   --nodes 1
   --ntasks 1
   --cpus 32
+  --mem 32G
   --gres gpu:1
   --make-args "PRACTICAL_TAG=${tag}"
 )

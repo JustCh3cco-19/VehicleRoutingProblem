@@ -17,6 +17,9 @@ import csv
 from pathlib import Path
 from statistics import mean, pstdev
 
+MAX_TOTAL_CORES = 128
+CORE_TICKS = [1, 2, 4, 8, 16, 32, 64, 128]
+
 
 def read_rows(path: Path) -> list[dict[str, str]]:
     with path.open(newline="") as f:
@@ -29,7 +32,10 @@ def parse_args() -> argparse.Namespace:
     p.add_argument(
         "--x",
         required=True,
-        help="Column to group by (e.g., omp_threads or mpi_ranks).",
+        help=(
+            "Column to group by (e.g. omp_threads), or total_cores to derive "
+            "mpi_ranks * omp_threads."
+        ),
     )
     p.add_argument(
         "--out-csv",
@@ -84,11 +90,18 @@ def main() -> int:
     groups: dict[int, list[float]] = {}
     for r in rows:
         try:
-            g = int(r.get(args.x, "0"))
+            if args.x == "total_cores":
+                g = int(r.get("mpi_ranks", "1")) * int(r.get("omp_threads", "1"))
+            else:
+                g = int(r.get(args.x, "0"))
             e = float(r.get("elapsed_s", ""))
         except ValueError:
             continue
         if g <= 0:
+            continue
+        if args.x == "omp_threads" and g > 32:
+            continue
+        if args.x == "total_cores" and g > MAX_TOTAL_CORES:
             continue
         groups.setdefault(g, []).append(e)
 
@@ -105,7 +118,8 @@ def main() -> int:
         m = mean(vals)
         s = pstdev(vals) if len(vals) > 1 else 0.0
         speedup = base_mean / m if m > 0 else 0.0
-        eff = speedup / g if g > 0 else 0.0
+        normalized_scale = float(g) / float(base_x)
+        eff = speedup / normalized_scale if normalized_scale > 0 else 0.0
         summary_rows.append(
             {
                 args.x: str(g),
@@ -161,7 +175,12 @@ def main() -> int:
         ax.set_ylabel("Speedup")
         ax.set_xscale("log", base=2)
         ax.set_yscale("log", base=2)
-        ax.set_xticks(x_vals)
+        if args.x in {"omp_threads", "total_cores"}:
+            ticks = CORE_TICKS[:6] if args.x == "omp_threads" else CORE_TICKS
+            ax.set_xlim(0.8, ticks[-1] * 1.25)
+            ax.set_xticks(ticks)
+        else:
+            ax.set_xticks(x_vals)
         ax.get_xaxis().set_major_formatter(plt.ScalarFormatter())
         ax.get_yaxis().set_major_formatter(plt.ScalarFormatter())
         ax.grid(False)

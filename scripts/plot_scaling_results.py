@@ -13,6 +13,11 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 
+MAX_TOTAL_CORES = 128
+MAX_NODES = 4
+MAX_CPUS_PER_TASK = 32
+CORE_TICKS = [1, 2, 4, 8, 16, 32, 64, 128]
+
 
 @dataclass
 class Row:
@@ -119,6 +124,14 @@ def save_plot(fig: plt.Figure, out_path: Path) -> None:
     plt.close(fig)
 
 
+def configure_core_axis(ax: plt.Axes) -> None:
+    ax.set_xscale("log", base=2)
+    ax.set_xlim(0.8, 160)
+    ax.set_xticks(CORE_TICKS)
+    ax.set_xticklabels([str(x) for x in CORE_TICKS])
+    ax.set_xlabel("Core CPU totali")
+
+
 def plot_strong_runtime(out_dir: Path, omp: list[Row], mpi_s: list[Row], seq: list[Row]) -> None:
     fig, ax = plt.subplots(figsize=(8.0, 4.8))
     xo, yo, eo = as_arrays(omp)
@@ -132,7 +145,7 @@ def plot_strong_runtime(out_dir: Path, omp: list[Row], mpi_s: list[Row], seq: li
         ax.axhline(seq_t, linestyle="--", color="gray", label=f"Sequential baseline ({seq_t:.3f}s)")
 
     ax.set_title("Strong Scaling Runtime")
-    ax.set_xlabel("Parallel Scale (workers)")
+    configure_core_axis(ax)
     ax.set_ylabel("Mean Time (s)")
     ax.grid(True, alpha=0.25)
     ax.legend()
@@ -151,13 +164,26 @@ def plot_strong_speedup(out_dir: Path, omp: list[Row], mpi_s: list[Row]) -> None
     base_omp = float(min(r.scale for r in omp))
     base_mpi = float(min(r.scale for r in mpi_s))
     ax.plot(xo, xo / base_omp, linestyle="--", color="#1f77b4", alpha=0.6, label="Ideal OpenMP")
-    ax.plot(xm, xm / base_mpi, linestyle="--", color="#ff7f0e", alpha=0.6, label="Ideal MPI+OpenMP")
+    ax.plot(
+        xm,
+        xm / base_mpi,
+        linestyle="--",
+        color="#ff7f0e",
+        alpha=0.6,
+        label="Ideal MPI+OpenMP (relativo a 32 core)",
+    )
 
     ax.plot(xo, so, marker="o", linewidth=2, label="Measured OpenMP")
-    ax.plot(xm, sm, marker="s", linewidth=2, label="Measured MPI+OpenMP")
+    ax.plot(
+        xm,
+        sm,
+        marker="s",
+        linewidth=2,
+        label="Measured MPI+OpenMP (relativo a 32 core)",
+    )
 
     ax.set_title("Strong Scaling Speedup")
-    ax.set_xlabel("Parallel Scale (workers)")
+    configure_core_axis(ax)
     ax.set_ylabel("Speedup")
     ax.grid(True, alpha=0.25)
     ax.legend()
@@ -172,11 +198,17 @@ def plot_strong_efficiency(out_dir: Path, omp: list[Row], mpi_s: list[Row]) -> N
     em = np.array([r.efficiency for r in mpi_s], dtype=float)
 
     ax.plot(xo, eo, marker="o", linewidth=2, label="OpenMP efficiency")
-    ax.plot(xm, em, marker="s", linewidth=2, label="MPI+OpenMP efficiency")
+    ax.plot(
+        xm,
+        em,
+        marker="s",
+        linewidth=2,
+        label="MPI+OpenMP efficiency (relativa a 32 core)",
+    )
     ax.axhline(1.0, linestyle="--", color="gray", alpha=0.7, label="Ideal efficiency")
 
     ax.set_title("Strong Scaling Efficiency")
-    ax.set_xlabel("Parallel Scale (workers)")
+    configure_core_axis(ax)
     ax.set_ylabel("Efficiency")
     ax.set_ylim(0.0, 1.1)
     ax.grid(True, alpha=0.25)
@@ -199,7 +231,7 @@ def plot_weak_runtime(out_dir: Path, mpi_w: list[Row]) -> None:
     ax2.set_ylabel("Ants (m)")
 
     ax.set_title("MPI+OpenMP Weak Scaling")
-    ax.set_xlabel("Parallel Scale (workers)")
+    configure_core_axis(ax)
     ax.set_ylabel("Mean Time (s)")
     ax.grid(True, alpha=0.25)
 
@@ -216,7 +248,7 @@ def plot_weak_time_per_ant(out_dir: Path, mpi_w: list[Row]) -> None:
 
     ax.plot(x, y, marker="o", linewidth=2, label="Time per ant")
     ax.set_title("MPI+OpenMP Weak Scaling: Time per Ant")
-    ax.set_xlabel("Parallel Scale (workers)")
+    configure_core_axis(ax)
     ax.set_ylabel("Seconds / ant")
     ax.grid(True, alpha=0.25)
     ax.legend()
@@ -347,6 +379,48 @@ def plot_seq_vs_parallel_speedup(
     save_plot(fig, out_dir / "seq_vs_parallel_speedup.png")
 
 
+def combined_strong_rows(omp: list[Row], mpi_s: list[Row]) -> list[Row]:
+    """Build 1..32 from one-node OpenMP, then 64/128 from MPI+OpenMP."""
+    by_scale: dict[int, Row] = {
+        row.scale: row for row in omp if row.scale in CORE_TICKS and row.scale <= 32
+    }
+    for row in mpi_s:
+        if row.scale in (64, 128):
+            by_scale[row.scale] = row
+    return [by_scale[x] for x in CORE_TICKS if x in by_scale]
+
+
+def plot_combined_strong(out_dir: Path, omp: list[Row], mpi_s: list[Row]) -> None:
+    rows = combined_strong_rows(omp, mpi_s)
+    if not rows:
+        return
+    x = np.array([r.scale for r in rows], dtype=float)
+    elapsed = np.array([r.mean_s for r in rows], dtype=float)
+    errors = np.array([r.std_s for r in rows], dtype=float)
+
+    fig, ax = plt.subplots(figsize=(8.4, 4.8))
+    ax.errorbar(x, elapsed, yerr=errors, marker="o", capsize=3, linewidth=2)
+    configure_core_axis(ax)
+    ax.set_ylabel("Tempo medio (s)")
+    ax.set_title("Strong Scaling Combinato OpenMP + MPI")
+    ax.grid(True, alpha=0.25)
+    save_plot(fig, out_dir / "strong_combined_runtime.png")
+
+    baseline_time = elapsed[0]
+    baseline_scale = x[0]
+    speedup = baseline_time / elapsed
+    ideal = x / baseline_scale
+    fig, ax = plt.subplots(figsize=(8.4, 4.8))
+    ax.plot(x, speedup, marker="o", linewidth=2, label="Misurato")
+    ax.plot(x, ideal, linestyle="--", color="gray", label="Ideale")
+    configure_core_axis(ax)
+    ax.set_ylabel("Speedup")
+    ax.set_title("Strong Scaling Combinato: Speedup 1–128 core")
+    ax.grid(True, alpha=0.25)
+    ax.legend()
+    save_plot(fig, out_dir / "strong_combined_speedup.png")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Generate scaling plots from CSV summary.")
     parser.add_argument("--summary", default="reports/scaling_summary.csv", help="Input summary CSV path")
@@ -359,13 +433,19 @@ def main() -> int:
     out_dir = Path(args.out_dir)
     ensure_dir(out_dir)
 
-    rows = load_rows(summary_path)
+    rows = [
+        r
+        for r in load_rows(summary_path)
+        if r.scale <= MAX_TOTAL_CORES
+        and r.ranks <= MAX_NODES
+        and r.threads_per_rank <= MAX_CPUS_PER_TASK
+    ]
     raw_rows = load_raw_rows(raw_path)
     omp = pick(rows, "omp_strong")
     mpi_s = pick(rows, "mpi_omp_strong")
     mpi_w = pick(rows, "mpi_omp_weak")
     seq = pick(rows, "seq_strong_baseline")
-    cuda = pick(rows, "cuda_strong")
+    cuda = pick(rows, "cuda_fixed")
 
     if not omp or not mpi_s or not mpi_w:
         raise RuntimeError("missing required experiments in summary CSV")
@@ -379,6 +459,7 @@ def main() -> int:
     plot_strong_runtime(out_dir, omp, mpi_s, seq)
     plot_strong_speedup(out_dir, omp, mpi_s)
     plot_strong_efficiency(out_dir, omp, mpi_s)
+    plot_combined_strong(out_dir, omp, mpi_s)
     plot_weak_runtime(out_dir, mpi_w)
     plot_weak_time_per_ant(out_dir, mpi_w)
     plot_backend_comparison(out_dir, seq, omp, mpi_s, cuda, raw_rows)

@@ -19,13 +19,20 @@ Script: `scripts/run_practical_experiments.py`
 
 1. Baseline sequenziale (`solve_seq`)
 2. Strong scaling OpenMP: `1,2,4,8,16,32` thread
-3. Strong scaling MPI: `1,2,4` rank
-4. Strong scaling Hybrid: `1x32`, `2x16`, `4x8`
+3. Strong scaling MPI: `1,2,4` rank/nodi, sempre con `32` thread per rank
+4. Curva strong combinata: `1x1`, `1x2`, `1x4`, `1x8`, `1x16`,
+   `1x32`, `2x32`, `4x32` (`1,2,4,8,16,32,64,128` core totali)
 5. Weak scaling OpenMP/MPI/Hybrid
-6. CUDA size sweep + confronto `seq vs cuda` + `openmp(best) vs cuda`
+6. CUDA problem-size sweep su una sola GPU, senza scaling di processi/nodi,
+   più confronto `seq vs cuda` + `openmp(best) vs cuda`
 7. Qualità soluzione su backend multipli (10 seed / run)
 
 Output: directory dedicata `results/practical_campaign/<timestamp>/...`
+
+La configurazione segue la [guida Scaling di HPC Wiki](https://hpc-wiki.info/hpc/Scaling):
+problem size fisso nello strong scaling, conteggi in potenze di due, più run
+indipendenti e tempi wall-clock. Lo speedup finale è calcolato come
+`T(1) / T(N)` sulla curva combinata da 1 a 128 core.
 
 ## Esecuzione rapida
 
@@ -66,10 +73,13 @@ Lo script sottomette automaticamente:
 python3 scripts/run_practical_experiments.py \
   --launcher mpirun \
   --strong-n 16000 \
-  --weak-base-n 2000 \
+  --weak-base-n 1000 \
   --openmp-threads 1,2,4,8,16,32 \
   --mpi-ranks 1,2,4 \
-  --hybrid-pairs 1x32,2x16,4x8 \
+  --hybrid-pairs 1x1,1x2,1x4,1x8,1x16,1x32,2x32,4x32 \
+  --weak-hybrid-pairs 1x32,2x32,4x32 \
+  --mpi-strong-omp-threads 32 \
+  --runtime-s 300 \
   --seq-repeats 5 \
   --scaling-repeats 5 \
   --quality-repeats 10 \
@@ -78,6 +88,10 @@ python3 scripts/run_practical_experiments.py \
 
 ## Note pratiche
 
-- Per MPI strong, il default è `OMP_THREADS=1` (profilo pure-MPI).
-- Per weak hybrid, la crescita problema è proporzionale ai rank mantenendo le coppie richieste (`1x32`, `2x16`, `4x8`).
+- Per MPI strong, il default è `OMP_THREADS=32`: gli assi dei grafici riportano
+  quindi `32,64,128` core totali, non soltanto il numero di rank.
+- Per weak hybrid, la crescita problema è proporzionale ai rank mantenendo
+  `32` thread per task (`1x32`, `2x32`, `4x32`).
+- Il massimo rappresentato dai grafici è `128` core totali. CUDA è mostrato
+  soltanto rispetto alla dimensione del problema e non nelle curve di scaling.
 - Se vuoi run veloci di validazione pipeline: aggiungi `--dry-run` o riduci i repeats.

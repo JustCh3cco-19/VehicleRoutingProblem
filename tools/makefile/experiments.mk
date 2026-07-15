@@ -2,6 +2,7 @@ exp_strong_openmp:
 	@threads_list="$(EXP_STRONG_OPENMP_THREADS)"; \
 	if [ "$$threads_list" = "auto" ]; then \
 		max_threads="$${SLURM_CPUS_PER_TASK:-$$(nproc)}"; \
+		if [ "$$max_threads" -gt "$(EXP_MAX_CPUS_PER_TASK)" ]; then max_threads="$(EXP_MAX_CPUS_PER_TASK)"; fi; \
 		t=1; \
 		threads_list=""; \
 		while [ "$$t" -le "$$max_threads" ]; do \
@@ -10,17 +11,18 @@ exp_strong_openmp:
 		done; \
 	fi; \
 	for t in $$threads_list; do \
+		if [ "$$t" -gt "$(EXP_MAX_CPUS_PER_TASK)" ]; then echo "[ERROR] max $(EXP_MAX_CPUS_PER_TASK) CPU/task"; exit 2; fi; \
 		echo "[exp_strong_openmp] omp_threads=$$t"; \
 		$(MAKE) solve_mpi \
 			SOLVE_CSV_DIR="$(RESULTS_ROOT)/solve_manifest/csv/exp_strong_openmp" \
 			SOLVE_SOLUTIONS_DIR="$(RESULTS_ROOT)/solve_manifest/solutions/exp_strong_openmp" \
 			SOLVE_BATCH_ID="strong_openmp_clients_t$$t" \
-			SOLVE_CLIENTS="$(EXP_STRONG_CLIENTS_SERIES)" \
+			SOLVE_CLIENTS="$(EXP_STRONG_OPENMP_N)" \
 			SOLVE_MPI_RANKS=1 \
 			SOLVE_MPI_OMP_THREADS="$$t" \
 			SOLVE_MPI_LAUNCHER="$(EXP_MPI_LAUNCHER)" \
 			SOLVE_MPI_REPEATS=1 \
-			SOLVE_MPI_RUNTIME_S=0 \
+			SOLVE_MPI_RUNTIME_S="$(EXP_RUNTIME_S)" \
 			SOLVE_MPI_STAGNATION_EPOCHS="$(EXP_STAGNATION_EPOCHS)" \
 			SOLVE_MPI_MIN_REL_IMPROVEMENT="$(EXP_MIN_REL_IMPROVEMENT)"; \
 	done
@@ -39,7 +41,7 @@ exp_strong_openmp_n8000_m256:
 			SOLVE_MPI_OMP_THREADS="$$t" \
 			SOLVE_MPI_LAUNCHER="$(EXP_MPI_LAUNCHER)" \
 			SOLVE_MPI_REPEATS=1 \
-			SOLVE_MPI_RUNTIME_S=0 \
+			SOLVE_MPI_RUNTIME_S="$(EXP_RUNTIME_S)" \
 			SOLVE_MPI_STAGNATION_EPOCHS="$(EXP_STAGNATION_EPOCHS)" \
 			SOLVE_MPI_MIN_REL_IMPROVEMENT="$(EXP_MIN_REL_IMPROVEMENT)"; \
 	done
@@ -59,17 +61,18 @@ exp_strong_mpi:
 		done; \
 	fi; \
 	for r in $$ranks_list; do \
+		if [ "$$r" -gt "$(EXP_MAX_CLUSTER_NODES)" ] || [ "$(EXP_STRONG_MPI_OMP_THREADS)" -gt "$(EXP_MAX_CPUS_PER_TASK)" ]; then echo "[ERROR] limite 4 nodi, 32 CPU/task"; exit 2; fi; \
 		echo "[exp_strong_mpi] mpi_ranks=$$r omp_threads=$(EXP_STRONG_MPI_OMP_THREADS)"; \
 		$(MAKE) solve_mpi \
 			SOLVE_CSV_DIR="$(RESULTS_ROOT)/solve_manifest/csv/exp_strong_mpi" \
 			SOLVE_SOLUTIONS_DIR="$(RESULTS_ROOT)/solve_manifest/solutions/exp_strong_mpi" \
 			SOLVE_BATCH_ID="strong_mpi_clients_r$$r" \
-			SOLVE_CLIENTS="$(EXP_STRONG_CLIENTS_SERIES)" \
+			SOLVE_CLIENTS="$(EXP_STRONG_MPI_N)" \
 			SOLVE_MPI_RANKS="$$r" \
 			SOLVE_MPI_OMP_THREADS="$(EXP_STRONG_MPI_OMP_THREADS)" \
 			SOLVE_MPI_LAUNCHER="$(EXP_MPI_LAUNCHER)" \
 			SOLVE_MPI_REPEATS=1 \
-			SOLVE_MPI_RUNTIME_S=0 \
+			SOLVE_MPI_RUNTIME_S="$(EXP_RUNTIME_S)" \
 			SOLVE_MPI_STAGNATION_EPOCHS="$(EXP_STAGNATION_EPOCHS)" \
 			SOLVE_MPI_MIN_REL_IMPROVEMENT="$(EXP_MIN_REL_IMPROVEMENT)"; \
 	done
@@ -78,33 +81,37 @@ exp_strong_hybrid:
 	@pairs="$(EXP_STRONG_HYBRID_PAIRS)"; \
 	if [ "$$pairs" = "auto" ]; then \
 		max_threads="$${SLURM_CPUS_PER_TASK:-$$(nproc)}"; \
+		if [ "$$max_threads" -gt "$(EXP_MAX_CPUS_PER_TASK)" ]; then max_threads="$(EXP_MAX_CPUS_PER_TASK)"; fi; \
 		max_nodes="$(EXP_MAX_CLUSTER_NODES)"; \
 		if [ -n "$${SLURM_JOB_NUM_NODES:-}" ] && [ "$${SLURM_JOB_NUM_NODES}" -lt "$$max_nodes" ]; then \
 			max_nodes="$${SLURM_JOB_NUM_NODES}"; \
 		fi; \
-		p=1; \
+		t=1; \
 		pairs=""; \
-		while [ "$$p" -le "$$max_threads" ] && [ "$$p" -le "$$max_nodes" ]; do \
-			pairs="$$pairs $$p $$p"; \
-			p=$$((p*2)); \
+		while [ "$$t" -le "$$max_threads" ]; do \
+			pairs="$$pairs 1 $$t"; \
+			t=$$((t*2)); \
 		done; \
+		if [ "$$max_threads" -ge 32 ] && [ "$$max_nodes" -ge 2 ]; then pairs="$$pairs 2 32"; fi; \
+		if [ "$$max_threads" -ge 32 ] && [ "$$max_nodes" -ge 4 ]; then pairs="$$pairs 4 32"; fi; \
 	fi; \
 	set -- $$pairs; \
 	while [ "$$#" -gt 0 ]; do \
 		r="$$1"; \
 		t="$$2"; \
 		shift 2; \
+		if [ "$$r" -gt "$(EXP_MAX_CLUSTER_NODES)" ] || [ "$$t" -gt "$(EXP_MAX_CPUS_PER_TASK)" ] || [ $$((r*t)) -gt "$(EXP_MAX_TOTAL_CORES)" ]; then echo "[ERROR] limite 4 nodi, 32 CPU/task, 128 core"; exit 2; fi; \
 		echo "[exp_strong_hybrid] mpi_ranks=$$r omp_threads=$$t n=$(EXP_STRONG_HYBRID_N)"; \
 		$(MAKE) solve_mpi \
 			SOLVE_CSV_DIR="$(RESULTS_ROOT)/solve_manifest/csv/exp_strong_hybrid" \
 			SOLVE_SOLUTIONS_DIR="$(RESULTS_ROOT)/solve_manifest/solutions/exp_strong_hybrid" \
 			SOLVE_BATCH_ID="strong_hybrid_clients_r$$r_t$$t" \
-			SOLVE_CLIENTS="$(EXP_STRONG_CLIENTS_SERIES)" \
+			SOLVE_CLIENTS="$(EXP_STRONG_HYBRID_N)" \
 			SOLVE_MPI_RANKS="$$r" \
 			SOLVE_MPI_OMP_THREADS="$$t" \
 			SOLVE_MPI_LAUNCHER="$(EXP_MPI_LAUNCHER)" \
 			SOLVE_MPI_REPEATS=1 \
-			SOLVE_MPI_RUNTIME_S=0 \
+			SOLVE_MPI_RUNTIME_S="$(EXP_RUNTIME_S)" \
 			SOLVE_MPI_STAGNATION_EPOCHS="$(EXP_STAGNATION_EPOCHS)" \
 			SOLVE_MPI_MIN_REL_IMPROVEMENT="$(EXP_MIN_REL_IMPROVEMENT)"; \
 	done
@@ -113,6 +120,7 @@ exp_weak_openmp:
 	@pairs="$(EXP_WEAK_OPENMP_PAIRS)"; \
 	if [ "$$pairs" = "auto" ]; then \
 		max_threads="$${SLURM_CPUS_PER_TASK:-$$(nproc)}"; \
+		if [ "$$max_threads" -gt "$(EXP_MAX_CPUS_PER_TASK)" ]; then max_threads="$(EXP_MAX_CPUS_PER_TASK)"; fi; \
 		t=1; \
 		pairs=""; \
 		while [ "$$t" -le "$$max_threads" ]; do \
@@ -126,6 +134,7 @@ exp_weak_openmp:
 		t="$$1"; \
 		n="$$2"; \
 		shift 2; \
+		if [ "$$t" -gt "$(EXP_MAX_CPUS_PER_TASK)" ]; then echo "[ERROR] max $(EXP_MAX_CPUS_PER_TASK) CPU/task"; exit 2; fi; \
 		echo "[exp_weak_openmp] omp_threads=$$t n=$$n"; \
 		$(MAKE) solve_mpi \
 			SOLVE_CSV_DIR="$(RESULTS_ROOT)/solve_manifest/csv/exp_weak_openmp" \
@@ -136,7 +145,7 @@ exp_weak_openmp:
 			SOLVE_MPI_OMP_THREADS="$$t" \
 			SOLVE_MPI_LAUNCHER="$(EXP_MPI_LAUNCHER)" \
 			SOLVE_MPI_REPEATS=1 \
-			SOLVE_MPI_RUNTIME_S=0 \
+			SOLVE_MPI_RUNTIME_S="$(EXP_RUNTIME_S)" \
 			SOLVE_MPI_STAGNATION_EPOCHS="$(EXP_STAGNATION_EPOCHS)" \
 			SOLVE_MPI_MIN_REL_IMPROVEMENT="$(EXP_MIN_REL_IMPROVEMENT)"; \
 	done
@@ -161,6 +170,7 @@ exp_weak_mpi:
 		r="$$1"; \
 		n="$$2"; \
 		shift 2; \
+		if [ "$$r" -gt "$(EXP_MAX_CLUSTER_NODES)" ] || [ "$(EXP_WEAK_MPI_OMP_THREADS)" -gt "$(EXP_MAX_CPUS_PER_TASK)" ]; then echo "[ERROR] limite 4 nodi, 32 CPU/task"; exit 2; fi; \
 		echo "[exp_weak_mpi] mpi_ranks=$$r n=$$n omp_threads=$(EXP_WEAK_MPI_OMP_THREADS)"; \
 		$(MAKE) solve_mpi \
 			SOLVE_CSV_DIR="$(RESULTS_ROOT)/solve_manifest/csv/exp_weak_mpi" \
@@ -171,7 +181,7 @@ exp_weak_mpi:
 			SOLVE_MPI_OMP_THREADS="$(EXP_WEAK_MPI_OMP_THREADS)" \
 			SOLVE_MPI_LAUNCHER="$(EXP_MPI_LAUNCHER)" \
 			SOLVE_MPI_REPEATS=1 \
-			SOLVE_MPI_RUNTIME_S=0 \
+			SOLVE_MPI_RUNTIME_S="$(EXP_RUNTIME_S)" \
 			SOLVE_MPI_STAGNATION_EPOCHS="$(EXP_STAGNATION_EPOCHS)" \
 			SOLVE_MPI_MIN_REL_IMPROVEMENT="$(EXP_MIN_REL_IMPROVEMENT)"; \
 	done
@@ -180,6 +190,7 @@ exp_weak_hybrid:
 	@triplets="$(EXP_WEAK_HYBRID_TRIPLETS)"; \
 	if [ "$$triplets" = "auto" ]; then \
 		max_threads="$${SLURM_CPUS_PER_TASK:-$$(nproc)}"; \
+		if [ "$$max_threads" -gt "$(EXP_MAX_CPUS_PER_TASK)" ]; then max_threads="$(EXP_MAX_CPUS_PER_TASK)"; fi; \
 		max_nodes="$(EXP_MAX_CLUSTER_NODES)"; \
 		if [ -n "$${SLURM_JOB_NUM_NODES:-}" ] && [ "$${SLURM_JOB_NUM_NODES}" -lt "$$max_nodes" ]; then \
 			max_nodes="$${SLURM_JOB_NUM_NODES}"; \
@@ -198,6 +209,7 @@ exp_weak_hybrid:
 		t="$$2"; \
 		n="$$3"; \
 		shift 3; \
+		if [ "$$r" -gt "$(EXP_MAX_CLUSTER_NODES)" ] || [ "$$t" -gt "$(EXP_MAX_CPUS_PER_TASK)" ] || [ $$((r*t)) -gt "$(EXP_MAX_TOTAL_CORES)" ]; then echo "[ERROR] limite 4 nodi, 32 CPU/task, 128 core"; exit 2; fi; \
 		echo "[exp_weak_hybrid] mpi_ranks=$$r omp_threads=$$t n=$$n"; \
 		$(MAKE) solve_mpi \
 			SOLVE_CSV_DIR="$(RESULTS_ROOT)/solve_manifest/csv/exp_weak_hybrid" \
@@ -208,7 +220,7 @@ exp_weak_hybrid:
 			SOLVE_MPI_OMP_THREADS="$$t" \
 			SOLVE_MPI_LAUNCHER="$(EXP_MPI_LAUNCHER)" \
 			SOLVE_MPI_REPEATS=1 \
-			SOLVE_MPI_RUNTIME_S=0 \
+			SOLVE_MPI_RUNTIME_S="$(EXP_RUNTIME_S)" \
 			SOLVE_MPI_STAGNATION_EPOCHS="$(EXP_STAGNATION_EPOCHS)" \
 			SOLVE_MPI_MIN_REL_IMPROVEMENT="$(EXP_MIN_REL_IMPROVEMENT)"; \
 	done
@@ -225,7 +237,7 @@ exp_all: exp_strong_openmp exp_weak_openmp exp_strong_mpi exp_strong_hybrid exp_
 
 # CUDA experiments
 exp_cuda_scaling_input:
-	@echo "[exp_cuda_scaling_input] input scaling with fixed m=$(EXP_CUDA_SCALING_M_FIXED)"
+	@echo "[exp_cuda_scaling_input] problem-size sweep on one fixed GPU, m=$(EXP_CUDA_SCALING_M_FIXED)"
 	$(MAKE) solve_cuda \
 		SOLVE_CSV_DIR="$(RESULTS_ROOT)/solve_manifest/csv/exp_cuda_scaling_input" \
 		SOLVE_SOLUTIONS_DIR="$(RESULTS_ROOT)/solve_manifest/solutions/exp_cuda_scaling_input" \
@@ -264,12 +276,10 @@ exp_seq_for_cuda:
 		SOLVE_SEQ_STAGNATION_EPOCHS="$(EXP_CUDA_STAGNATION_EPOCHS)" \
 		SOLVE_SEQ_MIN_REL_IMPROVEMENT="$(EXP_CUDA_MIN_REL_IMPROVEMENT)" \
 		SOLVE_BATCH_ID="seq_baseline_for_cuda"
-exp_cuda_all: exp_cuda_scaling_input exp_cuda_scaling_ants exp_seq_for_cuda
-	@echo "CUDA scaling + test sequenziale completed."
+exp_cuda_all: exp_cuda_scaling_input
+	@echo "CUDA problem-size sweep completed (one fixed GPU; no process/node scaling)."
 	@echo "CSV dirs:"
 	@echo "  $(RESULTS_ROOT)/solve_manifest/csv/exp_cuda_scaling_input"
-	@echo "  $(RESULTS_ROOT)/solve_manifest/csv/exp_cuda_scaling_ants"
-	@echo "  $(RESULTS_ROOT)/solve_manifest/csv/exp_cuda_vs_seq"
 
 # Practical campaign entry-points (batch-friendly)
 exp_practical_cpu:

@@ -101,6 +101,42 @@ static double wall_time(void) {
 #endif
 }
 
+static void print_mpi_progress(int epoch, double elapsed_s,
+                               double max_runtime_s, int epochs_remaining,
+                               int has_epoch_limit, double best_cost) {
+    char time_remaining[32];
+    char epochs_remaining_text[32];
+    char best_cost_text[64];
+
+    if (max_runtime_s > 0.0) {
+        snprintf(time_remaining, sizeof(time_remaining), "%.1fs",
+                 fmax(0.0, max_runtime_s - elapsed_s));
+    } else {
+        snprintf(time_remaining, sizeof(time_remaining), "senza limite");
+    }
+    if (has_epoch_limit) {
+        snprintf(epochs_remaining_text, sizeof(epochs_remaining_text), "%d",
+                 epochs_remaining > 0 ? epochs_remaining : 0);
+        if (epochs_remaining <= 0) {
+            snprintf(time_remaining, sizeof(time_remaining), "0.0s");
+        }
+    } else {
+        snprintf(epochs_remaining_text, sizeof(epochs_remaining_text),
+                 "senza limite");
+    }
+    if (best_cost < DBL_MAX) {
+        snprintf(best_cost_text, sizeof(best_cost_text), "%.3f", best_cost);
+    } else {
+        snprintf(best_cost_text, sizeof(best_cost_text), "non disponibile");
+    }
+
+    printf("[progress][mpi] epoca=%d | epoche_rimanenti_prima_stop=%s | "
+           "tempo_trascorso=%.1fs | tempo_rimanente=%s | best_cost=%s\n",
+           epoch, epochs_remaining_text, elapsed_s, time_remaining,
+           best_cost_text);
+    fflush(stdout);
+}
+
 /**
  * @brief Executes `get_l3_cache_size`.
  * @return Function result.
@@ -495,12 +531,12 @@ void aco_vrp_run(int n, int K, int cap, int m, double **c, double alpha, double 
 #ifdef USE_MPI
     AsyncSparseContext async_ctx; async_sparse_init(&async_ctx, mpi_size);
 #endif
-    int iter_since_best = 0; SparseDelta *rank_deltas = malloc((size_t)(n + K + 500) * 2 * sizeof(SparseDelta)); int rank_delta_count = 0;
+    int iter_since_best = 0; int runtime_stop = 0; SparseDelta *rank_deltas = malloc((size_t)(n + K + 500) * 2 * sizeof(SparseDelta)); int rank_delta_count = 0;
     #pragma omp parallel default(shared) proc_bind(close)
     {
         HierarchicalWorkspace ws; aco_mpi_ws_init(&ws, K, n, shared.visited_words, shared.meta_words);
         if (mpi_rank == 0 && omp_get_thread_num() == 0) printf("ACO Parallel Starting with %d threads. N=%d K=%d Cap=%d\n", omp_get_num_threads(), n, K, cap);
-        for (int iter = 0; (fixed_epochs > 0 && iter < fixed_epochs) || (fixed_epochs <= 0 && iter_since_best < max_stagnation_epochs); iter++) {
+        for (int iter = 0; !runtime_stop && ((fixed_epochs > 0 && iter < fixed_epochs) || (fixed_epochs <= 0 && iter_since_best < max_stagnation_epochs)); iter++) {
 #ifdef USE_MPI
             #pragma omp master
             async_sparse_wait_and_apply(&async_ctx, tau_mat, mpi_rank, mpi_size);
@@ -533,7 +569,30 @@ void aco_vrp_run(int n, int K, int cap, int m, double **c, double alpha, double 
                 if (is_sig_imp(*best_cost, g_min, min_rel_improvement)) iter_since_best = 0; else iter_since_best++;
                 if (g_min < *best_cost) { *best_cost = g_min; solution_copy(best_sol, iter_best_sol_rank);
                 }
-                if (mpi_rank == 0 && iter % 10 == 0) printf("Epoch %d: Best Cost = %.3f (Since Last Imp: %d)\n", iter, *best_cost, iter_since_best);
+                {
+                    double elapsed_s = wall_time() - start_time;
+                    int stop_now = (max_runtime_sec > 0.0 &&
+                                    elapsed_s >= max_runtime_sec) ? 1 : 0;
+#ifdef USE_MPI
+                    if (mpi_size > 1) {
+                        MPI_Allreduce(MPI_IN_PLACE, &stop_now, 1, MPI_INT,
+                                      MPI_MAX, MPI_COMM_WORLD);
+                    }
+#endif
+                    runtime_stop = stop_now;
+                    int has_epoch_limit = fixed_epochs > 0 || max_stagnation_epochs > 0;
+                    int epochs_remaining = (fixed_epochs > 0)
+                        ? fixed_epochs - (iter + 1)
+                        : max_stagnation_epochs - iter_since_best;
+                    if (mpi_rank == 0 &&
+                        (iter == 0 || (iter + 1) % 10 == 0 ||
+                         iter_since_best == 0 || epochs_remaining <= 0 ||
+                         runtime_stop)) {
+                        print_mpi_progress(iter + 1, elapsed_s, max_runtime_sec,
+                                           epochs_remaining, has_epoch_limit,
+                                           *best_cost);
+                    }
+                }
                 iter_best_cost_g = DBL_MAX; rank_delta_count = 0;
             }
             #pragma omp barrier

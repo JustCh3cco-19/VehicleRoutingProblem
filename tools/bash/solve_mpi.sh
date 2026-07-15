@@ -14,6 +14,18 @@ mpi_ranks="${SOLVE_MPI_RANKS:-2}"
 omp_threads="${SOLVE_MPI_OMP_THREADS:-2}"
 launcher_pref="${SOLVE_MPI_LAUNCHER:-auto}"
 
+if [[ ! "$runtime_s" =~ ^[1-9][0-9]*$ ]] || [ "$runtime_s" -gt 300 ]; then
+  echo "[ERROR] SOLVE_MPI_RUNTIME_S deve essere compreso tra 1 e 300 secondi" >&2
+  exit 2
+fi
+if [[ ! "$mpi_ranks" =~ ^[1-9][0-9]*$ ]] || [ "$mpi_ranks" -gt 4 ]; then
+  echo "[ERROR] SOLVE_MPI_RANKS deve essere compreso tra 1 e 4" >&2
+  exit 2
+fi
+if [[ ! "$omp_threads" =~ ^[1-9][0-9]*$ ]] || [ "$omp_threads" -gt 32 ]; then
+  echo "[ERROR] SOLVE_MPI_OMP_THREADS deve essere compreso tra 1 e 32" >&2
+  exit 2
+fi
 if [ "$repeats" -lt 1 ]; then
   repeats=1
 fi
@@ -86,19 +98,24 @@ tail -n +2 "$manifest" \
         else
           eta_mem_gb="n/a"
         fi
-        echo "[mpi] ${name} run=${run_id} (${done_runs}/${total_runs})"
-        echo "[mpi] run_stimata: eta_run_s=${eta_run_s} eta_mem_gb=${eta_mem_gb}"
+        echo "[mpi][avvio] istanza=${name} | run=${run_id} | avanzamento_campagna=${done_runs}/${total_runs} | rank=${mpi_ranks} | thread_per_rank=${omp_threads}"
+        echo "[mpi][limiti] tempo_massimo=${runtime_s}s | epoche_stagnazione=${stag_iters} | durata_stimata=${eta_run_s}s | memoria_stimata=${eta_mem_gb}GiB"
 
         sol_file="${sol_dir}/${name}_mpi_run${run_id}_solution.txt"
         stats_file="$(mktemp)"
+        output_file="$(mktemp)"
 
-        out=$(/usr/bin/time -f "%e,%M" -o "$stats_file" env \
+        /usr/bin/time -f "%e,%M" -o "$stats_file" env \
           ACO_SOLVER_TIMEOUT_SECONDS="$runtime_s" \
           ACO_SOLVER_STAGNATION_EPOCHS="$stag_iters" \
           ACO_SOLVER_MIN_REL_IMPROVEMENT="$improve_rel" \
           OMP_NUM_THREADS="$omp_threads" \
-          "${launcher_cmd[@]}" ./aco_vrp_openmp_mpi.out "$instance_path" "$K" "$m" "$seed_run" </dev/null 2>&1)
-        rc=$?
+          "${launcher_cmd[@]}" ./aco_vrp_openmp_mpi.out "$instance_path" "$K" "$m" "$seed_run" </dev/null 2>&1 \
+          | tee "$output_file" \
+          | awk '/^\[progress\]/ { print; fflush(); }'
+        rc=${PIPESTATUS[0]}
+        out="$(cat "$output_file")"
+        rm -f "$output_file"
 
         stats_line="$(grep -Eo '[0-9]+([.][0-9]+)?,[0-9]+' "$stats_file" | tail -n1)"
         elapsed="$(printf '%s' "$stats_line" | cut -d, -f1)"
@@ -130,7 +147,11 @@ tail -n +2 "$manifest" \
           err="$(printf '%s' "$out" | tr '\n' ' ' | tr ',' ';')"
           echo "$name,$profile,$instance_path,$n,$K,$m,$seed_run,$instance_seed,$layout_id,$run_id,error,$elapsed,$rss_gb,,$err,$mpi_ranks,$omp_threads,$batch_id" >> "$csv"
         fi
-        echo "[mpi] run_effettiva: elapsed_s=${elapsed:-n/a} mem_gb=${rss_gb:-n/a} status=$([ "$rc" -eq 0 ] && echo ok || echo error)"
+        if [ "$rc" -eq 0 ]; then
+          echo "[mpi][completato] tempo_trascorso=${elapsed:-n/a}s | tempo_rimanente=0s | best_cost=${cost:-n/a} | stato=ok | memoria=${rss_gb:-n/a}GiB"
+        else
+          echo "[mpi][completato] tempo_trascorso=${elapsed:-n/a}s | tempo_rimanente=n/a | best_cost=n/a | stato=errore | memoria=${rss_gb:-n/a}GiB"
+        fi
         echo
       done
     done

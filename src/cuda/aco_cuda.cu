@@ -35,6 +35,43 @@ static double wall_time_seconds(void) {
   return (double)ts.tv_sec + (double)ts.tv_nsec * 1e-9;
 }
 
+static void print_cuda_progress(int epoch, double elapsed_s,
+                                double max_runtime_s,
+                                int epochs_since_improvement,
+                                int max_stagnation_epochs,
+                                double best_cost) {
+  char time_remaining[32];
+  char epochs_remaining[32];
+  char best_cost_text[64];
+
+  if (max_runtime_s > 0.0) {
+    snprintf(time_remaining, sizeof(time_remaining), "%.1fs",
+             fmax(0.0, max_runtime_s - elapsed_s));
+  } else {
+    snprintf(time_remaining, sizeof(time_remaining), "senza limite");
+  }
+  if (max_stagnation_epochs > 0) {
+    int remaining = max_stagnation_epochs - epochs_since_improvement;
+    snprintf(epochs_remaining, sizeof(epochs_remaining), "%d",
+             remaining > 0 ? remaining : 0);
+    if (remaining <= 0) {
+      snprintf(time_remaining, sizeof(time_remaining), "0.0s");
+    }
+  } else {
+    snprintf(epochs_remaining, sizeof(epochs_remaining), "senza limite");
+  }
+  if (best_cost < DBL_MAX) {
+    snprintf(best_cost_text, sizeof(best_cost_text), "%.3f", best_cost);
+  } else {
+    snprintf(best_cost_text, sizeof(best_cost_text), "non disponibile");
+  }
+
+  printf("[progress][cuda] epoca=%d | epoche_rimanenti_prima_stop=%s | "
+         "tempo_trascorso=%.1fs | tempo_rimanente=%s | best_cost=%s\n",
+         epoch, epochs_remaining, elapsed_s, time_remaining, best_cost_text);
+  fflush(stdout);
+}
+
 /**
  * @brief Executes `load_timer_directives`.
  * @param max_runtime_sec Function parameter.
@@ -293,6 +330,7 @@ int aco_vrp_cuda_with_capacity(int n, int K, int vehicle_capacity_customers,
   printf("CUDA Solver starting... (N=%d, K=%d, M=%d)\n", n, K, m);
 
   while (1) {
+    int improved_this_epoch = 0;
     double current_time = wall_time_seconds();
     if (max_runtime_sec > 0.0 && (current_time - start_time) > max_runtime_sec) {
       break;
@@ -318,6 +356,7 @@ int aco_vrp_cuda_with_capacity(int n, int K, int vehicle_capacity_customers,
     if (found) {
       double new_best = (double)best_iter_cost;
       if (new_best < global_best) {
+        improved_this_epoch = 1;
         if (is_significant_improvement(global_best, new_best, min_rel_improvement)) {
           iter_since_best = 0;
         } else {
@@ -361,6 +400,15 @@ int aco_vrp_cuda_with_capacity(int n, int K, int vehicle_capacity_customers,
     }
 
     iter++;
+    double elapsed_s = wall_time_seconds() - start_time;
+    int reached_time_limit = max_runtime_sec > 0.0 && elapsed_s >= max_runtime_sec;
+    int reached_epoch_limit = max_stagnation_epochs > 0 &&
+                              iter_since_best >= max_stagnation_epochs;
+    if (iter == 1 || iter % 10 == 0 || improved_this_epoch ||
+        reached_time_limit || reached_epoch_limit) {
+      print_cuda_progress(iter, elapsed_s, max_runtime_sec, iter_since_best,
+                          max_stagnation_epochs, global_best);
+    }
   }
 
 
