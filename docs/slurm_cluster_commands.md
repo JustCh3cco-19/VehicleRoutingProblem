@@ -24,16 +24,17 @@ sinfo -o "%P %G %c %m"
 srun --mpi=list
 ```
 
-Impostare l'architettura CUDA corrispondente alla GPU del cluster. `sm_75` è
-solo un esempio e deve essere sostituito quando la GPU ha una compute
-capability differente:
+I comandi usano esplicitamente `CUDA_ARCH=sm_75`. È solo un esempio e deve
+essere sostituito quando la GPU ha una compute capability differente. Per
+controllare il modello della GPU tramite Slurm:
 
 ```bash
-CUDA_ARCH=sm_75
+srun --nodes=1 --ntasks=1 --gres=gpu:1 nvidia-smi --query-gpu=name,compute_cap --format=csv,noheader
 ```
 
-Se il cluster non possiede una partizione chiamata `gpu`, sostituire o
-rimuovere `--partition gpu` nei comandi successivi.
+I comandi non impongono una partizione chiamata `gpu`, perché non esiste su
+tutti i cluster. Se `sinfo -o "%P %G %c %m"` mostra le GPU in una partizione
+specifica, aggiungere `--partition NOME_REALE` a ogni comando CUDA.
 
 I risultati usano percorsi fissi sotto `results/manual_campaign/` e non
 richiedono variabili come `TAG`. Prima di iniziare una nuova campagna completa,
@@ -162,105 +163,97 @@ Se il cluster non supporta PMIx tramite `srun`, sostituire
 ```bash
 tools/batch/submit_solve.sh \
   --target solve_cuda \
-  --partition gpu \
   --time 00:30:00 \
   --nodes 1 \
   --ntasks 1 \
   --cpus 1 \
   --mem 32G \
   --gres gpu:1 \
-  --make-args "SOLVE_CLIENTS=500 SOLVE_CUDA_REPEATS=3 SOLVE_CUDA_RUNTIME_S=300 SOLVE_CUDA_STAGNATION_EPOCHS=500 SOLVE_CUDA_MIN_REL_IMPROVEMENT=0.001 CUDA_ARCH=$CUDA_ARCH SOLVE_CSV_DIR=results/manual_campaign/backend_sizes/cuda/n500/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/backend_sizes/cuda/n500/solutions"
+  --make-args "SOLVE_CLIENTS=500 SOLVE_CUDA_REPEATS=3 SOLVE_CUDA_RUNTIME_S=300 SOLVE_CUDA_STAGNATION_EPOCHS=500 SOLVE_CUDA_MIN_REL_IMPROVEMENT=0.001 CUDA_ARCH=sm_75 SOLVE_CSV_DIR=results/manual_campaign/backend_sizes/cuda/n500/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/backend_sizes/cuda/n500/solutions"
 ```
 
 ```bash
 tools/batch/submit_solve.sh \
   --target solve_cuda \
-  --partition gpu \
   --time 00:30:00 \
   --nodes 1 \
   --ntasks 1 \
   --cpus 1 \
   --mem 32G \
   --gres gpu:1 \
-  --make-args "SOLVE_CLIENTS=1000 SOLVE_CUDA_REPEATS=3 SOLVE_CUDA_RUNTIME_S=300 SOLVE_CUDA_STAGNATION_EPOCHS=500 SOLVE_CUDA_MIN_REL_IMPROVEMENT=0.001 CUDA_ARCH=$CUDA_ARCH SOLVE_CSV_DIR=results/manual_campaign/backend_sizes/cuda/n1000/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/backend_sizes/cuda/n1000/solutions"
+  --make-args "SOLVE_CLIENTS=1000 SOLVE_CUDA_REPEATS=3 SOLVE_CUDA_RUNTIME_S=300 SOLVE_CUDA_STAGNATION_EPOCHS=500 SOLVE_CUDA_MIN_REL_IMPROVEMENT=0.001 CUDA_ARCH=sm_75 SOLVE_CSV_DIR=results/manual_campaign/backend_sizes/cuda/n1000/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/backend_sizes/cuda/n1000/solutions"
 ```
 
 ```bash
 tools/batch/submit_solve.sh \
   --target solve_cuda \
-  --partition gpu \
   --time 00:30:00 \
   --nodes 1 \
   --ntasks 1 \
   --cpus 1 \
   --mem 32G \
   --gres gpu:1 \
-  --make-args "SOLVE_CLIENTS=2000 SOLVE_CUDA_REPEATS=3 SOLVE_CUDA_RUNTIME_S=300 SOLVE_CUDA_STAGNATION_EPOCHS=500 SOLVE_CUDA_MIN_REL_IMPROVEMENT=0.001 CUDA_ARCH=$CUDA_ARCH SOLVE_CSV_DIR=results/manual_campaign/backend_sizes/cuda/n2000/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/backend_sizes/cuda/n2000/solutions"
+  --make-args "SOLVE_CLIENTS=2000 SOLVE_CUDA_REPEATS=3 SOLVE_CUDA_RUNTIME_S=300 SOLVE_CUDA_STAGNATION_EPOCHS=500 SOLVE_CUDA_MIN_REL_IMPROVEMENT=0.001 CUDA_ARCH=sm_75 SOLVE_CSV_DIR=results/manual_campaign/backend_sizes/cuda/n2000/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/backend_sizes/cuda/n2000/solutions"
 ```
 
 ```bash
 tools/batch/submit_solve.sh \
   --target solve_cuda \
-  --partition gpu \
   --time 00:30:00 \
   --nodes 1 \
   --ntasks 1 \
   --cpus 1 \
   --mem 32G \
   --gres gpu:1 \
-  --make-args "SOLVE_CLIENTS=4000 SOLVE_CUDA_REPEATS=3 SOLVE_CUDA_RUNTIME_S=300 SOLVE_CUDA_STAGNATION_EPOCHS=500 SOLVE_CUDA_MIN_REL_IMPROVEMENT=0.001 CUDA_ARCH=$CUDA_ARCH SOLVE_CSV_DIR=results/manual_campaign/backend_sizes/cuda/n4000/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/backend_sizes/cuda/n4000/solutions"
+  --make-args "SOLVE_CLIENTS=4000 SOLVE_CUDA_REPEATS=3 SOLVE_CUDA_RUNTIME_S=300 SOLVE_CUDA_STAGNATION_EPOCHS=500 SOLVE_CUDA_MIN_REL_IMPROVEMENT=0.001 CUDA_ARCH=sm_75 SOLVE_CSV_DIR=results/manual_campaign/backend_sizes/cuda/n4000/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/backend_sizes/cuda/n4000/solutions"
 ```
 
 ```bash
 tools/batch/submit_solve.sh \
   --target solve_cuda \
-  --partition gpu \
   --time 00:30:00 \
   --nodes 1 \
   --ntasks 1 \
   --cpus 1 \
   --mem 32G \
   --gres gpu:1 \
-  --make-args "SOLVE_CLIENTS=8000 SOLVE_CUDA_REPEATS=3 SOLVE_CUDA_RUNTIME_S=300 SOLVE_CUDA_STAGNATION_EPOCHS=500 SOLVE_CUDA_MIN_REL_IMPROVEMENT=0.001 CUDA_ARCH=$CUDA_ARCH SOLVE_CSV_DIR=results/manual_campaign/backend_sizes/cuda/n8000/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/backend_sizes/cuda/n8000/solutions"
+  --make-args "SOLVE_CLIENTS=8000 SOLVE_CUDA_REPEATS=3 SOLVE_CUDA_RUNTIME_S=300 SOLVE_CUDA_STAGNATION_EPOCHS=500 SOLVE_CUDA_MIN_REL_IMPROVEMENT=0.001 CUDA_ARCH=sm_75 SOLVE_CSV_DIR=results/manual_campaign/backend_sizes/cuda/n8000/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/backend_sizes/cuda/n8000/solutions"
 ```
 
 ```bash
 tools/batch/submit_solve.sh \
   --target solve_cuda \
-  --partition gpu \
   --time 00:30:00 \
   --nodes 1 \
   --ntasks 1 \
   --cpus 1 \
   --mem 32G \
   --gres gpu:1 \
-  --make-args "SOLVE_CLIENTS=16000 SOLVE_CUDA_REPEATS=3 SOLVE_CUDA_RUNTIME_S=300 SOLVE_CUDA_STAGNATION_EPOCHS=500 SOLVE_CUDA_MIN_REL_IMPROVEMENT=0.001 CUDA_ARCH=$CUDA_ARCH SOLVE_CSV_DIR=results/manual_campaign/backend_sizes/cuda/n16000/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/backend_sizes/cuda/n16000/solutions"
+  --make-args "SOLVE_CLIENTS=16000 SOLVE_CUDA_REPEATS=3 SOLVE_CUDA_RUNTIME_S=300 SOLVE_CUDA_STAGNATION_EPOCHS=500 SOLVE_CUDA_MIN_REL_IMPROVEMENT=0.001 CUDA_ARCH=sm_75 SOLVE_CSV_DIR=results/manual_campaign/backend_sizes/cuda/n16000/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/backend_sizes/cuda/n16000/solutions"
 ```
 
 ```bash
 tools/batch/submit_solve.sh \
   --target solve_cuda \
-  --partition gpu \
   --time 00:30:00 \
   --nodes 1 \
   --ntasks 1 \
   --cpus 1 \
   --mem 32G \
   --gres gpu:1 \
-  --make-args "SOLVE_CLIENTS=32000 SOLVE_CUDA_REPEATS=3 SOLVE_CUDA_RUNTIME_S=300 SOLVE_CUDA_STAGNATION_EPOCHS=500 SOLVE_CUDA_MIN_REL_IMPROVEMENT=0.001 CUDA_ARCH=$CUDA_ARCH SOLVE_CSV_DIR=results/manual_campaign/backend_sizes/cuda/n32000/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/backend_sizes/cuda/n32000/solutions"
+  --make-args "SOLVE_CLIENTS=32000 SOLVE_CUDA_REPEATS=3 SOLVE_CUDA_RUNTIME_S=300 SOLVE_CUDA_STAGNATION_EPOCHS=500 SOLVE_CUDA_MIN_REL_IMPROVEMENT=0.001 CUDA_ARCH=sm_75 SOLVE_CSV_DIR=results/manual_campaign/backend_sizes/cuda/n32000/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/backend_sizes/cuda/n32000/solutions"
 ```
 
 ```bash
 tools/batch/submit_solve.sh \
   --target solve_cuda \
-  --partition gpu \
   --time 00:30:00 \
   --nodes 1 \
   --ntasks 1 \
   --cpus 1 \
   --mem 32G \
   --gres gpu:1 \
-  --make-args "SOLVE_CLIENTS=64000 SOLVE_CUDA_REPEATS=3 SOLVE_CUDA_RUNTIME_S=300 SOLVE_CUDA_STAGNATION_EPOCHS=500 SOLVE_CUDA_MIN_REL_IMPROVEMENT=0.001 CUDA_ARCH=$CUDA_ARCH SOLVE_CSV_DIR=results/manual_campaign/backend_sizes/cuda/n64000/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/backend_sizes/cuda/n64000/solutions"
+  --make-args "SOLVE_CLIENTS=64000 SOLVE_CUDA_REPEATS=3 SOLVE_CUDA_RUNTIME_S=300 SOLVE_CUDA_STAGNATION_EPOCHS=500 SOLVE_CUDA_MIN_REL_IMPROVEMENT=0.001 CUDA_ARCH=sm_75 SOLVE_CSV_DIR=results/manual_campaign/backend_sizes/cuda/n64000/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/backend_sizes/cuda/n64000/solutions"
 ```
 
 La GPU e le altre risorse CUDA rimangono fisse per tutte le istanze: questo è
@@ -458,14 +451,13 @@ volte:
 ```bash
 tools/batch/submit_solve.sh \
   --target solve_cuda \
-  --partition gpu \
   --time 00:30:00 \
   --nodes 1 \
   --ntasks 1 \
   --cpus 1 \
   --mem 32G \
   --gres gpu:1 \
-  --make-args "SOLVE_CLIENTS=16000 SOLVE_CUDA_REPEATS=5 SOLVE_CUDA_RUNTIME_S=300 SOLVE_CUDA_STAGNATION_EPOCHS=500 SOLVE_CUDA_MIN_REL_IMPROVEMENT=0.001 CUDA_ARCH=$CUDA_ARCH"
+  --make-args "SOLVE_CLIENTS=16000 SOLVE_CUDA_REPEATS=5 SOLVE_CUDA_RUNTIME_S=300 SOLVE_CUDA_STAGNATION_EPOCHS=500 SOLVE_CUDA_MIN_REL_IMPROVEMENT=0.001 CUDA_ARCH=sm_75"
 ```
 
 ## Caricamento esplicito dei moduli
