@@ -1,110 +1,73 @@
-\section{Performance Comparison}
+\section{Experimental Evaluation}
+\label{sec:performance}
 
-This section analyzes the measured scaling behavior of the implementations developed for the project relative to the sequential ACO baseline. The discussion focuses on how elapsed time changes with problem size and with the amount of parallelism, in order to identify where additional workers reduce runtime and where overhead begins to dominate. All quantitative results discussed below are derived from successful runs only. The available measurements report the problem size $n$, CVRP parameters $K$ and $m$, solver and instance seeds, elapsed time, \texttt{best\_cost}, memory footprint for CPU runs, and the parallel configuration expressed through \texttt{mpi\_ranks} and \texttt{omp\_threads}. They do not provide CPU or GPU model identifiers, compiler versions, or compilation flags, so the setup summary is restricted to directly observable information.
+\subsection{Method and validation}
 
-\subsection{Experimental Setup}
+Each experimental point is the arithmetic mean of three seeds, and error bars are the sample standard deviation.  Median, extrema, coefficient of variation (CV), and per-run validation outcomes are also considered.  The measured time is end-to-end wall time around \texttt{srun}, so it includes launcher, input, initialization, solver, output, and finalization.  Open MPI 4.1.6 and \texttt{-O3} are visible in the logs; CPU and GPU model identifiers are not.
 
-The experimental material is organized into three campaigns that capture complementary aspects of solver behavior: a baseline comparison between the sequential and CUDA versions, strong-scaling tests for the CPU backends, and weak-scaling tests in which the problem size grows with the worker count. The strong-scaling campaigns vary \texttt{omp\_threads} and \texttt{mpi\_ranks} at fixed $n$, while the weak-scaling campaign increases the problem size together with the available parallel resources. Overall, the dataset includes $15$ successful baseline runs, $39$ strong-scaling CPU runs, and $13$ weak-scaling CPU runs over the ranges $n=500$--$32000$, $n=2000$--$32000$, and $n=2000$--$32000$, respectively.
+Every current CSV row has positive finite timing and a matching solution file.  Reconstructed routes visit every customer exactly once and satisfy capacity.  Seven multi-rank outputs have a feasible printed route whose recomputed cost differs from the printed scalar best cost; their timings are retained, but their costs are excluded.  MPI RSS values are also excluded because \texttt{/usr/bin/time} observed the \texttt{srun} launcher rather than remote ranks.
 
-\subsection{OpenMP Backend}
+\subsection{Strong scaling}
 
-The strong-scaling measurements show a clear interior optimum rather than a monotonic improvement with thread count. Up to $n=16000$, the minimum elapsed time is obtained with four threads, reducing runtime from $115.22$~s to $30.43$~s at $n=2000$ and from $165.68$~s to $98.58$~s at $n=16000$. At $n=32000$, the minimum shifts to two threads with $374.08$~s, indicating that the additional parallel work exposed by larger thread counts is no longer sufficient to offset synchronization and management overhead.
+The strong experiment fixes $n=32{,}000$, $K=32$, the total population at $m=16$, and the work at 100 epochs; stagnation is disabled.  OpenMP measurements use one MPI rank and up to 32 threads, while the distributed measurement uses four ranks with 32 threads per rank.  We define $p=\text{ranks}\times\text{threads}$, $S_p=T_1/T_p$, and $E_p=S_p/p$.
 
-{\centering
-\includegraphics[width=\columnwidth]{uploads/no64/strong_openmp_elapsed.png}
-\captionof{figure}{Strong-scaling elapsed time for the OpenMP backend. The most favorable operating region is reached with a moderate thread count.}
-\label{fig:openmp-strong}
-\par}
+\begin{figure*}[t]
+\centering
+\includegraphics[width=0.32\textwidth]{figures/strong_scaling_runtime.pdf}\hfill
+\includegraphics[width=0.32\textwidth]{figures/strong_scaling_speedup.pdf}\hfill
+\includegraphics[width=0.32\textwidth]{figures/strong_scaling_efficiency.pdf}
+\caption{Strong-scaling runtime, speedup, and efficiency as three distinct plots. Points show means of three runs; runtime bars are sample SD and ratio bars use first-order SD propagation. The combined curves use OpenMP within one node and the four-rank MPI result at 128 workers.}
+\label{fig:strong-current}
+\end{figure*}
 
-In the weak-scaling campaign, the elapsed time remains nearly flat between the $n=4000$ and $n=8000$ points, with $46.16$~s and $47.39$~s for two and four threads respectively. Beyond that regime, the runtime rises to $89.09$~s at $n=16000$ and $268.67$~s at $n=32000$, showing that the larger working set and the growing synchronization cost already limit the extent to which additional threads preserve constant runtime at the largest remaining size.
+Mean OpenMP runtime falls from $165.98\pm2.11$~s at one thread to $60.09\pm8.39$~s at 32 threads.  The corresponding speedup is only $2.76$ and efficiency is $8.63\%$; variability also grows to a CV of $13.96\%$.  The fixed population explains an important part of this behavior: the ant-construction loop exposes only 16 independent ants per epoch, so at 32 threads at least half of the workers cannot receive an ant-construction task.  Additional threads can still accelerate dense evaporation and other parallel loops, but they do not increase concurrency in the principal coarse-grained phase.  End-to-end initialization, phase barriers, atomic deposits, and dense-matrix traffic further bound the attainable speedup.  The measurements therefore show insufficient task granularity for this strong-scaling configuration, while profiling would be needed to quantify the contribution of each remaining phase.
 
-{\centering
-\includegraphics[width=\columnwidth]{uploads/no64/weak_openmp_elapsed.png}
-\captionof{figure}{Weak-scaling elapsed time for the OpenMP backend. Runtime remains controlled only in the lower part of the explored size range.}
-\label{fig:openmp-weak}
-\par}
+The independent 32-worker MPI baseline is $59.00\pm3.77$~s, compatible in scale with the OpenMP 32-thread measurement.  Four ranks require $101.60\pm5.60$~s.  Relative to the 32-worker MPI point this is a speedup of $0.58$ and an efficiency of $14.5\%$ after normalizing by the fourfold resource increase.  Relative to the one-thread combined baseline, the 128-worker point has speedup $1.63$ and efficiency $1.28\%$.  Here the 16 ants are divided among four ranks, leaving only four local ants for 32 OpenMP threads on each rank during construction.  At the same time, every rank stores and evaporates its dense pheromone replica and participates in collective coordination.  The added resources thus increase replicated and coordination work without adding ant work, which accounts for the direction of the observed slowdown; a phase profile would still be required to apportion its magnitude.
 
-The speedup curve makes the same pattern explicit. Per-worker efficiency approaches $0.95$ at $n=2000$, but the curve flattens progressively once the thread count moves beyond the moderate operating region, which indicates diminishing returns from additional parallelism.
+\subsection{Weak scaling}
 
-{\centering
-\includegraphics[width=\columnwidth]{uploads/no64/strong_openmp_speedup.png}
-\captionof{figure}{OpenMP speedup curve generated from the merged strong-scaling campaign. The most efficient region lies at moderate thread counts.}
-\label{fig:openmp-speedup}
-\par}
+The weak campaign fixes $n=8{,}000$ and 100 epochs while maintaining 32 ants per total CPU worker.  OpenMP covers 1--32 workers on one rank; MPI extends the curve to 64 and 128 workers with 32 threads per rank.  The population therefore grows from 32 to 4096 and the workload-per-worker relation is constant.  We report $E^{weak}_p=T_1/T_p$ and use the OpenMP point at 32 workers in the combined curve.  The independent one-rank MPI measurement at the same point is retained as a consistency check.
 
-\subsection{MPI Backend}
+\begin{figure*}[t]
+\centering
+\includegraphics[width=0.48\textwidth]{figures/weak_scaling_runtime.pdf}\hfill
+\includegraphics[width=0.48\textwidth]{figures/weak_scaling_efficiency.pdf}
+\caption{Weak-scaling runtime and efficiency as distinct plots. OpenMP supplies 1--32 workers and MPI supplies 64--128. Points are three-run means with sample-SD bars; efficiency is $T_1/T_p$.}
+\label{fig:weak-current}
+\end{figure*}
 
-The MPI strong-scaling data also exhibit a narrow optimal parallelism region. The minimum elapsed time is obtained with two ranks up to $n=8000$, shifts slightly to four ranks at $n=16000$, and returns to one rank at $n=32000$. The change in the minimizing configuration indicates that communication overhead becomes increasingly visible as the number of ranks grows.
+Runtime is $29.46\pm0.10$~s at one worker, remains between $25.47$ and $30.43$~s through 32 OpenMP workers, falls to $22.05\pm1.65$~s at 64, and rises to $33.87\pm1.70$~s at 128.  Weak efficiency is $1.16$ at 32, $1.34$ at 64, and $0.87$ at 128.  The 32-worker MPI control is $25.42\pm0.65$~s versus $25.47\pm0.44$~s for OpenMP, supporting continuity at the backend transition.  Unlike strong scaling, this campaign supplies 32 ants per worker, so the coarse-grained loop remains populated as resources grow.  This directly explains why weak efficiency is much better than strong efficiency.  Ratios above one are consistent with amortization of fixed phase costs, but cache, scheduling, and hardware effects cannot be separated without profiling.
 
-{\centering
-\includegraphics[width=\columnwidth]{uploads/no64/strong_mpi_elapsed.png}
-\captionof{figure}{Strong-scaling elapsed time for the MPI backend. Performance improves at low rank counts and then saturates as communication costs accumulate.}
-\label{fig:mpi-strong}
-\par}
+\subsection{Sequential and CUDA size sweep}
 
-The weak-scaling measurements remain below $60$~s up to the $n=16000$ points represented in the campaign, then climb to $129.61$~s at $n=32000$. This increase shows that the weak-scaling regime remains controlled only over the smaller part of the explored range, after which communication and coordination costs prevent near-constant execution time.
+The size sweep covers sequential runs through $n=32{,}000$ and CUDA through $n=64{,}000$.  It is not a like-for-like speedup experiment: CUDA uses $m=256$, while the sequential population varies from 32 to 4, and both stop on stagnation or at 300 solver seconds.  Sequential runs hit the time limit from $n=2{,}000$ onward; CUDA hits it at $n=64{,}000$.  External times can exceed 300~s because initialization and finalization are outside the solver timer.
 
-{\centering
-\includegraphics[width=\columnwidth]{uploads/no64/weak_mpi_elapsed.png}
-\captionof{figure}{Weak-scaling elapsed time for the MPI backend. The cost of distributed synchronization becomes evident on the largest instances.}
-\label{fig:mpi-weak}
-\par}
+\begin{figure}[H]
+\centering
+\includegraphics[width=\columnwidth]{figures/backend_runtime.pdf}
+\caption{Runtime in the descriptive size sweep. Points are three-run means with sample-SD bars; crosses mark time-limited groups.}
+\label{fig:backend-current}
+\end{figure}
 
-\subsection{Hybrid OpenMP--MPI Backend}
+\begin{figure}[H]
+\centering
+\includegraphics[width=\columnwidth]{figures/backend_cost.pdf}
+\caption{Cost in the descriptive size sweep. Points are three-run means with sample-SD bars. Different populations and stopping epochs preclude interpreting the comparison as a backend speedup.}
+\label{fig:backend-cost}
+\end{figure}
 
-The hybrid strong-scaling measurements show that combining ranks and threads yields substantial reductions in elapsed time at smaller and medium problem sizes, reaching $12.39$~s at $n=2000$, $14.25$~s at $n=4000$, and $31.97$~s at $n=8000$. At larger sizes, however, the reduction becomes less pronounced: the minimum observed elapsed time is $122.24$~s at $n=16000$ and $453.24$~s at $n=32000$. The data therefore point to an optimal intermediate operating region rather than sustained gains from continually increasing parallelism.
-
-{\centering
-\includegraphics[width=\columnwidth]{uploads/no64/strong_hybrid_elapsed.png}
-\captionof{figure}{Strong-scaling elapsed time for the hybrid OpenMP--MPI backend. It is the strongest CPU-only configuration on the shared sizes, especially for small and medium instances.}
-\label{fig:hybrid-strong}
-\par}
-
-The weak-scaling campaign is sparser, but it shows the same limitation. A $2\times2$ setup solves $n=8000$ in $55.38$~s, whereas $4\times4$ workers require $372.47$~s on $n=32000$. The joint increase of inter-rank communication and intra-rank synchronization therefore prevents the larger configurations from maintaining near-constant runtime on the largest tested cases.
-
-{\centering
-\includegraphics[width=\columnwidth]{uploads/no64/weak_hybrid_elapsed.png}
-\captionof{figure}{Weak-scaling elapsed time for the hybrid OpenMP--MPI backend. The early advantage fades once both ranks and threads increase together.}
-\label{fig:hybrid-weak}
-\par}
-
-\subsection{CUDA Backend}
-
-Relative to the sequential baseline, the CUDA measurements preserve a speedup larger than one at every overlapping size. The sequential-over-CUDA speedup ranges from $111.21\times$ at $n=2000$ to $2.87\times$ at $n=32000$, showing that the runtime gap narrows as the workload grows but remains measurable throughout the shared range.
-
-Across the CPU-oriented strong-scaling experiments, the common pattern is that runtime reductions are concentrated in a moderate parallelism region rather than increasing monotonically with the number of workers. As the worker count grows, the minimizing configurations shift toward lower thread or rank counts, which is consistent with the increasing impact of synchronization and communication overhead. The weak-scaling results show the same limitation from a complementary perspective: elapsed time remains comparatively stable only over the lower part of the explored range and then increases sharply once both problem size and parallel resources grow together. In the direct cross-backend comparison, the measurements further show that at $n=32000$ all CPU parallel variants are slightly slower than the sequential baseline, whereas CUDA still retains a sequential-over-CUDA speedup above one.
-
-{\centering
-\includegraphics[width=\columnwidth]{uploads/no64/seq_vs_cuda_elapsed.png}
-\captionof{figure}{Direct comparison between the sequential baseline and CUDA elapsed time. CUDA dominates the overlapping problem sizes and remains usable on the largest tested instances.}
-\label{fig:seq-vs-cuda}
-\par}
-
-\balance
+CUDA reaches $n=64{,}000$ within the available outputs, while the dense sequential backend reaches $n=32{,}000$ with about 26.7~GiB RSS.  Runtime variability is substantial for several stagnation-terminated CUDA points (CV $62.9\%$ at $n=4{,}000$ and $41.8\%$ at $n=8{,}000$), so a single best run would be misleading.  Although CUDA reports lower runtime and cost on all shared sizes, the unequal search effort means that these observations cannot establish an implementation speedup or equal-budget quality advantage.
 
 \section{Conclusions}
 
-The results identify a clear hierarchy among the tested implementations. CUDA is the strongest overall solution on every problem size shared with the other backends, and it remains the only approach that preserves a substantial advantage when the instance size becomes large. Among the CPU-only implementations, the hybrid OpenMP--MPI solver delivers the best absolute times on small and medium instances, whereas OpenMP alone offers the most favorable efficiency profile when the number of threads is kept moderate.
+The reliable current evidence supports three limited conclusions.  First, OpenMP reduces the 100-epoch runtime on the $n=32{,}000$ instance, but a population of only 16 ants leaves the 32-thread configuration underutilized and limits speedup to $2.76\times$.  Second, splitting the same fixed population over four MPI ranks increases replicated and collective work while leaving only four ants per rank, producing a multi-node slowdown.  In contrast, the weak campaign keeps enough independent ants per worker and preserves $87\%$ efficiency at 128.  Third, the CUDA representation handles the largest available instance, but the present size sweep is not controlled well enough for a cross-backend speedup claim.
 
-At the same time, the experiments show that raw parallelism is not sufficient to guarantee scalability. For MPI and for the hybrid backend in particular, the benefits of adding workers diminish once communication and synchronization costs become comparable to the useful computation. This effect is especially visible on the largest instances, where the coordination overhead erodes most of the performance gains observed at smaller scales.
-
-Overall, these findings suggest that the choice of backend should depend on the target workload regime: CUDA is the preferred option whenever GPU execution is available, the hybrid solver is the most competitive CPU alternative for small-to-medium instances, and OpenMP is the most balanced shared-memory solution when simplicity and efficiency are both important.
+These results characterize the submitted configuration rather than a general limit of OpenMP or MPI.  Its strong-scaling resource count grows beyond the available ant-level parallelism, whereas the weak campaign grows useful work with the worker count.  Hardware identifiers, rank-level memory measurements, and phase profiling would be necessary for a more detailed attribution.  The inconsistent transfer of the globally best MPI route also remains a correctness limitation for quality comparisons, although its fixed-work timings are retained.
 
 \vspace{-0.75\baselineskip}
 {\small
 \begin{thebibliography}{9}
-
-\bibitem{wiki-vrp}
-Wikipedia,
-\emph{Vehicle routing problem}:
-\url{https://en.wikipedia.org/wiki/Vehicle_routing_problem}
-
-\bibitem{wiki-aco}
-Wikipedia,
-\emph{Ant colony optimization algorithms}:
-\url{https://en.wikipedia.org/wiki/Ant_colony_optimization_algorithms}
-
-
-
+\bibitem{wiki-vrp} Wikipedia, \emph{Vehicle routing problem}: \url{https://en.wikipedia.org/wiki/Vehicle_routing_problem}
+\bibitem{wiki-aco} Wikipedia, \emph{Ant colony optimization algorithms}: \url{https://en.wikipedia.org/wiki/Ant_colony_optimization_algorithms}
 \end{thebibliography}
 }

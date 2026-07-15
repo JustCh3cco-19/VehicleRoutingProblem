@@ -65,7 +65,8 @@ dkms.conf
 
 report/
 
-results/
+results/slurm/
+results/solve_manifest/
 
 __pycache__/
 

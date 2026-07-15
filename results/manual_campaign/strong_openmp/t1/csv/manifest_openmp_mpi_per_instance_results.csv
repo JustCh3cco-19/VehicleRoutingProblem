@@ -1,0 +1,4 @@
+name,profile,instance_path,n,K,m,solver_seed,instance_seed,layout_id,run_id,status,elapsed_s,max_rss_gb,best_cost,error,mpi_ranks,omp_threads,batch_id
+n32000_k32_s19006,generated_mpi,instances/test_aligned/n32000_k32_s19006.vrp,32000,32,16,1234,19006,grid100,1,ok,163.68,0.008301,14536.118,,1,1,strong_openmp_m16_e100_t1
+n32000_k32_s19006,generated_mpi,instances/test_aligned/n32000_k32_s19006.vrp,32000,32,16,1235,19006,grid100,2,ok,167.81,0.007812,14579.493,,1,1,strong_openmp_m16_e100_t1
+n32000_k32_s19006,generated_mpi,instances/test_aligned/n32000_k32_s19006.vrp,32000,32,16,1236,19006,grid100,3,ok,166.46,0.008301,14588.845,,1,1,strong_openmp_m16_e100_t1

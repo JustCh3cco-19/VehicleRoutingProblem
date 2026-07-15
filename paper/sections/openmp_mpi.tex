@@ -1,139 +1,25 @@
-\section{OpenMP--MPI Roadmap}
+\section{OpenMP--MPI Implementation}
 
-The OpenMP--MPI backend evolved through successive design iterations. The initial hybrid baseline established a functional starting point, but its scaling behavior exposed several architectural bottlenecks. A later iteration redesigned the solver according to high-performance computing principles, targeting cache efficiency, reduced synchronization, and communication patterns that remain sustainable on large instances. This section summarizes that evolution and explains why a subsequent attempt at \emph{intra-ant parallelism} on CPUs failed despite its apparent theoretical appeal.
+The CPU-parallel backend follows the natural coarse-grained decomposition of ACO.  OpenMP threads build independent ant solutions inside each rank, while MPI combines information across ranks.  This mapping keeps the sequential decision chain of an individual ant local and exposes parallelism across ants.
 
-\subsection{Initial iteration: baseline limitations}
+\subsection{Shared-memory organization}
 
-The initial hybrid implementation already exploited the natural mapping of ACO to distributed-memory execution: each MPI rank acted as a sub-colony, while OpenMP threads constructed local ant solutions. In practice, however, four bottlenecks limited both strong and weak scaling.
+The current implementation creates one persistent OpenMP region around the epoch loop.  Thread-private route-construction workspaces avoid sharing the visited set and random-number state.  Candidate indices and heuristic scores are stored contiguously, while the distance and pheromone matrices use single-precision aligned storage within the parallel solver.  Per-epoch work consists of four main phases: candidate-score refresh, independent ant construction, selection of the best solution, and pheromone evaporation/deposit.
 
-\begin{itemize}
-    \item \textbf{False sharing.} Telemetry and per-thread statistics were stored in non-aligned arrays of structures. Frequent writes from different threads caused repeated cache-line invalidations in L1/L2, reducing effective core throughput.
-    \item \textbf{Fork--join overhead.} The OpenMP parallel region was entered and destroyed once per epoch. This imposed a fixed latency at every iteration, which became visible especially on medium-size instances with short epochs.
-    \item \textbf{Serialized pheromone deposit.} The deposit phase was executed inside a \texttt{\#pragma omp single} region, introducing a strict serial tail at the end of each epoch and therefore an Amdahl-style limit on speedup.
-    \item \textbf{High MPI latency.} Pheromone synchronization was performed through one \texttt{MPI\_Iallreduce} per row of the matrix, that is, $N+1$ collectives per epoch. The resulting stream of small messages saturated the communication layer long before the network bandwidth itself became the limiting resource.
-\end{itemize}
+The ant loop uses a runtime-selectable OpenMP schedule.  Pheromone evaporation is partitioned statically over the dense matrix; deposits use atomic additions because different routes can touch the same edge.  This removes a serial deposit phase at the price of possible atomic contention.  The fixed-size strong-scaling campaign in Section~\ref{sec:performance} is designed to measure the net effect rather than attributing time to any one phase without profiling.
 
-These issues meant that the baseline solver was parallel in structure but not yet HPC-ready in execution behavior.
+\subsection{Distributed-memory synchronization}
 
-\subsection{Version~2: Architectural pillars}
+Each MPI rank owns a replica of the pheromone matrix and receives a disjoint portion of the total ant population.  Modified edges are represented as sparse \emph{delta} records containing a matrix index and an increment.  The implementation starts a nonblocking \texttt{MPI\_Iallgatherv}; deltas from the previous epoch are applied before the next local update.  This avoids transmitting the complete dense matrix when only route edges have changed.
 
-Version~2 restructured the OpenMP--MPI backend around four complementary ideas.
+The sparse exchange does not remove all distributed overhead.  Every rank still initializes and evaporates a dense matrix, performs collective coordination, and stores its local replica.  Consequently, increasing the number of ranks may expose replicated work even when the communicated payload is sparse.  The observed multi-node trend is discussed conservatively in Section~\ref{sec:performance}; no network or phase-level profile is available in the current result set.
 
-\subsubsection{Persistent threading}
+\subsection{Alternatives that were rejected}
 
-The OpenMP region is created once outside the epoch loop and kept alive for the full run. Threads synchronize through lightweight barriers and shared state transitions instead of repeated fork--join cycles. This removes a fixed source of overhead and improves temporal locality in thread-private workspaces.
+Earlier prototypes in \texttt{experiments/openmp\_v2/} explored row-wise dense collectives and collaborative \emph{intra-ant} execution.  The former issued many collectives per epoch.  The latter assigned several CPU threads to one ant, using barriers, spinning counters, or condition variables to coordinate each construction step.  These approaches increased the coordination granularity and were abandoned in favor of one independent ant per worker.
 
-\subsubsection{Cache awareness and adaptive auto-tuning}
+The repository does not contain compatible raw timing files for those prototypes, so their previously quoted speedups are not reused in the final quantitative evaluation.  The implementation history nevertheless motivates the final design choice: independent ants need synchronization only at phase boundaries, whereas collaborative ants synchronize along the sequential route-construction path.  SIMD within one core remains a possible alternative because it could accelerate candidate scans without introducing inter-core coordination.
 
-The second pillar is an explicitly cache-oriented data layout:
+\subsection{Correctness boundary}
 
-\begin{itemize}
-    \item all thread-private structures are padded and aligned to 64~bytes, matching the cache-line size of the target CPUs;
-    \item hot buffers are organized to avoid inter-thread interference;
-    \item the parameter $K_{cand}$ is auto-tuned at startup from the detected L3 capacity.
-\end{itemize}
-
-The tuning rule was refined to account for both candidate indices and scores, for an effective footprint of 8~bytes per element with a 70\% safety factor. The goal is to keep the hottest exploration structures resident in L3 and therefore reduce fallback traffic toward DRAM.
-
-\subsubsection{Fully parallel pheromone update}
-
-The serialized deposit phase of Version~1 was replaced by a fully parallel update based on hardware atomics:
-
-\begin{lstlisting}[language=C, caption=Parallel pheromone deposit with OpenMP atomics]
-#pragma omp parallel for schedule(guided)
-for (int ant = 0; ant < local_m; ++ant) {
-    for (int e = 0; e < route_len[ant] - 1; ++e) {
-        int u = route[ant][e];
-        int v = route[ant][e + 1];
-        double delta = deposit[ant][e];
-        #pragma omp atomic
-        tau[u][v] += delta;
-    }
-}
-\end{lstlisting}
-
-Although atomic operations introduce contention on hot edges, this design removes the dominating serial region and shifts the deposit phase back into the parallel fraction of the code.
-
-\subsubsection{Sparse delta synchronization over MPI}
-
-The most consequential redesign concerned communication. Instead of synchronizing the full dense pheromone matrix, each rank emits only the modified edges accumulated during the epoch. Communication therefore moves from a dense model to an incremental sparse-delta model based on index--increment pairs.
-
-\begin{lstlisting}[language=C, caption=Sparse pheromone exchange through delta aggregation]
-pack_local_deltas(local_idx, local_val, &local_nnz);
-MPI_Allgatherv(local_idx, local_nnz, MPI_INT,
-               all_idx, recvcounts, displs, MPI_INT,
-               MPI_COMM_WORLD);
-MPI_Allgatherv(local_val, local_nnz, MPI_DOUBLE,
-               all_val, recvcounts, displs, MPI_DOUBLE,
-               MPI_COMM_WORLD);
-apply_remote_deltas(all_idx, all_val, total_nnz);
-\end{lstlisting}
-
-On the large instances considered in this report, this change reduces network traffic by roughly three orders of magnitude: from about 1~GB of dense state to about 2~MB of actual modifications.
-
-\subsection{Empirical validation of Version~2}
-
-The later experimental campaigns confirmed that the sparse design matches the true behavior of the solver.
-
-\subsubsection{Experiment~15: sparsity analysis}
-
-For $N=16{,}000$ and $M=1536$, the measured update density per epoch is only \textbf{0.1085\%}. In absolute terms, this means that on a 1~GB pheromone matrix only about \textbf{2.12~MB} of data are modified in a typical epoch. This result justifies abandoning dense collectives in favor of sparse communication.
-
-\subsubsection{Experiment~16: incremental sparse MPI synchronization}
-
-Replacing row-wise \texttt{MPI\_Iallreduce} with \texttt{MPI\_Allgatherv} over packed deltas produced a measured speedup of \textbf{1.61\texttimes} in a local 2-rank setup. The improvement came from eliminating the transfer of almost entirely zero-valued matrix regions. To avoid shifting the bottleneck elsewhere, pheromone normalization was also parallelized instead of being left to the master thread.
-
-\subsubsection{Experiment~17: sparse asynchronous SSP}
-
-The final Version~2 configuration combines sparse synchronization with \emph{Stale Synchronous Parallelism} (SSP) using \texttt{MPI\_Iallgatherv}. In the local shared-memory testbed the observed speedup was \textbf{1.03\texttimes}, while the expected benefit on a real multi-node cluster is estimated in the \textbf{1.2\texttimes--1.5\texttimes} range. The modest local gain is coherent with the extremely low latency of local MPI paths: once the network is already cheap, overlapping communication with computation removes only a small residual cost. On real clusters, however, the asynchronous design moves the network almost entirely out of the critical path.
-
-\subsection{Current status and next steps}
-
-The current solver can be summarized as an \textbf{adaptive, hierarchical, sparse-SSP} OpenMP--MPI engine. Within the scope of this project, its main properties are:
-
-\begin{enumerate}[leftmargin=*,itemsep=2pt]
-    \item \textbf{Network efficiency:} approximately a 460\texttimes{} reduction in MPI traffic, from dense gigabyte-scale synchronization to sparse megabyte-scale deltas.
-    \item \textbf{Computation--communication overlap:} useful work and collective progress proceed concurrently rather than as two strictly separated phases.
-    \item \textbf{High throughput on large instances:} about 770~ms per epoch at $N=16{,}000$, with near-ideal local scaling in the tested environment.
-\end{enumerate}
-
-The next logical steps are to validate the SSP design on 4--8 physical cluster nodes and to study a hybrid CPU--GPU extension in which the GPU accelerates score-matrix computation while the CPU retains sparse route construction and communication management.
-
-\subsection{Why intra-ant parallelism failed on CPUs}
-
-Even after the improvements above, the construction stage remained the dominant cost on very large instances, accounting for roughly 75\% of the runtime at $N=16{,}000$. A new Version~3 therefore explored \textbf{collaborative ant teams}: instead of mapping one ant to one thread, several threads cooperated on the same ant, with the goal of accelerating the fallback scan over distance rows of about 64~KB.
-
-Three variants were implemented, and all of them failed.
-
-\subsubsection{V3.1: synchronous team}
-
-The first design used explicit OpenMP barriers between the leader thread, responsible for the probabilistic choice, and the worker threads, responsible for the fallback scan. With approximately $1536$ ants and $16{,}000$ construction steps per epoch, the implementation executed on the order of \textbf{24 million global barriers per epoch}. The measured epoch time rose to about \textbf{8.4~s}, compared with about \textbf{1.4~s} for the Version~2 design based on independent threads.
-
-\subsubsection{V3.2: speculative spinning}
-
-To remove barrier overhead, the second design replaced explicit barriers with generation-based spinning on shared atomic counters. In theory this avoided software barriers; in practice it created a \textbf{coherency storm}. Continuous polling on shared cache lines triggered MESI invalidations and cache-line bouncing, slowing the leader thread exactly when it needed bandwidth to read the real problem data. The execution became unstable and exceeded \textbf{5 minutes per epoch}.
-
-\subsubsection{V3.3: on-demand wakeup}
-
-The third design used \texttt{pthread\_cond\_wait} to park worker threads and wake them only when a heavy fallback scan was required. This eliminated busy-waiting but introduced a new bottleneck: kernel wakeup latency. A wakeup cost of about \textbf{5--10~$\mu$s} is already comparable to, or larger than, the useful serial scan itself. Consequently, cores looked underutilized not because they had no work, but because they were repeatedly waiting on the operating system scheduler.
-
-\subsection{Technical interpretation of the failure}
-
-The failure of Version~3 is fundamentally a mismatch between task granularity and coordination cost. The fallback over a 64~KB row is a micro-granular memory task. On a modern CPU, the serial work is so short that any inter-thread protocol becomes proportionally too expensive. The parallel execution time can be expressed as
-
-\[
-T_{par} = \frac{T_{comp}}{P} + T_{coord},
-\]
-
-where $T_{comp}$ is the serial scan time, $P$ is the number of collaborating workers, and $T_{coord}$ is the cost of synchronization. In our tests,
-
-\begin{itemize}
-    \item $T_{comp} \approx 10~\mu s$,
-    \item $T_{coord} \approx 15$--$20~\mu s$.
-\end{itemize}
-
-Since $T_{coord} > T_{comp}$, the collaborative version is slower than the serial one for any practical value of $P$. The issue is not a poor implementation of a promising idea; rather, it is a limit imposed by the physical cost of inter-core coordination on commodity multicore CPUs.
-
-\subsection{Design lesson}
-
-Taken together, these results point to a clear design principle for CPU-based ACO solvers: \textbf{one ant per thread} remains the most robust strategy for sustaining high throughput. If the goal is instead to reduce the latency of the fallback stage, the more promising path is not intra-ant collaboration across cores, but \textbf{SIMD vectorization within a single core}. Instruction sets such as AVX2 and AVX-512 can process 8--16 elements per instruction without introducing barriers, kernel wakeups, or coherency traffic, and therefore offer a more credible route to lower latency while preserving full core utilization.
+The current validation reconstructs every saved route and checks customer coverage and capacity.  All available OpenMP--MPI routes are feasible.  For several multi-rank runs, however, the scalar \texttt{best\_cost} does not match the cost of the route printed by rank zero.  This does not change the fixed-epoch wall time, which is retained for scaling, but it prevents using those cost values as multi-rank quality evidence.  Resolving the ownership and transfer of the globally best route is therefore a necessary correctness improvement beyond the timing study.
