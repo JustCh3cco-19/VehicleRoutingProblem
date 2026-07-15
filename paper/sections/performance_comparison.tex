@@ -13,9 +13,9 @@ The strong experiment fixes $n=32{,}000$, $K=32$, the total population at $m=16$
 
 \begin{figure*}[t]
 \centering
-\includegraphics[width=0.32\textwidth]{figures/strong_scaling_runtime.pdf}\hfill
-\includegraphics[width=0.32\textwidth]{figures/strong_scaling_speedup.pdf}\hfill
-\includegraphics[width=0.32\textwidth]{figures/strong_scaling_efficiency.pdf}
+\includegraphics[width=0.32\textwidth]{figures/scaling/strong_scaling_runtime.pdf}\hfill
+\includegraphics[width=0.32\textwidth]{figures/scaling/strong_scaling_speedup.pdf}\hfill
+\includegraphics[width=0.32\textwidth]{figures/scaling/strong_scaling_efficiency.pdf}
 \caption{Strong-scaling runtime, speedup, and efficiency as three distinct plots. Points show means of three runs; runtime bars are sample SD and ratio bars use first-order SD propagation. The combined curves use OpenMP within one node and the four-rank MPI result at 128 workers.}
 \label{fig:strong-current}
 \end{figure*}
@@ -26,12 +26,12 @@ The independent 32-worker MPI baseline is $59.00\pm3.77$~s, compatible in scale 
 
 \subsection{Weak scaling}
 
-The weak campaign fixes $n=8{,}000$ and 100 epochs while maintaining 32 ants per total CPU worker.  OpenMP covers 1--32 workers on one rank; MPI extends the curve to 64 and 128 workers with 32 threads per rank.  The population therefore grows from 32 to 4096 and the workload-per-worker relation is constant.  We report $E^{weak}_p=T_1/T_p$ and use the OpenMP point at 32 workers in the combined curve.  The independent one-rank MPI measurement at the same point is retained as a consistency check.
+The weak campaign fixes $n=8{,}000$ and 100 epochs while maintaining 32 ants per total CPU worker.  OpenMP covers 1--32 workers on one rank; MPI extends the curve to 64 and 128 workers with 32 threads per rank.  The population therefore grows from 32 to 4096 and the workload-per-worker relation is constant.  I report $E^{weak}_p=T_1/T_p$ and use the OpenMP point at 32 workers in the combined curve.  The independent one-rank MPI measurement at the same point is retained as a consistency check.
 
 \begin{figure*}[t]
 \centering
-\includegraphics[width=0.48\textwidth]{figures/weak_scaling_runtime.pdf}\hfill
-\includegraphics[width=0.48\textwidth]{figures/weak_scaling_efficiency.pdf}
+\includegraphics[width=0.48\textwidth]{figures/scaling/weak_scaling_runtime.pdf}\hfill
+\includegraphics[width=0.48\textwidth]{figures/scaling/weak_scaling_efficiency.pdf}
 \caption{Weak-scaling runtime and efficiency as distinct plots. OpenMP supplies 1--32 workers and MPI supplies 64--128. Points are three-run means with sample-SD bars; efficiency is $T_1/T_p$.}
 \label{fig:weak-current}
 \end{figure*}
@@ -44,14 +44,14 @@ The size sweep covers sequential runs through $n=32{,}000$ and CUDA through $n=6
 
 \begin{figure}[H]
 \centering
-\includegraphics[width=\columnwidth]{figures/backend_runtime.pdf}
+\includegraphics[width=\columnwidth]{figures/comparison/backend_runtime.pdf}
 \caption{Runtime in the descriptive size sweep. Points are three-run means with sample-SD bars; crosses mark time-limited groups.}
 \label{fig:backend-current}
 \end{figure}
 
 \begin{figure}[H]
 \centering
-\includegraphics[width=\columnwidth]{figures/backend_cost.pdf}
+\includegraphics[width=\columnwidth]{figures/comparison/backend_cost.pdf}
 \caption{Cost in the descriptive size sweep. Points are three-run means with sample-SD bars. Different populations and stopping epochs preclude interpreting the comparison as a backend speedup.}
 \label{fig:backend-cost}
 \end{figure}

@@ -851,6 +851,9 @@ def main() -> int:
     root = args.root.resolve()
     data_dir = root / args.data_dir
     figure_dir = root / args.figure_dir
+    summary_dir = data_dir / "summaries"
+    scaling_figure_dir = figure_dir / "scaling"
+    comparison_figure_dir = figure_dir / "comparison"
 
     runs, discovery_notes = discover_runs(root)
     validate_runs(root, runs)
@@ -858,19 +861,38 @@ def main() -> int:
     historic_notes = inspect_historic_logs(root)
 
     common_stats = ["samples", "mean_s", "median_s", "min_s", "max_s", "std_s", "cv_pct", "cost_samples", "mean_cost", "std_cost"]
-    write_validation(data_dir / "run_validation.csv", root, runs)
-    write_csv(data_dir / "backend_size_summary.csv", backend, ["backend", "n", "K", "m", "termination", *common_stats])
-    write_csv(data_dir / "strong_scaling_summary.csv", scaling, ["family", "n", "K", "m", "ranks", "threads", "workers", "baseline_workers", *common_stats, "speedup", "speedup_std", "efficiency", "efficiency_std"])
-    write_csv(data_dir / "strong_combined_summary.csv", combined, ["source_family", "n", "K", "m", "ranks", "threads", "workers", *common_stats, "speedup", "speedup_std", "efficiency", "efficiency_std"])
-    write_csv(data_dir / "weak_scaling_summary.csv", weak, ["family", "n", "K", "m", "ranks", "threads", "workers", "ants_per_worker", "baseline_workers", *common_stats, "weak_efficiency", "weak_efficiency_std"])
+    for legacy_name in (
+        "run_validation.csv",
+        "backend_size_summary.csv",
+        "strong_scaling_summary.csv",
+        "strong_combined_summary.csv",
+        "weak_scaling_summary.csv",
+    ):
+        (data_dir / legacy_name).unlink(missing_ok=True)
+    write_validation(summary_dir / "run_validation.csv", root, runs)
+    write_csv(summary_dir / "backend_size_summary.csv", backend, ["backend", "n", "K", "m", "termination", *common_stats])
+    write_csv(summary_dir / "strong_scaling_summary.csv", scaling, ["family", "n", "K", "m", "ranks", "threads", "workers", "baseline_workers", *common_stats, "speedup", "speedup_std", "efficiency", "efficiency_std"])
+    write_csv(summary_dir / "strong_combined_summary.csv", combined, ["source_family", "n", "K", "m", "ranks", "threads", "workers", *common_stats, "speedup", "speedup_std", "efficiency", "efficiency_std"])
+    write_csv(summary_dir / "weak_scaling_summary.csv", weak, ["family", "n", "K", "m", "ranks", "threads", "workers", "ants_per_worker", "baseline_workers", *common_stats, "weak_efficiency", "weak_efficiency_std"])
     write_report(data_dir / "analysis.md", root, runs, discovery_notes, historic_notes, scaling, weak)
 
     setup_plot_style()
-    for legacy_name in ("strong_scaling.pdf", "weak_scaling.pdf", "backend_size_comparison.pdf"):
+    for legacy_name in (
+        "strong_scaling.pdf",
+        "weak_scaling.pdf",
+        "backend_size_comparison.pdf",
+        "strong_scaling_runtime.pdf",
+        "strong_scaling_speedup.pdf",
+        "strong_scaling_efficiency.pdf",
+        "weak_scaling_runtime.pdf",
+        "weak_scaling_efficiency.pdf",
+        "backend_runtime.pdf",
+        "backend_cost.pdf",
+    ):
         (figure_dir / legacy_name).unlink(missing_ok=True)
-    plot_strong(figure_dir, scaling, combined)
-    plot_weak(figure_dir, weak)
-    plot_backend(figure_dir, backend)
+    plot_strong(scaling_figure_dir, scaling, combined)
+    plot_weak(scaling_figure_dir, weak)
+    plot_backend(comparison_figure_dir, backend)
 
     print(f"Validated {len(runs)} current rows; {sum(r.included_timing for r in runs)} included for timing.")
     print(f"Wrote derived data to {display_path(data_dir, root)}")

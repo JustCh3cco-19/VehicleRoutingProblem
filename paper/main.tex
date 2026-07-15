@@ -54,7 +54,7 @@
 }
 
 \title{\textbf{Parallelization of an ACO Solver for the Constrained Vehicle Routing Problem}}
-\author{Francesco Zompanti (2012601) \and Iacopo Tomini (2060878)}
+\author{Francesco Zompanti (2012601)}
 \date{}
 
 \begin{document}
@@ -62,7 +62,7 @@
 \begin{@twocolumnfalse}
 \maketitle
 \begin{abstract}
-We present sequential, OpenMP--MPI, and CUDA implementations of an Ant Colony Optimization solver for capacitated vehicle routing.  The final campaign uses three repetitions per point and validates every saved route.  On 100 fixed epochs at $n=32{,}000$, OpenMP reaches $2.76\times$ speedup at 32 threads, whereas the measured four-node MPI configuration is slower than its 32-worker baseline.  The complete weak curve retains $87\%$ efficiency at 128 workers relative to one.  CUDA reaches $n=64{,}000$, but unequal search budgets prevent a cross-backend speedup claim.  The limited strong-scaling efficiency and inconsistent printed costs in seven multi-rank outputs are reported explicitly.
+I present sequential, OpenMP--MPI, and CUDA implementations of an Ant Colony Optimization solver for capacitated vehicle routing.  The final campaign uses three repetitions per point and validates every saved route.  On 100 fixed epochs at $n=32{,}000$, OpenMP reaches $2.76\times$ speedup at 32 threads, whereas the measured four-node MPI configuration is slower than its 32-worker baseline.  The complete weak curve retains $87\%$ efficiency at 128 workers relative to one.  CUDA reaches $n=64{,}000$, but unequal search budgets prevent a cross-backend speedup claim.  The limited strong-scaling efficiency and inconsistent printed costs in seven multi-rank outputs are reported explicitly.
 \end{abstract}
 
 \vspace{1em}

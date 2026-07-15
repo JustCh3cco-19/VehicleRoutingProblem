@@ -1,10 +1,10 @@
 \section{Introduction}
 
-We study a \textbf{capacitated vehicle routing problem} solved through \textbf{Ant Colony Optimization} (ACO), focusing on the implementation choices needed for shared-memory, distributed-memory, and GPU execution.
+I study a \textbf{capacitated vehicle routing problem} solved through \textbf{Ant Colony Optimization} (ACO), focusing on the implementation choices needed for shared-memory, distributed-memory, and GPU execution.
 
 \subsection{Problem formulation}
 
-We consider a constrained vehicle routing problem on a complete graph $G=(V,E)$, where $V=\{0,1,\dots,n\}$ is the set of nodes and node $0$ denotes the depot. The set of customers is therefore $C=\{1,\dots,n\}$. Each arc $(i,j) \in E$ is associated with a travel cost $c_{ij} \ge 0$, derived in our instances from the Euclidean distance between nodes. A fleet of at most $K$ vehicles is available, and each vehicle has capacity $Q$. In the instances handled by our solver, customer demands are unitary, that is, $q_i=1$ for every $i \in C$, while $q_0=0$.
+We consider a constrained vehicle routing problem on a complete graph $G=(V,E)$, where $V=\{0,1,\dots,n\}$ is the set of nodes and node $0$ denotes the depot. The set of customers is therefore $C=\{1,\dots,n\}$. Each arc $(i,j) \in E$ is associated with a travel cost $c_{ij} \ge 0$, derived in my instances from the Euclidean distance between nodes. A fleet of at most $K$ vehicles is available, and each vehicle has capacity $Q$. In the instances handled by my solver, customer demands are unitary, that is, $q_i=1$ for every $i \in C$, while $q_0=0$.
 
 A feasible solution is a set of depot-to-depot routes such that each customer is visited exactly once and the total demand served by each route does not exceed the vehicle capacity. Let $x_{ij}^k$ be a binary decision variable equal to $1$ if vehicle $k$ traverses arc $(i,j)$ and $0$ otherwise. A compact mathematical formulation can be written as follows:
 
@@ -42,7 +42,7 @@ x_{ij}^k \in \{0,1\}
 \qquad \forall i,j \in V,\; i \ne j,\; \forall k=1,\dots,K.
 \]
 
-The objective minimizes the total travel cost of all routes. The first constraint ensures that every customer is served exactly once. The second enforces that each vehicle can leave from and return to the depot at most once. The third is the standard flow-conservation constraint, while the fourth encodes the vehicle-capacity limit. In the specific setting of our project, since all customer demands are equal to one, the capacity constraint can also be interpreted as a bound on the maximum number of customers assigned to each route.
+The objective minimizes the total travel cost of all routes. The first constraint ensures that every customer is served exactly once. The second enforces that each vehicle can leave from and return to the depot at most once. The third is the standard flow-conservation constraint, while the fourth encodes the vehicle-capacity limit. In the specific setting of my project, since all customer demands are equal to one, the capacity constraint can also be interpreted as a bound on the maximum number of customers assigned to each route.
 
 \subsection{Sequential baseline analysis}
 
