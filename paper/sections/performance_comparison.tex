@@ -3,9 +3,9 @@
 
 \subsection{Method and validation}
 
-Each experimental point is the arithmetic mean of three seeds, and error bars are the sample standard deviation.  Median, extrema, coefficient of variation (CV), and per-run validation outcomes are also considered.  The measured time is end-to-end wall time around \texttt{srun}, so it includes launcher, input, initialization, solver, output, and finalization.  Open MPI 4.1.6 and \texttt{-O3} are visible in the logs; CPU and GPU model identifiers are not.
+Each experimental point is the arithmetic mean of three seeds, and error bars are the sample standard deviation.  Median, extrema, coefficient of variation (CV), and per-run validation outcomes are also considered.
 
-Every current CSV row has positive finite timing and a matching solution file.  Reconstructed routes visit every customer exactly once and satisfy capacity.  Seven multi-rank outputs have a feasible printed route whose recomputed cost differs from the printed scalar best cost; their timings are retained, but their costs are excluded.  MPI RSS values are also excluded because \texttt{/usr/bin/time} observed the \texttt{srun} launcher rather than remote ranks.
+Every current CSV row has positive finite timing and a matching solution file.  Reconstructed routes visit every customer exactly once and satisfy capacity.  Seven multi-rank outputs have a feasible printed route whose recomputed cost differs from the printed scalar best cost; their timings are retained, but their costs are excluded.
 
 \subsection{Strong scaling}
 
@@ -62,7 +62,7 @@ CUDA reaches $n=64{,}000$ within the available outputs, while the dense sequenti
 
 The reliable current evidence supports three limited conclusions.  First, OpenMP reduces the 100-epoch runtime on the $n=32{,}000$ instance, but a population of only 16 ants leaves the 32-thread configuration underutilized and limits speedup to $2.76\times$.  Second, splitting the same fixed population over four MPI ranks increases replicated and collective work while leaving only four ants per rank, producing a multi-node slowdown.  In contrast, the weak campaign keeps enough independent ants per worker and preserves $87\%$ efficiency at 128.  Third, the CUDA representation handles the largest available instance, but the present size sweep is not controlled well enough for a cross-backend speedup claim.
 
-These results characterize the submitted configuration rather than a general limit of OpenMP or MPI.  Its strong-scaling resource count grows beyond the available ant-level parallelism, whereas the weak campaign grows useful work with the worker count.  Hardware identifiers, rank-level memory measurements, and phase profiling would be necessary for a more detailed attribution.  The inconsistent transfer of the globally best MPI route also remains a correctness limitation for quality comparisons, although its fixed-work timings are retained.
+These results characterize the submitted configuration rather than a general limit of OpenMP or MPI.  Its strong-scaling resource count grows beyond the available ant-level parallelism, whereas the weak campaign grows useful work with the worker count.  Phase profiling would be necessary for a more detailed attribution.  The inconsistent transfer of the globally best MPI route also remains a correctness limitation for quality comparisons, although its fixed-work timings are retained.
 
 \vspace{-0.75\baselineskip}
 {\small

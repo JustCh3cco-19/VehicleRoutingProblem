@@ -46,10 +46,10 @@ The objective minimizes the total travel cost of all routes. The first constrain
 
 \subsection{Sequential baseline analysis}
 
-The sequential baseline implemented in the uploaded code follows a standard ACO structure with two practical additions: bounded pheromone updates and a repair-oriented route construction phase that preserves feasibility when some customers remain unassigned after the first pass.
+The sequential baseline follows a standard ACO structure with two practical additions: bounded pheromone updates and a repair-oriented route construction phase that preserves feasibility when some customers remain unassigned after the first pass.
 
 \begin{algorithm}[H]
-\caption{Sequential baseline in \texttt{aco\_sequential.c}}
+\caption{Sequential ACO baseline}
 \footnotesize
 \begin{algorithmic}[1]
 \State \textbf{Input:} $n$, $K$, $Q$, $m$, $c$, $(\alpha,\beta,\rho,\tau_0)$, seed

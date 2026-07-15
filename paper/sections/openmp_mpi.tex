@@ -16,9 +16,27 @@ The sparse exchange does not remove all distributed overhead.  Every rank still 
 
 \subsection{Alternatives that were rejected}
 
-Earlier prototypes in \texttt{experiments/openmp\_v2/} explored row-wise dense collectives and collaborative \emph{intra-ant} execution.  The former issued many collectives per epoch.  The latter assigned several CPU threads to one ant, using barriers, spinning counters, or condition variables to coordinate each construction step.  These approaches increased the coordination granularity and were abandoned in favor of one independent ant per worker.
+The first CPU-parallel version exposed four concrete implementation problems:
+\begin{itemize}[leftmargin=*,nosep]
+    \item \textbf{False sharing:} adjacent, unaligned per-thread telemetry structures generated unnecessary cache-coherence traffic.
+    \item \textbf{Repeated fork--join:} opening and closing an OpenMP region at every epoch added recurring thread-management overhead.
+    \item \textbf{Serial deposits:} pheromone deposits executed inside a single-thread section and serialized part of every epoch.
+    \item \textbf{Fine-grained MPI synchronization:} one nonblocking reduction per matrix row produced a large number of small collectives.
+\end{itemize}
 
-The repository does not contain compatible raw timing files for those prototypes, so their previously quoted speedups are not reused in the final quantitative evaluation.  The implementation history nevertheless motivates the final design choice: independent ants need synchronization only at phase boundaries, whereas collaborative ants synchronize along the sequential route-construction path.  SIMD within one core remains a possible alternative because it could accelerate candidate scans without introducing inter-core coordination.
+These problems motivated the organization retained in the submitted version: one persistent OpenMP region, aligned thread-private workspaces, atomic parallel deposits, and sparse delta exchange through \texttt{MPI\_Iallgatherv}.  The changes remove the original serial and per-row synchronization structures, but do not make coordination free.  Atomic contention, phase barriers, replicated dense-matrix work, and collective synchronization remain relevant when the ant population does not provide enough independent work per worker.
+
+Further alternatives exposed the following limitations:
+\begin{itemize}[leftmargin=*,nosep]
+    \item \textbf{Scheduling overhead and imbalance:} fine-grained dynamic scheduling repeatedly accesses the OpenMP work queue, whereas larger guided chunks can leave a long tail because ants construct routes of different lengths.
+    \item \textbf{Insufficient task granularity:} a fixed population may expose fewer independent ants than threads.  Once every ant has been assigned, extra workers can only assist the dense matrix phases; this limitation remains visible in the strong-scaling campaign.
+    \item \textbf{Dense-matrix pressure:} double precision enlarged the working set and memory traffic.  Single precision reduces this cost but preserves quadratic storage.
+    \item \textbf{Irregular fallback:} if the candidate list has no feasible unvisited customer, selection falls back to an $O(n)$ scan.  Two-level candidate lists, hierarchical visited masks, and cache-adaptive candidate widths reduce exhausted-block work, but cannot remove the global fallback without changing the search rule.
+    \item \textbf{Poor prefetch and SIMD fit:} the visited-dependent access pattern frustrates manual prefetching, while direct SIMD requires masked filtering, reduction, and probabilistic selection and can evaluate entries that are immediately discarded.
+    \item \textbf{Fine-grained intra-ant coordination:} per-step barriers repeatedly synchronized workers; atomic spinning replaced barrier calls with cache-line bouncing; and condition-variable wakeups introduced operating-system latency comparable to the small scan being parallelized.
+\end{itemize}
+
+The final one-ant-per-worker mapping therefore synchronizes only at phase boundaries.  Hierarchical masks and adaptive candidate data are retained, while the rejected implementation history is reported qualitatively and no cross-version speedup is reused.
 
 \subsection{Correctness boundary}
 
