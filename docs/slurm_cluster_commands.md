@@ -51,8 +51,8 @@ Le istanze disponibili fino a 64.000 clienti sono:
 
 Ogni job richiede al massimo 30 minuti. Per lasciare margine alla compilazione,
 all'inizializzazione e alla scrittura dei risultati, ogni singolo run del solver
-è limitato a 300 secondi. Con tre ripetizioni il calcolo può durare al massimo
-15 minuti; con cinque ripetizioni può durare al massimo 25 minuti. Il limite
+è limitato a 300 secondi. Le tre ripetizioni OpenMP-MPI possono durare al
+massimo 15 minuti. Il limite
 disponibile è di 32 GB di RAM e 32 CPU per task.
 
 Le submission CPU richiedono uniformemente `--cpus 32`. Questa è
@@ -279,42 +279,42 @@ e lo speedup della curva finale usa il punto a un core come baseline.
 ### Strong scaling OpenMP
 
 Il problema rimane fisso a 32.000 clienti e i thread crescono per potenze di
-due. Vengono usati un rank MPI e cinque run per configurazione:
+due. Vengono usati un rank MPI e tre run per configurazione:
 
 ```bash
 tools/batch/submit_solve.sh \
   --target solve_mpi --time 00:30:00 --nodes 1 --ntasks 1 --cpus 32 --mem 32G \
-  --make-args "SOLVE_CLIENTS=32000 SOLVE_MPI_RANKS=1 SOLVE_MPI_OMP_THREADS=1 SOLVE_MPI_LAUNCHER=srun SOLVE_MPI_REPEATS=5 SOLVE_MPI_RUNTIME_S=300 SOLVE_MPI_STAGNATION_EPOCHS=500 SOLVE_MPI_MIN_REL_IMPROVEMENT=0.001 SOLVE_BATCH_ID=strong_openmp_t1 SOLVE_CSV_DIR=results/manual_campaign/strong_openmp/t1/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/strong_openmp/t1/solutions"
+  --make-args "SOLVE_CLIENTS=32000 SOLVE_MPI_RANKS=1 SOLVE_MPI_OMP_THREADS=1 SOLVE_MPI_LAUNCHER=srun SOLVE_MPI_REPEATS=3 SOLVE_MPI_RUNTIME_S=300 SOLVE_MPI_STAGNATION_EPOCHS=500 SOLVE_MPI_MIN_REL_IMPROVEMENT=0.001 SOLVE_BATCH_ID=strong_openmp_t1 SOLVE_CSV_DIR=results/manual_campaign/strong_openmp/t1/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/strong_openmp/t1/solutions"
 ```
 
 ```bash
 tools/batch/submit_solve.sh \
   --target solve_mpi --time 00:30:00 --nodes 1 --ntasks 1 --cpus 32 --mem 32G \
-  --make-args "SOLVE_CLIENTS=32000 SOLVE_MPI_RANKS=1 SOLVE_MPI_OMP_THREADS=2 SOLVE_MPI_LAUNCHER=srun SOLVE_MPI_REPEATS=5 SOLVE_MPI_RUNTIME_S=300 SOLVE_MPI_STAGNATION_EPOCHS=500 SOLVE_MPI_MIN_REL_IMPROVEMENT=0.001 SOLVE_BATCH_ID=strong_openmp_t2 SOLVE_CSV_DIR=results/manual_campaign/strong_openmp/t2/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/strong_openmp/t2/solutions"
+  --make-args "SOLVE_CLIENTS=32000 SOLVE_MPI_RANKS=1 SOLVE_MPI_OMP_THREADS=2 SOLVE_MPI_LAUNCHER=srun SOLVE_MPI_REPEATS=3 SOLVE_MPI_RUNTIME_S=300 SOLVE_MPI_STAGNATION_EPOCHS=500 SOLVE_MPI_MIN_REL_IMPROVEMENT=0.001 SOLVE_BATCH_ID=strong_openmp_t2 SOLVE_CSV_DIR=results/manual_campaign/strong_openmp/t2/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/strong_openmp/t2/solutions"
 ```
 
 ```bash
 tools/batch/submit_solve.sh \
   --target solve_mpi --time 00:30:00 --nodes 1 --ntasks 1 --cpus 32 --mem 32G \
-  --make-args "SOLVE_CLIENTS=32000 SOLVE_MPI_RANKS=1 SOLVE_MPI_OMP_THREADS=4 SOLVE_MPI_LAUNCHER=srun SOLVE_MPI_REPEATS=5 SOLVE_MPI_RUNTIME_S=300 SOLVE_MPI_STAGNATION_EPOCHS=500 SOLVE_MPI_MIN_REL_IMPROVEMENT=0.001 SOLVE_BATCH_ID=strong_openmp_t4 SOLVE_CSV_DIR=results/manual_campaign/strong_openmp/t4/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/strong_openmp/t4/solutions"
+  --make-args "SOLVE_CLIENTS=32000 SOLVE_MPI_RANKS=1 SOLVE_MPI_OMP_THREADS=4 SOLVE_MPI_LAUNCHER=srun SOLVE_MPI_REPEATS=3 SOLVE_MPI_RUNTIME_S=300 SOLVE_MPI_STAGNATION_EPOCHS=500 SOLVE_MPI_MIN_REL_IMPROVEMENT=0.001 SOLVE_BATCH_ID=strong_openmp_t4 SOLVE_CSV_DIR=results/manual_campaign/strong_openmp/t4/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/strong_openmp/t4/solutions"
 ```
 
 ```bash
 tools/batch/submit_solve.sh \
   --target solve_mpi --time 00:30:00 --nodes 1 --ntasks 1 --cpus 32 --mem 32G \
-  --make-args "SOLVE_CLIENTS=32000 SOLVE_MPI_RANKS=1 SOLVE_MPI_OMP_THREADS=8 SOLVE_MPI_LAUNCHER=srun SOLVE_MPI_REPEATS=5 SOLVE_MPI_RUNTIME_S=300 SOLVE_MPI_STAGNATION_EPOCHS=500 SOLVE_MPI_MIN_REL_IMPROVEMENT=0.001 SOLVE_BATCH_ID=strong_openmp_t8 SOLVE_CSV_DIR=results/manual_campaign/strong_openmp/t8/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/strong_openmp/t8/solutions"
+  --make-args "SOLVE_CLIENTS=32000 SOLVE_MPI_RANKS=1 SOLVE_MPI_OMP_THREADS=8 SOLVE_MPI_LAUNCHER=srun SOLVE_MPI_REPEATS=3 SOLVE_MPI_RUNTIME_S=300 SOLVE_MPI_STAGNATION_EPOCHS=500 SOLVE_MPI_MIN_REL_IMPROVEMENT=0.001 SOLVE_BATCH_ID=strong_openmp_t8 SOLVE_CSV_DIR=results/manual_campaign/strong_openmp/t8/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/strong_openmp/t8/solutions"
 ```
 
 ```bash
 tools/batch/submit_solve.sh \
   --target solve_mpi --time 00:30:00 --nodes 1 --ntasks 1 --cpus 32 --mem 32G \
-  --make-args "SOLVE_CLIENTS=32000 SOLVE_MPI_RANKS=1 SOLVE_MPI_OMP_THREADS=16 SOLVE_MPI_LAUNCHER=srun SOLVE_MPI_REPEATS=5 SOLVE_MPI_RUNTIME_S=300 SOLVE_MPI_STAGNATION_EPOCHS=500 SOLVE_MPI_MIN_REL_IMPROVEMENT=0.001 SOLVE_BATCH_ID=strong_openmp_t16 SOLVE_CSV_DIR=results/manual_campaign/strong_openmp/t16/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/strong_openmp/t16/solutions"
+  --make-args "SOLVE_CLIENTS=32000 SOLVE_MPI_RANKS=1 SOLVE_MPI_OMP_THREADS=16 SOLVE_MPI_LAUNCHER=srun SOLVE_MPI_REPEATS=3 SOLVE_MPI_RUNTIME_S=300 SOLVE_MPI_STAGNATION_EPOCHS=500 SOLVE_MPI_MIN_REL_IMPROVEMENT=0.001 SOLVE_BATCH_ID=strong_openmp_t16 SOLVE_CSV_DIR=results/manual_campaign/strong_openmp/t16/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/strong_openmp/t16/solutions"
 ```
 
 ```bash
 tools/batch/submit_solve.sh \
   --target solve_mpi --time 00:30:00 --nodes 1 --ntasks 1 --cpus 32 --mem 32G \
-  --make-args "SOLVE_CLIENTS=32000 SOLVE_MPI_RANKS=1 SOLVE_MPI_OMP_THREADS=32 SOLVE_MPI_LAUNCHER=srun SOLVE_MPI_REPEATS=5 SOLVE_MPI_RUNTIME_S=300 SOLVE_MPI_STAGNATION_EPOCHS=500 SOLVE_MPI_MIN_REL_IMPROVEMENT=0.001 SOLVE_BATCH_ID=strong_openmp_t32 SOLVE_CSV_DIR=results/manual_campaign/strong_openmp/t32/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/strong_openmp/t32/solutions"
+  --make-args "SOLVE_CLIENTS=32000 SOLVE_MPI_RANKS=1 SOLVE_MPI_OMP_THREADS=32 SOLVE_MPI_LAUNCHER=srun SOLVE_MPI_REPEATS=3 SOLVE_MPI_RUNTIME_S=300 SOLVE_MPI_STAGNATION_EPOCHS=500 SOLVE_MPI_MIN_REL_IMPROVEMENT=0.001 SOLVE_BATCH_ID=strong_openmp_t32 SOLVE_CSV_DIR=results/manual_campaign/strong_openmp/t32/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/strong_openmp/t32/solutions"
 ```
 
 ### Strong scaling MPI
@@ -325,19 +325,19 @@ occupa un nodo; i punti sono quindi 32, 64 e 128 core totali:
 ```bash
 tools/batch/submit_solve.sh \
   --target solve_mpi --time 00:30:00 --nodes 1 --ntasks 1 --cpus 32 --mem 32G \
-  --make-args "SOLVE_CLIENTS=32000 SOLVE_MPI_RANKS=1 SOLVE_MPI_OMP_THREADS=32 SOLVE_MPI_LAUNCHER=srun SOLVE_MPI_REPEATS=5 SOLVE_MPI_RUNTIME_S=300 SOLVE_MPI_STAGNATION_EPOCHS=500 SOLVE_MPI_MIN_REL_IMPROVEMENT=0.001 SOLVE_BATCH_ID=strong_mpi_r1_t32 SOLVE_CSV_DIR=results/manual_campaign/strong_mpi/r1_t32/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/strong_mpi/r1_t32/solutions"
+  --make-args "SOLVE_CLIENTS=32000 SOLVE_MPI_RANKS=1 SOLVE_MPI_OMP_THREADS=32 SOLVE_MPI_LAUNCHER=srun SOLVE_MPI_REPEATS=3 SOLVE_MPI_RUNTIME_S=300 SOLVE_MPI_STAGNATION_EPOCHS=500 SOLVE_MPI_MIN_REL_IMPROVEMENT=0.001 SOLVE_BATCH_ID=strong_mpi_r1_t32 SOLVE_CSV_DIR=results/manual_campaign/strong_mpi/r1_t32/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/strong_mpi/r1_t32/solutions"
 ```
 
 ```bash
 tools/batch/submit_solve.sh \
   --target solve_mpi --time 00:30:00 --nodes 2 --ntasks 2 --cpus 32 --mem 32G \
-  --make-args "SOLVE_CLIENTS=32000 SOLVE_MPI_RANKS=2 SOLVE_MPI_OMP_THREADS=32 SOLVE_MPI_LAUNCHER=srun SOLVE_MPI_REPEATS=5 SOLVE_MPI_RUNTIME_S=300 SOLVE_MPI_STAGNATION_EPOCHS=500 SOLVE_MPI_MIN_REL_IMPROVEMENT=0.001 SOLVE_BATCH_ID=strong_mpi_r2_t32 SOLVE_CSV_DIR=results/manual_campaign/strong_mpi/r2_t32/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/strong_mpi/r2_t32/solutions"
+  --make-args "SOLVE_CLIENTS=32000 SOLVE_MPI_RANKS=2 SOLVE_MPI_OMP_THREADS=32 SOLVE_MPI_LAUNCHER=srun SOLVE_MPI_REPEATS=3 SOLVE_MPI_RUNTIME_S=300 SOLVE_MPI_STAGNATION_EPOCHS=500 SOLVE_MPI_MIN_REL_IMPROVEMENT=0.001 SOLVE_BATCH_ID=strong_mpi_r2_t32 SOLVE_CSV_DIR=results/manual_campaign/strong_mpi/r2_t32/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/strong_mpi/r2_t32/solutions"
 ```
 
 ```bash
 tools/batch/submit_solve.sh \
   --target solve_mpi --time 00:30:00 --nodes 4 --ntasks 4 --cpus 32 --mem 32G \
-  --make-args "SOLVE_CLIENTS=32000 SOLVE_MPI_RANKS=4 SOLVE_MPI_OMP_THREADS=32 SOLVE_MPI_LAUNCHER=srun SOLVE_MPI_REPEATS=5 SOLVE_MPI_RUNTIME_S=300 SOLVE_MPI_STAGNATION_EPOCHS=500 SOLVE_MPI_MIN_REL_IMPROVEMENT=0.001 SOLVE_BATCH_ID=strong_mpi_r4_t32 SOLVE_CSV_DIR=results/manual_campaign/strong_mpi/r4_t32/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/strong_mpi/r4_t32/solutions"
+  --make-args "SOLVE_CLIENTS=32000 SOLVE_MPI_RANKS=4 SOLVE_MPI_OMP_THREADS=32 SOLVE_MPI_LAUNCHER=srun SOLVE_MPI_REPEATS=3 SOLVE_MPI_RUNTIME_S=300 SOLVE_MPI_STAGNATION_EPOCHS=500 SOLVE_MPI_MIN_REL_IMPROVEMENT=0.001 SOLVE_BATCH_ID=strong_mpi_r4_t32 SOLVE_CSV_DIR=results/manual_campaign/strong_mpi/r4_t32/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/strong_mpi/r4_t32/solutions"
 ```
 
 ### Curva strong combinata finale
@@ -388,37 +388,37 @@ una protezione. La configurazione debole è quindi:
 ```bash
 tools/batch/submit_solve.sh \
   --target solve_mpi --time 00:30:00 --nodes 1 --ntasks 1 --cpus 32 --mem 32G \
-  --make-args "SOLVE_CLIENTS=8000 SOLVE_MPI_RANKS=1 SOLVE_MPI_OMP_THREADS=1 SOLVE_MPI_M=32 SOLVE_MPI_FIXED_EPOCHS=10 SOLVE_MPI_LAUNCHER=srun SOLVE_MPI_REPEATS=5 SOLVE_MPI_RUNTIME_S=300 SOLVE_MPI_STAGNATION_EPOCHS=0 SOLVE_MPI_MIN_REL_IMPROVEMENT=0.001 SOLVE_BATCH_ID=weak_openmp_c1_m32 SOLVE_CSV_DIR=results/manual_campaign/weak_openmp/c1_m32/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/weak_openmp/c1_m32/solutions"
+  --make-args "SOLVE_CLIENTS=8000 SOLVE_MPI_RANKS=1 SOLVE_MPI_OMP_THREADS=1 SOLVE_MPI_M=32 SOLVE_MPI_FIXED_EPOCHS=10 SOLVE_MPI_LAUNCHER=srun SOLVE_MPI_REPEATS=3 SOLVE_MPI_RUNTIME_S=300 SOLVE_MPI_STAGNATION_EPOCHS=0 SOLVE_MPI_MIN_REL_IMPROVEMENT=0.001 SOLVE_BATCH_ID=weak_openmp_c1_m32 SOLVE_CSV_DIR=results/manual_campaign/weak_openmp/c1_m32/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/weak_openmp/c1_m32/solutions"
 ```
 
 ```bash
 tools/batch/submit_solve.sh \
   --target solve_mpi --time 00:30:00 --nodes 1 --ntasks 1 --cpus 32 --mem 32G \
-  --make-args "SOLVE_CLIENTS=8000 SOLVE_MPI_RANKS=1 SOLVE_MPI_OMP_THREADS=2 SOLVE_MPI_M=64 SOLVE_MPI_FIXED_EPOCHS=10 SOLVE_MPI_LAUNCHER=srun SOLVE_MPI_REPEATS=5 SOLVE_MPI_RUNTIME_S=300 SOLVE_MPI_STAGNATION_EPOCHS=0 SOLVE_MPI_MIN_REL_IMPROVEMENT=0.001 SOLVE_BATCH_ID=weak_openmp_c2_m64 SOLVE_CSV_DIR=results/manual_campaign/weak_openmp/c2_m64/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/weak_openmp/c2_m64/solutions"
+  --make-args "SOLVE_CLIENTS=8000 SOLVE_MPI_RANKS=1 SOLVE_MPI_OMP_THREADS=2 SOLVE_MPI_M=64 SOLVE_MPI_FIXED_EPOCHS=10 SOLVE_MPI_LAUNCHER=srun SOLVE_MPI_REPEATS=3 SOLVE_MPI_RUNTIME_S=300 SOLVE_MPI_STAGNATION_EPOCHS=0 SOLVE_MPI_MIN_REL_IMPROVEMENT=0.001 SOLVE_BATCH_ID=weak_openmp_c2_m64 SOLVE_CSV_DIR=results/manual_campaign/weak_openmp/c2_m64/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/weak_openmp/c2_m64/solutions"
 ```
 
 ```bash
 tools/batch/submit_solve.sh \
   --target solve_mpi --time 00:30:00 --nodes 1 --ntasks 1 --cpus 32 --mem 32G \
-  --make-args "SOLVE_CLIENTS=8000 SOLVE_MPI_RANKS=1 SOLVE_MPI_OMP_THREADS=4 SOLVE_MPI_M=128 SOLVE_MPI_FIXED_EPOCHS=10 SOLVE_MPI_LAUNCHER=srun SOLVE_MPI_REPEATS=5 SOLVE_MPI_RUNTIME_S=300 SOLVE_MPI_STAGNATION_EPOCHS=0 SOLVE_MPI_MIN_REL_IMPROVEMENT=0.001 SOLVE_BATCH_ID=weak_openmp_c4_m128 SOLVE_CSV_DIR=results/manual_campaign/weak_openmp/c4_m128/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/weak_openmp/c4_m128/solutions"
+  --make-args "SOLVE_CLIENTS=8000 SOLVE_MPI_RANKS=1 SOLVE_MPI_OMP_THREADS=4 SOLVE_MPI_M=128 SOLVE_MPI_FIXED_EPOCHS=10 SOLVE_MPI_LAUNCHER=srun SOLVE_MPI_REPEATS=3 SOLVE_MPI_RUNTIME_S=300 SOLVE_MPI_STAGNATION_EPOCHS=0 SOLVE_MPI_MIN_REL_IMPROVEMENT=0.001 SOLVE_BATCH_ID=weak_openmp_c4_m128 SOLVE_CSV_DIR=results/manual_campaign/weak_openmp/c4_m128/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/weak_openmp/c4_m128/solutions"
 ```
 
 ```bash
 tools/batch/submit_solve.sh \
   --target solve_mpi --time 00:30:00 --nodes 1 --ntasks 1 --cpus 32 --mem 32G \
-  --make-args "SOLVE_CLIENTS=8000 SOLVE_MPI_RANKS=1 SOLVE_MPI_OMP_THREADS=8 SOLVE_MPI_M=256 SOLVE_MPI_FIXED_EPOCHS=10 SOLVE_MPI_LAUNCHER=srun SOLVE_MPI_REPEATS=5 SOLVE_MPI_RUNTIME_S=300 SOLVE_MPI_STAGNATION_EPOCHS=0 SOLVE_MPI_MIN_REL_IMPROVEMENT=0.001 SOLVE_BATCH_ID=weak_openmp_c8_m256 SOLVE_CSV_DIR=results/manual_campaign/weak_openmp/c8_m256/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/weak_openmp/c8_m256/solutions"
+  --make-args "SOLVE_CLIENTS=8000 SOLVE_MPI_RANKS=1 SOLVE_MPI_OMP_THREADS=8 SOLVE_MPI_M=256 SOLVE_MPI_FIXED_EPOCHS=10 SOLVE_MPI_LAUNCHER=srun SOLVE_MPI_REPEATS=3 SOLVE_MPI_RUNTIME_S=300 SOLVE_MPI_STAGNATION_EPOCHS=0 SOLVE_MPI_MIN_REL_IMPROVEMENT=0.001 SOLVE_BATCH_ID=weak_openmp_c8_m256 SOLVE_CSV_DIR=results/manual_campaign/weak_openmp/c8_m256/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/weak_openmp/c8_m256/solutions"
 ```
 
 ```bash
 tools/batch/submit_solve.sh \
   --target solve_mpi --time 00:30:00 --nodes 1 --ntasks 1 --cpus 32 --mem 32G \
-  --make-args "SOLVE_CLIENTS=8000 SOLVE_MPI_RANKS=1 SOLVE_MPI_OMP_THREADS=16 SOLVE_MPI_M=512 SOLVE_MPI_FIXED_EPOCHS=10 SOLVE_MPI_LAUNCHER=srun SOLVE_MPI_REPEATS=5 SOLVE_MPI_RUNTIME_S=300 SOLVE_MPI_STAGNATION_EPOCHS=0 SOLVE_MPI_MIN_REL_IMPROVEMENT=0.001 SOLVE_BATCH_ID=weak_openmp_c16_m512 SOLVE_CSV_DIR=results/manual_campaign/weak_openmp/c16_m512/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/weak_openmp/c16_m512/solutions"
+  --make-args "SOLVE_CLIENTS=8000 SOLVE_MPI_RANKS=1 SOLVE_MPI_OMP_THREADS=16 SOLVE_MPI_M=512 SOLVE_MPI_FIXED_EPOCHS=10 SOLVE_MPI_LAUNCHER=srun SOLVE_MPI_REPEATS=3 SOLVE_MPI_RUNTIME_S=300 SOLVE_MPI_STAGNATION_EPOCHS=0 SOLVE_MPI_MIN_REL_IMPROVEMENT=0.001 SOLVE_BATCH_ID=weak_openmp_c16_m512 SOLVE_CSV_DIR=results/manual_campaign/weak_openmp/c16_m512/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/weak_openmp/c16_m512/solutions"
 ```
 
 ```bash
 tools/batch/submit_solve.sh \
   --target solve_mpi --time 00:30:00 --nodes 1 --ntasks 1 --cpus 32 --mem 32G \
-  --make-args "SOLVE_CLIENTS=8000 SOLVE_MPI_RANKS=1 SOLVE_MPI_OMP_THREADS=32 SOLVE_MPI_M=1024 SOLVE_MPI_FIXED_EPOCHS=10 SOLVE_MPI_LAUNCHER=srun SOLVE_MPI_REPEATS=5 SOLVE_MPI_RUNTIME_S=300 SOLVE_MPI_STAGNATION_EPOCHS=0 SOLVE_MPI_MIN_REL_IMPROVEMENT=0.001 SOLVE_BATCH_ID=weak_openmp_c32_m1024 SOLVE_CSV_DIR=results/manual_campaign/weak_openmp/c32_m1024/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/weak_openmp/c32_m1024/solutions"
+  --make-args "SOLVE_CLIENTS=8000 SOLVE_MPI_RANKS=1 SOLVE_MPI_OMP_THREADS=32 SOLVE_MPI_M=1024 SOLVE_MPI_FIXED_EPOCHS=10 SOLVE_MPI_LAUNCHER=srun SOLVE_MPI_REPEATS=3 SOLVE_MPI_RUNTIME_S=300 SOLVE_MPI_STAGNATION_EPOCHS=0 SOLVE_MPI_MIN_REL_IMPROVEMENT=0.001 SOLVE_BATCH_ID=weak_openmp_c32_m1024 SOLVE_CSV_DIR=results/manual_campaign/weak_openmp/c32_m1024/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/weak_openmp/c32_m1024/solutions"
 ```
 
 ### Weak scaling MPI, inter-nodo
@@ -429,19 +429,19 @@ curva weak combinata si usano poi i punti MPI a 64 e 128 core.
 ```bash
 tools/batch/submit_solve.sh \
   --target solve_mpi --time 00:30:00 --nodes 1 --ntasks 1 --cpus 32 --mem 32G \
-  --make-args "SOLVE_CLIENTS=8000 SOLVE_MPI_RANKS=1 SOLVE_MPI_OMP_THREADS=32 SOLVE_MPI_M=1024 SOLVE_MPI_FIXED_EPOCHS=10 SOLVE_MPI_LAUNCHER=srun SOLVE_MPI_REPEATS=5 SOLVE_MPI_RUNTIME_S=300 SOLVE_MPI_STAGNATION_EPOCHS=0 SOLVE_MPI_MIN_REL_IMPROVEMENT=0.001 SOLVE_BATCH_ID=weak_mpi_c32_r1_t32_m1024 SOLVE_CSV_DIR=results/manual_campaign/weak_mpi/c32_r1_t32_m1024/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/weak_mpi/c32_r1_t32_m1024/solutions"
+  --make-args "SOLVE_CLIENTS=8000 SOLVE_MPI_RANKS=1 SOLVE_MPI_OMP_THREADS=32 SOLVE_MPI_M=1024 SOLVE_MPI_FIXED_EPOCHS=10 SOLVE_MPI_LAUNCHER=srun SOLVE_MPI_REPEATS=3 SOLVE_MPI_RUNTIME_S=300 SOLVE_MPI_STAGNATION_EPOCHS=0 SOLVE_MPI_MIN_REL_IMPROVEMENT=0.001 SOLVE_BATCH_ID=weak_mpi_c32_r1_t32_m1024 SOLVE_CSV_DIR=results/manual_campaign/weak_mpi/c32_r1_t32_m1024/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/weak_mpi/c32_r1_t32_m1024/solutions"
 ```
 
 ```bash
 tools/batch/submit_solve.sh \
   --target solve_mpi --time 00:30:00 --nodes 2 --ntasks 2 --cpus 32 --mem 32G \
-  --make-args "SOLVE_CLIENTS=8000 SOLVE_MPI_RANKS=2 SOLVE_MPI_OMP_THREADS=32 SOLVE_MPI_M=2048 SOLVE_MPI_FIXED_EPOCHS=10 SOLVE_MPI_LAUNCHER=srun SOLVE_MPI_REPEATS=5 SOLVE_MPI_RUNTIME_S=300 SOLVE_MPI_STAGNATION_EPOCHS=0 SOLVE_MPI_MIN_REL_IMPROVEMENT=0.001 SOLVE_BATCH_ID=weak_mpi_c64_r2_t32_m2048 SOLVE_CSV_DIR=results/manual_campaign/weak_mpi/c64_r2_t32_m2048/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/weak_mpi/c64_r2_t32_m2048/solutions"
+  --make-args "SOLVE_CLIENTS=8000 SOLVE_MPI_RANKS=2 SOLVE_MPI_OMP_THREADS=32 SOLVE_MPI_M=2048 SOLVE_MPI_FIXED_EPOCHS=10 SOLVE_MPI_LAUNCHER=srun SOLVE_MPI_REPEATS=3 SOLVE_MPI_RUNTIME_S=300 SOLVE_MPI_STAGNATION_EPOCHS=0 SOLVE_MPI_MIN_REL_IMPROVEMENT=0.001 SOLVE_BATCH_ID=weak_mpi_c64_r2_t32_m2048 SOLVE_CSV_DIR=results/manual_campaign/weak_mpi/c64_r2_t32_m2048/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/weak_mpi/c64_r2_t32_m2048/solutions"
 ```
 
 ```bash
 tools/batch/submit_solve.sh \
   --target solve_mpi --time 00:30:00 --nodes 4 --ntasks 4 --cpus 32 --mem 32G \
-  --make-args "SOLVE_CLIENTS=8000 SOLVE_MPI_RANKS=4 SOLVE_MPI_OMP_THREADS=32 SOLVE_MPI_M=4096 SOLVE_MPI_FIXED_EPOCHS=10 SOLVE_MPI_LAUNCHER=srun SOLVE_MPI_REPEATS=5 SOLVE_MPI_RUNTIME_S=300 SOLVE_MPI_STAGNATION_EPOCHS=0 SOLVE_MPI_MIN_REL_IMPROVEMENT=0.001 SOLVE_BATCH_ID=weak_mpi_c128_r4_t32_m4096 SOLVE_CSV_DIR=results/manual_campaign/weak_mpi/c128_r4_t32_m4096/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/weak_mpi/c128_r4_t32_m4096/solutions"
+  --make-args "SOLVE_CLIENTS=8000 SOLVE_MPI_RANKS=4 SOLVE_MPI_OMP_THREADS=32 SOLVE_MPI_M=4096 SOLVE_MPI_FIXED_EPOCHS=10 SOLVE_MPI_LAUNCHER=srun SOLVE_MPI_REPEATS=3 SOLVE_MPI_RUNTIME_S=300 SOLVE_MPI_STAGNATION_EPOCHS=0 SOLVE_MPI_MIN_REL_IMPROVEMENT=0.001 SOLVE_BATCH_ID=weak_mpi_c128_r4_t32_m4096 SOLVE_CSV_DIR=results/manual_campaign/weak_mpi/c128_r4_t32_m4096/csv SOLVE_SOLUTIONS_DIR=results/manual_campaign/weak_mpi/c128_r4_t32_m4096/solutions"
 ```
 
 Per il grafico weak finale usare i punti OpenMP da 1 a 32 core e i punti MPI
