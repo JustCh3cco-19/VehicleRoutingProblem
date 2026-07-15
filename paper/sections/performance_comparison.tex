@@ -38,6 +38,7 @@ The weak campaign fixes $n=8{,}000$ and 100 epochs while maintaining 32 ants per
 
 Runtime is $29.46\pm0.10$~s at one worker, remains between $25.47$ and $30.43$~s through 32 OpenMP workers, falls to $22.05\pm1.65$~s at 64, and rises to $33.87\pm1.70$~s at 128.  Weak efficiency is $1.16$ at 32, $1.34$ at 64, and $0.87$ at 128.  The 32-worker MPI control is $25.42\pm0.65$~s versus $25.47\pm0.44$~s for OpenMP, supporting continuity at the backend transition.  Unlike strong scaling, this campaign supplies 32 ants per worker, so the coarse-grained loop remains populated as resources grow.  This directly explains why weak efficiency is much better than strong efficiency.  Ratios above one are consistent with amortization of fixed phase costs, but cache, scheduling, and hardware effects cannot be separated without profiling.
 
+\FloatBarrier
 \subsection{Sequential and CUDA size sweep}
 
 The size sweep covers sequential runs through $n=32{,}000$ and CUDA through $n=64{,}000$.  It is not a like-for-like speedup experiment: CUDA uses $m=256$, while the sequential population varies from 32 to 4, and both stop on stagnation or at 300 solver seconds.  Sequential runs hit the time limit from $n=2{,}000$ onward; CUDA hits it at $n=64{,}000$.  External times can exceed 300~s because initialization and finalization are outside the solver timer.
