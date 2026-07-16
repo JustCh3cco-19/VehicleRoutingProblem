@@ -25,8 +25,8 @@ Main architectural choices (aligned with internal technical docs):
 - **V3 excluded** from main runs: collaborative intra-ant parallelism introduces synchronization overhead that is not beneficial on general-purpose CPUs.
 
 Internal references:
-- [RoadmapOpenMP_MPI.md](docs/RoadmapOpenMP_MPI.md)
-- [v3_failure_analysis.md](docs/v3_failure_analysis.md)
+- [RoadmapOpenMP_MPI.md](docs/openmp-mpi/RoadmapOpenMP_MPI.md)
+- [v3_failure_analysis.md](docs/openmp-mpi/v3_failure_analysis.md)
 
 ## 3. Repository Structure
 
@@ -46,7 +46,11 @@ Operational tooling:
 - `tools/batch/` Slurm job scripts
 
 Technical documentation:
-- `docs/`
+- [Documentation index](docs/README.md)
+
+Research and historical implementations:
+- `experimental/exp_dist_calc/`
+- `experimental/experiments/`
 
 ## 4. Requirements
 
@@ -117,7 +121,7 @@ make exp_weak_hybrid
 ```
 
 Practical campaign pipeline:
-- details: [practical_experiment_campaign.md](docs/practical_experiment_campaign.md)
+- details: [practical_experiment_campaign.md](docs/experiments/practical_experiment_campaign.md)
 - aggregated data: `merged_by_run_backend/*.csv`
 - summary report: [REPORT.md](merged_by_run_backend/REPORT.md)
 

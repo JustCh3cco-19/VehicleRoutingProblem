@@ -95,3 +95,12 @@ merged_manifests_clean/
 
 # Extra local caches
 *.log
+
+# LaTeX intermediates generated for the backend documentation.
+# Keep docs/backends/spiegazione_backend.tex and its final PDF versioned.
+/docs/backends/spiegazione_backend.aux
+/docs/backends/spiegazione_backend.out
+/docs/backends/spiegazione_backend.toc
+/docs/backends/spiegazione_backend.fdb_latexmk
+/docs/backends/spiegazione_backend.fls
+/docs/backends/spiegazione_backend.synctex.gz
