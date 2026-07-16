@@ -25,8 +25,8 @@ Main architectural choices (aligned with internal technical docs):
 - **V3 excluded** from main runs: collaborative intra-ant parallelism introduces synchronization overhead that is not beneficial on general-purpose CPUs.
 
 Internal references:
-- [RoadmapOpenMP_MPI.md](docs/engineering/RoadmapOpenMP_MPI.md)
-- [v3_failure_analysis.md](docs/engineering/v3_failure_analysis.md)
+- [RoadmapOpenMP_MPI.md](docs/openmp-mpi/RoadmapOpenMP_MPI.md)
+- [v3_failure_analysis.md](docs/openmp-mpi/v3_failure_analysis.md)
 
 ## 3. Repository Structure
 
@@ -46,11 +46,11 @@ Operational tooling:
 - `tools/batch/` Slurm job scripts
 
 Technical documentation:
-- [architecture.md](docs/engineering/architecture.md)
-- [instance_generation.md](docs/usage/instance_generation.md)
-- [practical_experiment_campaign.md](docs/usage/practical_experiment_campaign.md)
-- [implementation_improvements.md](docs/engineering/implementation_improvements.md)
-- [structural_improvements.md](docs/engineering/structural_improvements.md)
+- [Documentation index](docs/README.md)
+
+Research and historical implementations:
+- `experimental/exp_dist_calc/`
+- `experimental/experiments/`
 
 ## 4. Requirements
 
@@ -124,19 +124,40 @@ make exp_weak_hybrid
 ```
 
 Practical campaign pipeline:
-- details: [practical_experiment_campaign.md](docs/usage/practical_experiment_campaign.md)
-- generated data: `results/practical_campaign/<tag>/...`
-- generated summaries: produced by `tools/python/summarize_practical_experiments.py`
+- details: [practical_experiment_campaign.md](docs/experiments/practical_experiment_campaign.md)
+- aggregated data: `merged_by_run_backend/*.csv`
+- summary report: [REPORT.md](merged_by_run_backend/REPORT.md)
 
-## 9. Results And Reports
+## 9. Results Summary (Current Campaign)
 
-Generated benchmark outputs should go under `results/`, which is ignored by git
-except for [results/README.md](results/README.md).
+Source: [merged_by_run_backend/REPORT.md](merged_by_run_backend/REPORT.md)
 
-Versioned reports live under:
-- [docs/reports/](docs/reports/)
+Coverage (`status=ok` rows):
+- `seq_performance`: 7
+- `cuda_performance`: 10
+- `openmp_strong`: 14
+- `mpi_strong`: 12
+- `hybrid_strong`: 13
+- `openmp_weak`: 6
+- `mpi_weak`: 6
+- `hybrid_weak`: 3
+- `seq_quality`: 11
+- `mpi_quality`: 16
+- `cuda_quality`: 30
 
-## 10. Plot Reproduction
+Key findings:
+- **OpenMP strong:** best average tradeoff at `4` threads (with variation at largest size).
+- **MPI strong:** best average configuration at `2` ranks.
+- **Hybrid strong:** best average configuration `4x4` (ranks x threads) on available data.
+- **CUDA vs SEQ:** CUDA is faster on all overlapping sizes, observed speedup ~`2.87x`–`111.21x`.
+
+Generated plots:
+- `merged_by_run_backend/plots/strong_*`
+- `merged_by_run_backend/plots/weak_*`
+- `merged_by_run_backend/plots/seq_vs_cuda_elapsed.png`
+- `merged_by_run_backend/plots/quality_*`
+
+## 10. Report/Plot Reproduction
 
 Regenerate plots from aggregated CSV files:
 

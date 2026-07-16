@@ -5,7 +5,7 @@
 #SBATCH --time=00:30:00
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=32
-#SBATCH --mem=16G
+#SBATCH --mem=32G
 #SBATCH --qos=students_limit
 
 set -euo pipefail

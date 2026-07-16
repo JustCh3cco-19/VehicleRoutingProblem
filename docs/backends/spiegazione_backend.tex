@@ -1,0 +1,351 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[italian]{babel}
+\usepackage{lmodern}
+\usepackage[a4paper,margin=2.3cm]{geometry}
+\usepackage{microtype}
+\usepackage{amsmath}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{hyperref}
+\usepackage{enumitem}
+\usepackage{fancyhdr}
+
+\definecolor{accent}{HTML}{245B78}
+\definecolor{codebg}{HTML}{F4F6F8}
+\hypersetup{colorlinks=true,linkcolor=accent,urlcolor=accent}
+\setlist{nosep,leftmargin=*}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{5pt}
+\pagestyle{fancy}
+\setlength{\headheight}{14pt}
+\fancyhf{}
+\lhead{ACO per CVRP}
+\rhead{Analisi dei backend}
+\cfoot{\thepage}
+\lstset{basicstyle=\ttfamily\small,backgroundcolor=\color{codebg},frame=single,
+  rulecolor=\color{codebg},breaklines=true,columns=fullflexible}
+
+\title{\textbf{Implementazione ACO per il CVRP}\\
+\large Backend sequenziale, OpenMP--MPI e CUDA}
+\author{VehicleRoutingProblem --- documentazione tecnica}
+\date{16 luglio 2026}
+
+\begin{document}
+\maketitle
+\tableofcontents
+\newpage
+
+\section{Obiettivo e algoritmo comune}
+
+Il progetto risolve il \emph{Capacitated Vehicle Routing Problem} (CVRP): dati un
+deposito, $n$ clienti, $K$ veicoli e una capacità per veicolo, bisogna costruire
+$K$ percorsi che partano e terminino al deposito, visitino tutti i clienti una
+sola volta e minimizzino la distanza complessiva.
+
+I tre backend impiegano \emph{Ant Colony Optimization} (ACO). Ogni formica
+costruisce una soluzione scegliendo il prossimo cliente $j$ a partire dal nodo
+$i$ con peso
+\[
+  w_{ij}=\tau_{ij}^{\alpha}\eta_{ij}^{\beta},
+  \qquad \eta_{ij}=\frac{1}{d_{ij}},
+\]
+dove $\tau$ è il feromone, $\eta$ l'informazione euristica basata sulla distanza,
+$\alpha$ controlla l'influenza del feromone e $\beta$ quella della distanza.
+La scelta è probabilistica, tramite roulette-wheel selection.
+
+Al termine di un'epoca si conserva la soluzione migliore, si applica
+l'evaporazione
+\[
+  \tau_{ij}\leftarrow(1-\rho)\tau_{ij},
+\]
+e si deposita feromone sugli archi migliori, tipicamente in quantità
+proporzionale a $Q/L$, dove $L$ è il costo della soluzione. I parametri usati
+dalla CLI sono $\alpha=1$, $\beta=2$, $\rho=0.5$, $\tau_0=1$ e $Q=1$.
+
+L'esecuzione può arrestarsi per timeout o per un numero configurabile di epoche
+senza miglioramento significativo. Le direttive sono lette dalle variabili
+\texttt{ACO\_SOLVER\_TIMEOUT\_SECONDS},
+\texttt{ACO\_SOLVER\_STAGNATION\_EPOCHS} e
+\texttt{ACO\_SOLVER\_MIN\_REL\_IMPROVEMENT}.
+
+\section{Codice e librerie condivise}
+
+Le implementazioni riusano i componenti in \texttt{src/common}:
+\begin{itemize}
+  \item \texttt{instance\_parser}: lettura delle istanze VRP/TSPLIB e delle coordinate;
+  \item \texttt{matrix}: allocazione e rilascio della matrice delle distanze;
+  \item \texttt{solution}: rappresentazione, copia e valutazione delle rotte;
+  \item \texttt{aco\_shared}: generazione riproducibile dei seed e funzioni casuali.
+\end{itemize}
+
+Le librerie C principali sono \texttt{math.h} (collegata con \texttt{-lm}),
+\texttt{stdint.h}, \texttt{float.h}, \texttt{stdlib.h} e \texttt{time.h}.
+OpenMP aggiunge \texttt{omp.h}, MPI \texttt{mpi.h}; CUDA usa la runtime NVIDIA e
+i tipi definiti dal compilatore \texttt{nvcc}.
+
+\section{Backend sequenziale}
+
+Il sorgente principale è \texttt{src/seq/aco\_sequential.c}. Tutte le formiche
+sono costruite una dopo l'altra sul processore:
+\begin{lstlisting}
+per ogni epoca:
+    aggiorna gli score tau^alpha * eta^beta
+    per ogni formica:
+        costruisci K rotte rispettando la capacita
+        calcola il costo e conserva la migliore
+    evapora e deposita il feromone
+\end{lstlisting}
+
+\subsection{Costruzione della soluzione}
+
+Il workspace della formica contiene una soluzione riutilizzabile, il carico dei
+veicoli, lo stato del generatore casuale e una bitmask dei clienti visitati. Un
+cliente occupa un solo bit in un array di \texttt{uint64\_t}; il test avviene
+con la parola \texttt{node/64} e il bit \texttt{node\%64}. Ciò riduce memoria e
+traffico di cache rispetto a un array di interi.
+
+La struttura chiamata candidate list include, in questa versione, tutti gli
+$n$ clienti. Per ogni coppia utile vengono precalcolati l'indice del candidato e
+$\eta^\beta$; a ogni epoca viene aggiornato lo score $\tau^\alpha\eta^\beta$.
+La selezione scorre i clienti non visitati una prima volta per sommare gli score
+e una seconda volta per applicare la roulette. Se non esiste un peso valido,
+viene scelto il cliente non visitato più vicino.
+
+Durante la costruzione viene preservata capacità sufficiente per i veicoli
+successivi. In termini intuitivi, una rotta non assorbe clienti che saranno
+necessari per rendere completabili le rotte rimanenti.
+
+\subsection{Feromone e stagnazione}
+
+Il deposito assegna il 30\% del peso alla migliore soluzione dell'epoca e il
+70\% alla migliore globale. Il feromone è limitato tra \texttt{tau\_min} e
+\texttt{tau\_max}, secondo un comportamento simile a Max--Min Ant System. Dopo
+un periodo di stagnazione viene riavvicinato a $\tau_0$:
+\[
+  \tau_{ij}\leftarrow0.5\tau_{ij}+0.5\tau_0,
+\]
+così da aumentare nuovamente l'esplorazione.
+
+\subsection{Ottimizzazioni CPU e AVX2}
+
+Sono effettivamente presenti:
+\begin{itemize}
+  \item compilazione \texttt{-O3};
+  \item memoria allineata a 64 byte e padding delle righe;
+  \item puntatori \texttt{restrict}, utili all'analisi di aliasing del compilatore;
+  \item $\eta^\beta$ e score in \texttt{float}, feromone e costo in \texttt{double};
+  \item workspace riutilizzato, senza allocazioni nel ciclo delle formiche;
+  \item casi rapidi per esponenti 1, 2 e 0.5, evitando \texttt{pow};
+  \item bitset compatto per i clienti visitati.
+\end{itemize}
+
+Il codice contiene intrinsics AVX2 esplicite: \texttt{\_mm256\_i32gather\_pd}
+carica quattro valori sparsi di feromone, \texttt{\_mm256\_mul\_pd} esegue le
+moltiplicazioni e le conversioni trasformano i risultati tra \texttt{double} e
+\texttt{float}. Il percorso SIMD viene compilato soltanto se è definita
+\texttt{\_\_AVX2\_\_}. Il Makefile predefinito usa \texttt{-O3}, ma non abilita
+automaticamente AVX2. Si può usare:
+\begin{lstlisting}
+make clean
+make seq PERF_FLAGS="-mavx2 -mfma"
+# oppure, per la CPU locale:
+make seq PERF_FLAGS="-march=native"
+\end{lstlisting}
+\texttt{-march=native} può sfruttare ulteriori istruzioni della macchina, ma il
+binario risultante è meno portabile. Inoltre un gather sparso è normalmente meno
+efficiente di un caricamento vettoriale contiguo.
+
+\section{Backend ibrido OpenMP--MPI}
+
+Il sorgente è \texttt{src/openmp-mpi/aco\_parallel.c}. MPI distribuisce le
+formiche tra processi, anche su nodi distinti; OpenMP utilizza i core condivisi
+da ciascun rank. La compilazione usa \texttt{mpicc}, \texttt{-fopenmp},
+\texttt{-DUSE\_MPI}, \texttt{-O3} e \texttt{-lm}.
+
+MPI viene inizializzato con \texttt{MPI\_THREAD\_FUNNELED}: le chiamate MPI sono
+eseguite dal thread master, mentre gli altri thread lavorano con OpenMP.
+
+\subsection{Distribuzione MPI}
+
+Le formiche sono divise quasi uniformemente tra i rank. Ogni rank conserva una
+copia locale delle matrici, costruisce le proprie formiche con seed distinti e
+calcola il proprio minimo. \texttt{MPI\_Allreduce} con \texttt{MPI\_MIN}
+determina il miglior costo globale. Un altro Allreduce con \texttt{MPI\_MAX}
+propaga la richiesta di arresto, impedendo che un rank continui mentre gli altri
+sono terminati.
+
+Il codice sincronizza i depositi come modifiche sparse, non scambiando tutta la
+matrice $O(n^2)$. Ogni modifica contiene l'indice linearizzato dell'arco e un
+incremento \texttt{float}. Un tipo MPI personalizzato viene costruito con
+\texttt{MPI\_Type\_create\_struct}. I rank scambiano prima le cardinalità con
+\texttt{MPI\_Allgather}, poi i dati con \texttt{MPI\_Iallgatherv}. La richiesta
+non bloccante viene completata nell'epoca successiva con \texttt{MPI\_Wait}.
+La quantità comunicata è proporzionale agli archi della soluzione, circa
+$O(n+K)$, invece che agli elementi dell'intera matrice.
+
+\subsection{Parallelismo OpenMP}
+
+Una singola regione parallela persistente evita di ricreare il team a ogni
+epoca. \texttt{proc\_bind(close)} tende a collocare vicini i thread, favorendo
+la località di cache. Sono parallelizzati:
+\begin{itemize}
+  \item inizializzazione e conversione delle matrici;
+  \item costruzione delle liste dei candidati;
+  \item aggiornamento degli score;
+  \item costruzione delle formiche;
+  \item evaporazione della matrice;
+  \item deposito sugli archi migliori.
+\end{itemize}
+
+I loop regolari usano \texttt{schedule(static)}. Le formiche usano
+\texttt{schedule(runtime)}, configurabile tramite \texttt{OMP\_SCHEDULE}. Ogni
+thread possiede un workspace privato. Una breve regione \texttt{critical}
+riduce i migliori locali; \texttt{atomic} protegge aggiornamenti concorrenti del
+feromone e l'inserimento nel buffer sparso. Le barriere separano le fasi che
+dipendono dai risultati della fase precedente.
+
+\subsection{Cache, candidate list e bitmask gerarchica}
+
+Il programma legge, quando disponibile, la dimensione della cache L3 da Linux e
+sceglie il numero di candidati per far occupare a indici ed euristiche circa il
+70\% della L3:
+\[
+  k\approx\frac{0.7\,L3}{(n+1)\,8},\qquad16\leq k\leq512.
+\]
+Il working set passa così da $O(n^2)$ a $O(nk)$. Quando la lista locale non è
+sufficiente viene eseguito un fallback globale.
+
+I visitati sono organizzati su due livelli: L1 contiene un bit per cliente; L2
+indica quali parole L1 hanno ancora clienti disponibili. Le istruzioni generate
+da \texttt{\_\_builtin\_ctzll} individuano velocemente i bit attivi e permettono
+di saltare blocchi completamente visitati.
+
+Distanze, feromone ed euristiche sono prevalentemente \texttt{float}, con
+matrici contigue, righe allineate a 64 byte e stride con padding. Questo dimezza
+la memoria rispetto al \texttt{double}, migliora la cache e aumenta il possibile
+throughput SIMD.
+
+Nel backend principale non ci sono intrinsics AVX2 esplicite; i loop regolari
+possono però essere autovettorizzati da GCC. Anche qui AVX2 non è garantito dal
+Makefile di default e può essere richiesto con \texttt{PERF\_FLAGS=-mavx2} o
+\texttt{-march=native}.
+
+\section{Backend CUDA}
+
+La logica host è in \path{src/cuda/aco_cuda.cu}, mentre i kernel sono in
+\path{src/cuda/aco_cuda_kernels.cu}. La compilazione predefinita usa
+\texttt{nvcc -O3 -std=c++17 -arch=sm\_75}; l'architettura può essere cambiata,
+ad esempio con \texttt{make cuda CUDA\_ARCH=sm\_80}.
+
+\subsection{Un warp per formica}
+
+La scelta centrale è assegnare un warp di 32 thread a ogni formica. I lane del
+warp collaborano per valutare 32 candidati, calcolare somme e prefissi, estrarre
+il prossimo cliente ed eseguire il fallback globale.
+
+Sono usate primitive warp-level:
+\begin{itemize}
+  \item \texttt{\_\_shfl\_down\_sync} per le riduzioni;
+  \item \texttt{\_\_shfl\_up\_sync} per la somma prefissa;
+  \item \texttt{\_\_shfl\_sync} per i broadcast;
+  \item \texttt{\_\_ballot\_sync} e \texttt{\_\_ffs} per scegliere il lane valido;
+  \item \texttt{\_\_syncwarp} per la sincronizzazione interna.
+\end{itemize}
+Queste operazioni scambiano dati attraverso i registri, senza richiedere shared
+memory. La candidate list contiene 32 clienti, uno per lane, salvo istanze più
+piccole.
+
+\subsection{Feromone quantizzato e distanze on demand}
+
+La matrice del feromone usa un solo \texttt{uint8\_t} per arco. Il byte codifica
+logaritmicamente un valore tra $10^{-4}$ e $10^2$:
+\[
+  \tau=\exp(q\,\Delta+\log\tau_{\min}).
+\]
+Questo richiede un quarto della memoria di \texttt{float} e un ottavo di
+\texttt{double}, aumentando il numero di valori trasferiti per transazione.
+In scala logaritmica l'evaporazione moltiplicativa diventa approssimativamente
+una sottrazione intera saturata, molto economica sull'intera matrice. Il costo è
+una precisione inferiore e discretizzata.
+
+La GPU non memorizza la matrice completa delle distanze: conserva le coordinate
+come \texttt{float2} e calcola \texttt{sqrtf(dx*dx+dy*dy)} quando necessario.
+Si scambia quindi calcolo, abbondante sulla GPU, con traffico e capacità di
+memoria. La matrice quadratica del feromone rimane comunque allocata.
+
+\subsection{Bitset, layout e atomiche}
+
+Anche CUDA usa bitmask gerarchiche L1/L2 per i visitati. Le righe sono arrotondate
+a 128 byte. I percorsi sono disposti come \texttt{[step][ant]}, così formiche
+adiacenti accedono a indirizzi adiacenti; coordinate, candidate list e stati RNG
+sono mantenuti in array dedicati. Queste scelte favoriscono accessi coalescenti.
+
+Il deposito assegna un thread a ciascun veicolo. Poiché non esiste una normale
+atomica per il singolo byte in questa forma, \texttt{atomicMax\_uint8} aggiorna
+il byte con un ciclo \texttt{atomicCAS} sulla parola a 32 bit che lo contiene.
+
+\subsection{Sequenza dei kernel e trasferimenti}
+
+Ogni epoca esegue:
+\begin{enumerate}
+  \item reset dello stato delle formiche;
+  \item costruzione parallela delle soluzioni;
+  \item copia GPU--CPU dei sommari delle formiche;
+  \item selezione CPU della migliore formica;
+  \item eventuale copia del percorso migliore completo;
+  \item evaporazione del feromone;
+  \item deposito iteration-best con peso 30\%;
+  \item deposito global-best con peso 70\%.
+\end{enumerate}
+
+Il ciclo host contiene varie \texttt{cudaDeviceSynchronize} e copie sincrone.
+Questi punti possono incidere sulle istanze piccole. Riduzione del best sulla GPU,
+stream asincroni, memoria host pinned e CUDA Graphs sarebbero possibili sviluppi,
+ma non sono presenti nel codice corrente.
+
+\section{Confronto conclusivo}
+
+\small
+\begin{tabularx}{\textwidth}{@{}lXXX@{}}
+\toprule
+\textbf{Aspetto} & \textbf{Sequenziale} & \textbf{OpenMP--MPI} & \textbf{CUDA}\\
+\midrule
+Parallelismo & Formiche seriali & Formiche tra rank e thread & Un warp per formica\\
+Distanze & Matrice \texttt{double} & Matrice locale \texttt{float} & Coordinate \texttt{float2}, calcolo on demand\\
+Feromone & Matrice \texttt{double} & Matrice \texttt{float} per rank & Matrice logaritmica \texttt{uint8\_t}\\
+Candidati & Tutti gli $n$ & 16--512 adattati alla L3 & 32, uno per lane\\
+Visitati & Bitset L1 & Bitset L1/L2 & Bitset L1/L2\\
+SIMD & Intrinsics AVX2 condizionali & Autovettorizzazione possibile & Primitive SIMD del warp\\
+Sincronizzazione & Nessuna tra worker & barrier, critical, atomic, collettive MPI & warp sync, atomiche, sync CPU--GPU\\
+Comunicazione & Nessuna & Delta sparsi con \texttt{MPI\_Iallgatherv} & Copie CPU--GPU\\
+\bottomrule
+\end{tabularx}
+\normalsize
+
+In sintesi, il sequenziale è il riferimento CPU e include un percorso AVX2
+esplicito ma non abilitato automaticamente. OpenMP--MPI scala distribuendo
+formiche indipendenti e riduce il costo di cache e comunicazione con candidate
+list adattive e delta sparsi. CUDA riorganizza invece dati e algoritmo intorno
+all'hardware GPU: warp da 32 lane, shuffle nei registri, distanze calcolate al
+momento e feromone compresso a 8 bit.
+
+\section{Comandi di compilazione}
+\begin{lstlisting}
+make seq
+make openmp_mpi
+make cuda
+
+# CPU locale con ISA disponibile sulla macchina
+make clean
+make seq PERF_FLAGS="-march=native"
+make openmp_mpi PERF_FLAGS="-march=native"
+
+# Target CUDA differente
+make cuda CUDA_ARCH=sm_80
+\end{lstlisting}
+
+\end{document}

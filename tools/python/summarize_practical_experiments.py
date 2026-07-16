@@ -11,6 +11,10 @@ import math
 from pathlib import Path
 from statistics import mean, pstdev
 
+MAX_NODES = 4
+MAX_CPUS_PER_TASK = 32
+MAX_TOTAL_CORES = 128
+
 
 def read_rows(path: Path) -> list[dict[str, str]]:
     if not path.exists():
@@ -38,7 +42,9 @@ def ival(text: str, default: int = 0) -> int:
         return default
 
 
-def summarize_scaling(rows: list[dict[str, str]], scale_mode: str) -> list[dict[str, str]]:
+def summarize_scaling(
+    rows: list[dict[str, str]], scale_mode: str, weak: bool = False
+) -> list[dict[str, str]]:
     ok = [r for r in rows if r.get("status") == "ok"]
     groups: dict[tuple[int, int, int], list[dict[str, str]]] = {}
 
@@ -46,6 +52,14 @@ def summarize_scaling(rows: list[dict[str, str]], scale_mode: str) -> list[dict[
         n = ival(r.get("n", "0"), 0)
         ranks = ival(r.get("mpi_ranks", "1"), 1)
         threads = ival(r.get("omp_threads", "1"), 1)
+        if (
+            ranks <= 0
+            or ranks > MAX_NODES
+            or threads <= 0
+            or threads > MAX_CPUS_PER_TASK
+            or ranks * threads > MAX_TOTAL_CORES
+        ):
+            continue
         groups.setdefault((n, ranks, threads), []).append(r)
 
     out: list[dict[str, str]] = []
@@ -59,9 +73,8 @@ def summarize_scaling(rows: list[dict[str, str]], scale_mode: str) -> list[dict[
 
         if scale_mode == "openmp":
             scale = threads
-        elif scale_mode == "mpi":
-            scale = ranks
         else:
+            # MPI and combined hybrid curves use total allocated CPU cores.
             scale = ranks * threads
 
         out.append(
@@ -91,10 +104,14 @@ def summarize_scaling(rows: list[dict[str, str]], scale_mode: str) -> list[dict[
         t = float(row["mean_s"])
         if t <= 0.0 or base_time <= 0.0:
             continue
-        speedup = base_time / t
+        time_ratio = base_time / t
         norm_scale = scale / base_scale if base_scale > 0.0 else math.nan
-        efficiency = speedup / norm_scale if norm_scale > 0.0 else math.nan
-        row["speedup"] = f"{speedup:.6f}"
+        efficiency = (
+            time_ratio
+            if weak
+            else time_ratio / norm_scale if norm_scale > 0.0 else math.nan
+        )
+        row["speedup"] = "" if weak else f"{time_ratio:.6f}"
         row["efficiency"] = f"{efficiency:.6f}"
     return out
 
@@ -301,19 +318,19 @@ def main() -> int:
     out_dir = root / "reports"
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    scaling_cfg: list[tuple[str, str, str, str]] = [
-        ("Strong OpenMP", "exp_strong_openmp_practical", "manifest_openmp_mpi_per_instance_results.csv", "openmp"),
-        ("Strong MPI", "exp_strong_mpi_practical", "manifest_openmp_mpi_per_instance_results.csv", "mpi"),
-        ("Strong Hybrid", "exp_strong_hybrid_practical", "manifest_openmp_mpi_per_instance_results.csv", "hybrid"),
-        ("Weak OpenMP", "exp_weak_openmp_practical", "manifest_openmp_mpi_per_instance_results.csv", "openmp"),
-        ("Weak MPI", "exp_weak_mpi_practical", "manifest_openmp_mpi_per_instance_results.csv", "mpi"),
-        ("Weak Hybrid", "exp_weak_hybrid_practical", "manifest_openmp_mpi_per_instance_results.csv", "hybrid"),
+    scaling_cfg: list[tuple[str, str, str, str, bool]] = [
+        ("Strong OpenMP", "exp_strong_openmp_practical", "manifest_openmp_mpi_per_instance_results.csv", "openmp", False),
+        ("Strong MPI (speedup relativo al punto a 32 core)", "exp_strong_mpi_practical", "manifest_openmp_mpi_per_instance_results.csv", "mpi", False),
+        ("Strong Combined (OpenMP + MPI)", "exp_strong_hybrid_practical", "manifest_openmp_mpi_per_instance_results.csv", "hybrid", False),
+        ("Weak OpenMP", "exp_weak_openmp_practical", "manifest_openmp_mpi_per_instance_results.csv", "openmp", True),
+        ("Weak MPI", "exp_weak_mpi_practical", "manifest_openmp_mpi_per_instance_results.csv", "mpi", True),
+        ("Weak Hybrid", "exp_weak_hybrid_practical", "manifest_openmp_mpi_per_instance_results.csv", "hybrid", True),
     ]
 
     scaling_summaries: dict[str, list[dict[str, str]]] = {}
-    for title, exp_dir, file_name, mode in scaling_cfg:
+    for title, exp_dir, file_name, mode, weak in scaling_cfg:
         rows = load_backend_rows(root, exp_dir, file_name)
-        summary = summarize_scaling(rows, mode)
+        summary = summarize_scaling(rows, mode, weak=weak)
         scaling_summaries[title] = summary
         if summary:
             write_csv(

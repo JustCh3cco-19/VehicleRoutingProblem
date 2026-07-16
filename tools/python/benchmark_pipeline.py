@@ -19,11 +19,15 @@ def run(cmd: list[str]) -> None:
 
 def main() -> int:
     p = argparse.ArgumentParser(description="Run benchmark and plots in one command.")
-    p.add_argument("--include-cuda", action="store_true", help="Include CUDA benchmark run.")
+    p.add_argument(
+        "--include-cuda",
+        action="store_true",
+        help="Include a fixed single-GPU comparison (not CUDA scaling).",
+    )
     p.add_argument("--repeats", type=int, default=3)
     p.add_argument("--warmups", type=int, default=1)
-    p.add_argument("--timeout-s", type=int, default=600)
-    p.add_argument("--output-dir", default="results/benchmark_pipeline")
+    p.add_argument("--timeout-s", type=int, default=300)
+    p.add_argument("--output-dir", default="reports")
     p.add_argument("--n", type=int, default=100)
     p.add_argument("--k", type=int, default=8)
     p.add_argument("--m", type=int, default=256)
@@ -32,9 +36,9 @@ def main() -> int:
     p.add_argument("--weak-k", type=int, default=8)
     p.add_argument("--weak-t", type=int, default=120)
     p.add_argument("--weak-ants-per-worker", type=int, default=64)
-    p.add_argument("--omp-threads", default="1,2,4,8")
+    p.add_argument("--omp-threads", default="1,2,4,8,16,32")
     p.add_argument("--mpi-ranks", default="1,2,4")
-    p.add_argument("--mpi-threads-per-rank", type=int, default=2)
+    p.add_argument("--mpi-threads-per-rank", type=int, default=32)
     p.add_argument("--sync-every", type=int, default=1)
     p.add_argument("--skip-build", action="store_true")
     args = p.parse_args()

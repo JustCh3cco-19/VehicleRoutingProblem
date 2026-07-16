@@ -13,6 +13,7 @@ Opzioni:
   --nodes N               Override numero nodi
   --ntasks N              Override numero task Slurm (MPI ranks allocabili)
   --cpus N                Override cpus-per-task
+  --mem SIZE              Memoria richiesta per nodo (es. 32G)
   --partition NAME        Override partizione
   --account NAME          Override account
   --qos NAME              Override qos (default nel job: students_limit)
@@ -43,6 +44,12 @@ has_nodes=0
 has_ntasks=0
 has_cpus=0
 has_gres=0
+time_value="00:30:00"
+nodes_value=""
+ntasks_value=""
+cpus_value=""
+gres_value=""
+mem_value=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -59,22 +66,31 @@ while [[ $# -gt 0 ]]; do
       shift 2
       ;;
     --time)
-      sbatch_args+=(--time "${2:-}")
+      time_value="${2:-}"
+      sbatch_args+=(--time "${time_value}")
       shift 2
       ;;
     --nodes)
-      sbatch_args+=(--nodes "${2:-}")
+      nodes_value="${2:-}"
+      sbatch_args+=(--nodes "${nodes_value}")
       has_nodes=1
       shift 2
       ;;
     --ntasks)
-      sbatch_args+=(--ntasks "${2:-}")
+      ntasks_value="${2:-}"
+      sbatch_args+=(--ntasks "${ntasks_value}")
       has_ntasks=1
       shift 2
       ;;
     --cpus)
-      sbatch_args+=(--cpus-per-task "${2:-}")
+      cpus_value="${2:-}"
+      sbatch_args+=(--cpus-per-task "${cpus_value}")
       has_cpus=1
+      shift 2
+      ;;
+    --mem)
+      mem_value="${2:-}"
+      sbatch_args+=(--mem "${mem_value}")
       shift 2
       ;;
     --partition)
@@ -90,7 +106,8 @@ while [[ $# -gt 0 ]]; do
       shift 2
       ;;
     --gres)
-      sbatch_args+=(--gres "${2:-}")
+      gres_value="${2:-}"
+      sbatch_args+=(--gres "${gres_value}")
       has_gres=1
       shift 2
       ;;
@@ -106,6 +123,70 @@ while [[ $# -gt 0 ]]; do
       echo "[ERROR] opzione non riconosciuta: $1"
       usage
       exit 2
+      ;;
+  esac
+done
+
+if [[ ! "${time_value}" =~ ^([0-9]+):([0-5][0-9]):([0-5][0-9])$ ]]; then
+  echo "[ERROR] formato --time non valido: ${time_value} (atteso HH:MM:SS)"
+  exit 2
+fi
+time_seconds=$((10#${BASH_REMATCH[1]} * 3600 + 10#${BASH_REMATCH[2]} * 60 + 10#${BASH_REMATCH[3]}))
+if (( time_seconds > 1800 )); then
+  echo "[ERROR] la policy consente al massimo --time 00:30:00"
+  exit 2
+fi
+if [[ -n "${nodes_value}" ]] && { [[ ! "${nodes_value}" =~ ^[1-9][0-9]*$ ]] || (( nodes_value > 4 )); }; then
+  echo "[ERROR] --nodes deve essere compreso tra 1 e 4"
+  exit 2
+fi
+if [[ -n "${ntasks_value}" ]] && { [[ ! "${ntasks_value}" =~ ^[1-9][0-9]*$ ]] || (( ntasks_value > 4 )); }; then
+  echo "[ERROR] --ntasks deve essere compreso tra 1 e 4"
+  exit 2
+fi
+if [[ -n "${cpus_value}" ]] && { [[ ! "${cpus_value}" =~ ^[1-9][0-9]*$ ]] || (( cpus_value > 32 )); }; then
+  echo "[ERROR] --cpus deve essere compreso tra 1 e 32"
+  exit 2
+fi
+if [[ -n "${mem_value}" ]]; then
+  if [[ ! "${mem_value}" =~ ^([1-9][0-9]*)([GgMm])$ ]]; then
+    echo "[ERROR] formato --mem non valido: usare G o M (es. 32G)"
+    exit 2
+  fi
+  mem_amount="${BASH_REMATCH[1]}"
+  mem_unit="${BASH_REMATCH[2]}"
+  if { [[ "${mem_unit^^}" == "G" ]] && (( mem_amount > 32 )); } || \
+     { [[ "${mem_unit^^}" == "M" ]] && (( mem_amount > 32768 )); }; then
+    echo "[ERROR] la memoria massima richiedibile è 32G per nodo"
+    exit 2
+  fi
+fi
+if [[ -n "${gres_value}" && "${gres_value}" != "gpu:1" ]]; then
+  echo "[ERROR] è consentita una sola GPU: usare --gres gpu:1"
+  exit 2
+fi
+
+for make_token in ${make_args}; do
+  make_key="${make_token%%=*}"
+  make_value="${make_token#*=}"
+  case "${make_key}" in
+    SOLVE_MPI_RANKS)
+      if [[ ! "${make_value}" =~ ^[1-9][0-9]*$ ]] || (( make_value > 4 )); then
+        echo "[ERROR] SOLVE_MPI_RANKS deve essere compreso tra 1 e 4"
+        exit 2
+      fi
+      ;;
+    SOLVE_MPI_OMP_THREADS)
+      if [[ ! "${make_value}" =~ ^[1-9][0-9]*$ ]] || (( make_value > 32 )); then
+        echo "[ERROR] SOLVE_MPI_OMP_THREADS deve essere compreso tra 1 e 32"
+        exit 2
+      fi
+      ;;
+    SOLVE_SEQ_RUNTIME_S|SOLVE_MPI_RUNTIME_S|SOLVE_CUDA_RUNTIME_S)
+      if [[ ! "${make_value}" =~ ^[1-9][0-9]*$ ]] || (( make_value > 300 )); then
+        echo "[ERROR] ${make_key} deve essere compreso tra 1 e 300 secondi"
+        exit 2
+      fi
       ;;
   esac
 done

@@ -26,6 +26,10 @@ from typing import Any
 
 ELAPSED_RE = re.compile(r"elapsed:\s*([0-9]*\.?[0-9]+)")
 COST_RE = re.compile(r"best cost:\s*([0-9]*\.?[0-9]+)")
+MAX_NODES = 4
+MAX_CPUS_PER_TASK = 32
+MAX_TOTAL_CORES = 128
+MAX_TIMEOUT_S = 300
 
 
 def parse_int_list(text: str, name: str) -> list[int]:
@@ -178,10 +182,15 @@ def summarize(raw_rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 row["speedup"] = ""
                 row["efficiency"] = ""
                 continue
-            speedup = baseline_time / float(row["mean_s"])
+            time_ratio = baseline_time / float(row["mean_s"])
             normalized_scale = scale / baseline_scale
-            efficiency = speedup / normalized_scale if normalized_scale > 0.0 else 0.0
-            row["speedup"] = speedup
+            is_weak = str(row["experiment"]).endswith("_weak")
+            efficiency = (
+                time_ratio
+                if is_weak
+                else time_ratio / normalized_scale if normalized_scale > 0.0 else 0.0
+            )
+            row["speedup"] = "" if is_weak else time_ratio
             row["efficiency"] = efficiency
 
     summary_rows.sort(key=lambda r: (r["experiment"], int(r["scale"])))
@@ -229,7 +238,10 @@ def build_report(
     lines.append(f"- MPI ranks tested: {args.mpi_ranks}")
     lines.append(f"- MPI threads per rank: {args.mpi_threads_per_rank}")
     lines.append(f"- MPI sync_every: {args.sync_every}")
-    lines.append(f"- CUDA benchmark included: {'yes' if args.include_cuda else 'no'}")
+    lines.append(
+        f"- CUDA fixed single-GPU comparison included (not scaling): "
+        f"{'yes' if args.include_cuda else 'no'}"
+    )
     lines.append("")
 
     lines.append("## Aggregated Results")
@@ -324,7 +336,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Run scaling benchmarks for VRP ACO.")
     parser.add_argument("--repeats", type=int, default=3, help="Measured runs per configuration.")
     parser.add_argument("--warmups", type=int, default=1, help="Warmup runs per configuration.")
-    parser.add_argument("--timeout-s", type=int, default=600, help="Timeout per run (seconds).")
+    parser.add_argument("--timeout-s", type=int, default=300, help="Timeout per run (seconds).")
     parser.add_argument("--output-dir", default="reports", help="Directory for generated reports.")
 
     parser.add_argument("--n", type=int, default=100, help="Strong-scaling customers.")
@@ -342,18 +354,24 @@ def main() -> int:
         help="Weak-scaling ants per worker (rank*thread).",
     )
 
-    parser.add_argument("--omp-threads", default="1,2,4,8", help="Comma-separated OpenMP thread counts.")
+    parser.add_argument("--omp-threads", default="1,2,4,8,16,32", help="Comma-separated OpenMP thread counts.")
     parser.add_argument("--mpi-ranks", default="1,2,4", help="Comma-separated MPI ranks.")
-    parser.add_argument("--mpi-threads-per-rank", type=int, default=2, help="OpenMP threads per MPI rank.")
+    parser.add_argument("--mpi-threads-per-rank", type=int, default=32, help="Fixed OpenMP threads per MPI rank.")
     parser.add_argument("--sync-every", type=int, default=1, help="MPI pheromone sync period.")
 
     parser.add_argument("--skip-build", action="store_true", help="Skip make targets before benchmarking.")
-    parser.add_argument("--include-cuda", action="store_true", help="Include CUDA strong-scaling run.")
+    parser.add_argument(
+        "--include-cuda",
+        action="store_true",
+        help="Include one fixed single-GPU comparison; CUDA is excluded from scaling curves.",
+    )
 
     args = parser.parse_args()
 
     if args.repeats <= 0 or args.warmups < 0:
         raise ValueError("repeats must be > 0 and warmups must be >= 0")
+    if args.timeout_s <= 0 or args.timeout_s > MAX_TIMEOUT_S:
+        raise ValueError(f"timeout-s must be in the range 1..{MAX_TIMEOUT_S}")
     if args.n <= 0 or args.k <= 0 or args.m <= 0 or args.t <= 0:
         raise ValueError("strong scaling parameters must be > 0")
     if args.weak_n <= 0 or args.weak_k <= 0 or args.weak_t <= 0:
@@ -367,6 +385,14 @@ def main() -> int:
 
     omp_threads = parse_int_list(args.omp_threads, "omp_threads")
     mpi_ranks = parse_int_list(args.mpi_ranks, "mpi_ranks")
+    if max(omp_threads) > MAX_CPUS_PER_TASK:
+        raise ValueError(f"OpenMP threads cannot exceed {MAX_CPUS_PER_TASK}")
+    if max(mpi_ranks) > MAX_NODES:
+        raise ValueError(f"MPI ranks/nodes cannot exceed {MAX_NODES}")
+    if args.mpi_threads_per_rank > MAX_CPUS_PER_TASK:
+        raise ValueError(f"MPI threads per rank cannot exceed {MAX_CPUS_PER_TASK}")
+    if max(mpi_ranks) * args.mpi_threads_per_rank > MAX_TOTAL_CORES:
+        raise ValueError(f"total MPI+OpenMP cores cannot exceed {MAX_TOTAL_CORES}")
     args.omp_threads = ",".join(str(v) for v in omp_threads)
     args.mpi_ranks = ",".join(str(v) for v in mpi_ranks)
 
@@ -518,7 +544,7 @@ def main() -> int:
 
     if args.include_cuda:
         append_case(
-            experiment="cuda_strong",
+            experiment="cuda_fixed",
             backend="cuda",
             cmd=[
                 "./aco_vrp_cuda",

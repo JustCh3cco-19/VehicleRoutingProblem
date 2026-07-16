@@ -9,10 +9,9 @@ v1_data = {
     "TimePerIter_ms": [3.27, 4.70, 24.59, 93.38, 366.23]
 }
 
-# Carica V2 e V3 dai CSV generati.
-base_dir = Path("results/analysis/cuda_performance")
-v2_results = pd.read_csv(base_dir / "v2" / "results.csv")
-v3_results = pd.read_csv(base_dir / "v3" / "results.csv")
+# Carica V2 e V3 dai CSV
+v2_results = pd.read_csv("docs/cuda/performance/v2/results.csv")
+v3_results = pd.read_csv("docs/cuda/performance/v3/results.csv")
 
 plt.figure(figsize=(12, 7))
 
@@ -38,7 +37,6 @@ plt.annotate(f"{v2_results['TimePerIter_ms'].iloc[-1]:.1f}ms", (1000, v2_results
 plt.annotate(f"{v3_results['TimePerIter_ms'].iloc[-1]:.1f}ms", (1000, v3_results["TimePerIter_ms"].iloc[-1]), textcoords="offset points", xytext=(0,10), ha='center', color='green', weight='bold')
 
 plt.tight_layout()
-base_dir.mkdir(parents=True, exist_ok=True)
-output_path = base_dir / "comparison_scaling_plot.png"
+output_path = "docs/cuda/performance/comparison_scaling_plot.png"
 plt.savefig(output_path)
 print(f"Comparison plot saved to {output_path}")

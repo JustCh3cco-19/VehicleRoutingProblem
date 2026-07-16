@@ -1,0 +1,4 @@
+name,profile,instance_path,n,K,m,solver_seed,instance_seed,layout_id,run_id,status,elapsed_s,max_rss_gb,best_cost,error
+n8000_k8_s19004,generated,instances/test_aligned/n8000_k8_s19004.vrp,8000,8,16,1234,19004,grid100,1,ok,306.48,1.672363,55304.000,
+n8000_k8_s19004,generated,instances/test_aligned/n8000_k8_s19004.vrp,8000,8,16,1235,19004,grid100,2,ok,306.91,1.672363,55823.870,
+n8000_k8_s19004,generated,instances/test_aligned/n8000_k8_s19004.vrp,8000,8,16,1236,19004,grid100,3,ok,306.34,1.672363,55887.430,

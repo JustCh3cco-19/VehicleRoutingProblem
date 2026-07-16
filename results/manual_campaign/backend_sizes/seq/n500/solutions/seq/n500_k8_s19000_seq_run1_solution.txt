@@ -1,0 +1,77 @@
+[progress][seq] epoca=1 | epoche_rimanenti_prima_stop=500 | tempo_trascorso=0.0s | tempo_rimanente=300.0s | best_cost=7568.073
+[progress][seq] epoca=3 | epoche_rimanenti_prima_stop=500 | tempo_trascorso=0.1s | tempo_rimanente=299.9s | best_cost=7540.063
+[progress][seq] epoca=4 | epoche_rimanenti_prima_stop=500 | tempo_trascorso=0.2s | tempo_rimanente=299.8s | best_cost=7090.149
+[progress][seq] epoca=5 | epoche_rimanenti_prima_stop=500 | tempo_trascorso=0.2s | tempo_rimanente=299.8s | best_cost=6741.015
+[progress][seq] epoca=6 | epoche_rimanenti_prima_stop=500 | tempo_trascorso=0.2s | tempo_rimanente=299.8s | best_cost=5857.712
+[progress][seq] epoca=7 | epoche_rimanenti_prima_stop=500 | tempo_trascorso=0.3s | tempo_rimanente=299.7s | best_cost=5801.237
+[progress][seq] epoca=8 | epoche_rimanenti_prima_stop=500 | tempo_trascorso=0.3s | tempo_rimanente=299.7s | best_cost=5733.713
+[progress][seq] epoca=9 | epoche_rimanenti_prima_stop=500 | tempo_trascorso=0.3s | tempo_rimanente=299.7s | best_cost=5460.302
+[progress][seq] epoca=10 | epoche_rimanenti_prima_stop=499 | tempo_trascorso=0.4s | tempo_rimanente=299.6s | best_cost=5460.302
+[progress][seq] epoca=20 | epoche_rimanenti_prima_stop=489 | tempo_trascorso=0.8s | tempo_rimanente=299.2s | best_cost=5460.302
+[progress][seq] epoca=30 | epoche_rimanenti_prima_stop=479 | tempo_trascorso=1.2s | tempo_rimanente=298.8s | best_cost=5460.302
+[progress][seq] epoca=31 | epoche_rimanenti_prima_stop=500 | tempo_trascorso=1.2s | tempo_rimanente=298.8s | best_cost=5350.251
+[progress][seq] epoca=40 | epoche_rimanenti_prima_stop=491 | tempo_trascorso=1.5s | tempo_rimanente=298.5s | best_cost=5350.251
+[progress][seq] epoca=50 | epoche_rimanenti_prima_stop=481 | tempo_trascorso=1.9s | tempo_rimanente=298.1s | best_cost=5350.251
+[progress][seq] epoca=60 | epoche_rimanenti_prima_stop=471 | tempo_trascorso=2.3s | tempo_rimanente=297.7s | best_cost=5350.251
+[progress][seq] epoca=61 | epoche_rimanenti_prima_stop=500 | tempo_trascorso=2.3s | tempo_rimanente=297.7s | best_cost=5190.296
+[progress][seq] epoca=70 | epoche_rimanenti_prima_stop=491 | tempo_trascorso=2.7s | tempo_rimanente=297.3s | best_cost=5190.296
+[progress][seq] epoca=80 | epoche_rimanenti_prima_stop=481 | tempo_trascorso=3.1s | tempo_rimanente=296.9s | best_cost=5190.296
+[progress][seq] epoca=90 | epoche_rimanenti_prima_stop=471 | tempo_trascorso=3.4s | tempo_rimanente=296.6s | best_cost=5190.296
+[progress][seq] epoca=100 | epoche_rimanenti_prima_stop=461 | tempo_trascorso=3.8s | tempo_rimanente=296.2s | best_cost=5190.296
+[progress][seq] epoca=110 | epoche_rimanenti_prima_stop=451 | tempo_trascorso=4.2s | tempo_rimanente=295.8s | best_cost=5190.296
+[progress][seq] epoca=120 | epoche_rimanenti_prima_stop=441 | tempo_trascorso=4.6s | tempo_rimanente=295.4s | best_cost=5190.296
+[progress][seq] epoca=130 | epoche_rimanenti_prima_stop=431 | tempo_trascorso=5.0s | tempo_rimanente=295.0s | best_cost=5190.296
+[progress][seq] epoca=140 | epoche_rimanenti_prima_stop=421 | tempo_trascorso=5.4s | tempo_rimanente=294.6s | best_cost=5190.296
+[progress][seq] epoca=150 | epoche_rimanenti_prima_stop=411 | tempo_trascorso=5.7s | tempo_rimanente=294.3s | best_cost=5190.296
+[progress][seq] epoca=160 | epoche_rimanenti_prima_stop=401 | tempo_trascorso=6.1s | tempo_rimanente=293.9s | best_cost=5190.296
+[progress][seq] epoca=170 | epoche_rimanenti_prima_stop=391 | tempo_trascorso=6.5s | tempo_rimanente=293.5s | best_cost=5190.296
+[progress][seq] epoca=180 | epoche_rimanenti_prima_stop=381 | tempo_trascorso=6.9s | tempo_rimanente=293.1s | best_cost=5190.296
+[progress][seq] epoca=190 | epoche_rimanenti_prima_stop=371 | tempo_trascorso=7.3s | tempo_rimanente=292.7s | best_cost=5190.296
+[progress][seq] epoca=200 | epoche_rimanenti_prima_stop=361 | tempo_trascorso=7.7s | tempo_rimanente=292.3s | best_cost=5190.296
+[progress][seq] epoca=210 | epoche_rimanenti_prima_stop=351 | tempo_trascorso=8.1s | tempo_rimanente=291.9s | best_cost=5190.296
+[progress][seq] epoca=220 | epoche_rimanenti_prima_stop=341 | tempo_trascorso=8.4s | tempo_rimanente=291.6s | best_cost=5190.296
+[progress][seq] epoca=230 | epoche_rimanenti_prima_stop=331 | tempo_trascorso=8.8s | tempo_rimanente=291.2s | best_cost=5190.296
+[progress][seq] epoca=240 | epoche_rimanenti_prima_stop=321 | tempo_trascorso=9.2s | tempo_rimanente=290.8s | best_cost=5190.296
+[progress][seq] epoca=250 | epoche_rimanenti_prima_stop=311 | tempo_trascorso=9.6s | tempo_rimanente=290.4s | best_cost=5190.296
+[progress][seq] epoca=260 | epoche_rimanenti_prima_stop=301 | tempo_trascorso=10.0s | tempo_rimanente=290.0s | best_cost=5190.296
+[progress][seq] epoca=270 | epoche_rimanenti_prima_stop=291 | tempo_trascorso=10.4s | tempo_rimanente=289.6s | best_cost=5190.296
+[progress][seq] epoca=280 | epoche_rimanenti_prima_stop=281 | tempo_trascorso=10.7s | tempo_rimanente=289.3s | best_cost=5190.296
+[progress][seq] epoca=290 | epoche_rimanenti_prima_stop=271 | tempo_trascorso=11.1s | tempo_rimanente=288.9s | best_cost=5190.296
+[progress][seq] epoca=300 | epoche_rimanenti_prima_stop=261 | tempo_trascorso=11.5s | tempo_rimanente=288.5s | best_cost=5190.296
+[progress][seq] epoca=310 | epoche_rimanenti_prima_stop=251 | tempo_trascorso=11.9s | tempo_rimanente=288.1s | best_cost=5190.296
+[progress][seq] epoca=320 | epoche_rimanenti_prima_stop=241 | tempo_trascorso=12.3s | tempo_rimanente=287.7s | best_cost=5190.296
+[progress][seq] epoca=330 | epoche_rimanenti_prima_stop=231 | tempo_trascorso=12.7s | tempo_rimanente=287.3s | best_cost=5190.296
+[progress][seq] epoca=340 | epoche_rimanenti_prima_stop=221 | tempo_trascorso=13.0s | tempo_rimanente=287.0s | best_cost=5190.296
+[progress][seq] epoca=350 | epoche_rimanenti_prima_stop=211 | tempo_trascorso=13.4s | tempo_rimanente=286.6s | best_cost=5190.296
+[progress][seq] epoca=360 | epoche_rimanenti_prima_stop=201 | tempo_trascorso=13.8s | tempo_rimanente=286.2s | best_cost=5190.296
+[progress][seq] epoca=370 | epoche_rimanenti_prima_stop=191 | tempo_trascorso=14.2s | tempo_rimanente=285.8s | best_cost=5190.296
+[progress][seq] epoca=380 | epoche_rimanenti_prima_stop=181 | tempo_trascorso=14.6s | tempo_rimanente=285.4s | best_cost=5190.296
+[progress][seq] epoca=390 | epoche_rimanenti_prima_stop=171 | tempo_trascorso=15.0s | tempo_rimanente=285.0s | best_cost=5190.296
+[progress][seq] epoca=400 | epoche_rimanenti_prima_stop=161 | tempo_trascorso=15.4s | tempo_rimanente=284.6s | best_cost=5190.296
+[progress][seq] epoca=410 | epoche_rimanenti_prima_stop=151 | tempo_trascorso=15.7s | tempo_rimanente=284.3s | best_cost=5190.296
+[progress][seq] epoca=420 | epoche_rimanenti_prima_stop=141 | tempo_trascorso=16.1s | tempo_rimanente=283.9s | best_cost=5190.296
+[progress][seq] epoca=430 | epoche_rimanenti_prima_stop=131 | tempo_trascorso=16.5s | tempo_rimanente=283.5s | best_cost=5190.296
+[progress][seq] epoca=440 | epoche_rimanenti_prima_stop=121 | tempo_trascorso=16.9s | tempo_rimanente=283.1s | best_cost=5190.296
+[progress][seq] epoca=450 | epoche_rimanenti_prima_stop=111 | tempo_trascorso=17.3s | tempo_rimanente=282.7s | best_cost=5190.296
+[progress][seq] epoca=460 | epoche_rimanenti_prima_stop=101 | tempo_trascorso=17.7s | tempo_rimanente=282.3s | best_cost=5190.296
+[progress][seq] epoca=470 | epoche_rimanenti_prima_stop=91 | tempo_trascorso=18.0s | tempo_rimanente=282.0s | best_cost=5190.296
+[progress][seq] epoca=480 | epoche_rimanenti_prima_stop=81 | tempo_trascorso=18.4s | tempo_rimanente=281.6s | best_cost=5190.296
+[progress][seq] epoca=490 | epoche_rimanenti_prima_stop=71 | tempo_trascorso=18.8s | tempo_rimanente=281.2s | best_cost=5190.296
+[progress][seq] epoca=500 | epoche_rimanenti_prima_stop=61 | tempo_trascorso=19.2s | tempo_rimanente=280.8s | best_cost=5190.296
+[progress][seq] epoca=510 | epoche_rimanenti_prima_stop=51 | tempo_trascorso=19.6s | tempo_rimanente=280.4s | best_cost=5190.296
+[progress][seq] epoca=520 | epoche_rimanenti_prima_stop=41 | tempo_trascorso=20.0s | tempo_rimanente=280.0s | best_cost=5190.296
+[progress][seq] epoca=530 | epoche_rimanenti_prima_stop=31 | tempo_trascorso=20.4s | tempo_rimanente=279.6s | best_cost=5190.296
+[progress][seq] epoca=540 | epoche_rimanenti_prima_stop=21 | tempo_trascorso=20.7s | tempo_rimanente=279.3s | best_cost=5190.296
+[progress][seq] epoca=550 | epoche_rimanenti_prima_stop=11 | tempo_trascorso=21.1s | tempo_rimanente=278.9s | best_cost=5190.296
+[progress][seq] epoca=560 | epoche_rimanenti_prima_stop=1 | tempo_trascorso=21.5s | tempo_rimanente=278.5s | best_cost=5190.296
+[progress][seq] epoca=561 | epoche_rimanenti_prima_stop=0 | tempo_trascorso=21.5s | tempo_rimanente=0.0s | best_cost=5190.296
+Route 1:
+Route 2: 6 237 384 406 173 257 95 262 171 374 380 168 91 369 293 432 172 392 162 23 346 423 303 121 476 50 38 244 434 89 68 472 64 397 264 217 221 66 372 493 333 361 330 99 177 446 419 317 383 417
+Route 3: 202 422 143 431 494 159 298 189 345 399 336 75 235 229 358 437 302 12 322 51 86 387 265 464 292 224 375 2 123 206 65 498 242 80 294 348 59 157 353 362 167 286 53 169 251 477 395 307 203 335 137 211 270 228 312 320 359 360 182 418 163 63 470 365 491 364 341 377 82 188 252 288 471 227 481
+Route 4: 450 236 79 175 442 194 453 105 218 176 76 463 70 22 289 316 260 276 149 184 449 243 74 329 332 385 376 492 103 347 1 438 210 78 199 81 403 19 468 156 96 405 461 15 310 140 408 249 253 368 285 343 223 100 109 428 104 155 49 474 225 139 4 197 193 93 331 213 200 161 94 290 55 145 144
+Route 5: 111 174 33 393 226 230 462 254 219 266 112 440 351 247 460 192 58 201 127 36 165 407 386 71 487 273 344 141 327 125 319 382 370 37 205 324 8 367 122 150 27 186 170 69 433 454 326 239 46 47 473 441 415 311 20 250 435 328 214 179 391 480 496 41 60 349 209 396 25 117 40 153 98 323 355
+Route 6: 459 97 196 18 306 334 275 500 240 339 429 304 274 338 436 426 282 28 128 284 352 466 124 305 420 486 39 231 427 129 126 45 451 10 373 444 478 7 497 340 154 295 458 208 215 357 416 5 207 475 484 314 106 356 409 452 87 77 278 390 482 241 297 402 160 456 272 212 261 246 281 166 469 448 412
+Route 7: 32 84 17 134 148 269 102 73 180 308 490 72 455 216 389 489 108 83 130 198 388 287 299 3 147 35 342 245 263 146 291 271 443 31 430 151 101 158 119 24 232 9 256 424 234 118 178 90 337 42 410 120 164 54 421 187 220 133 499 315 138 309 131 267 479 61 255 136 11 181 67 413 48 29 313
+Route 8: 467 85 43 233 366 280 318 488 400 222 190 13 398 88 142 62 14 495 483 110 414 394 152 300 411 404 283 204 258 57 56 381 350 363 183 447 279 485 52 114 44 135 248 113 277 238 34 16 26 116 371 107 268 379 195 321 92 354 325 115 457 401 425 465 132 445 439 259 191 378 296 30 21 301 185
+Cost: 5190.296
+best cost: 5190.296

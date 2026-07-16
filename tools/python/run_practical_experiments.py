@@ -19,6 +19,15 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
+MAX_NODES = 4
+MAX_CPUS_PER_TASK = 32
+MAX_TOTAL_CORES = MAX_NODES * MAX_CPUS_PER_TASK
+MAX_RUNTIME_S = 300
+DEFAULT_OPENMP_THREADS = "1,2,4,8,16,32"
+DEFAULT_MPI_RANKS = "1,2,4"
+DEFAULT_COMBINED_STRONG_PAIRS = "1x1,1x2,1x4,1x8,1x16,1x32,2x32,4x32"
+DEFAULT_WEAK_HYBRID_PAIRS = "1x32,2x32,4x32"
+
 
 @dataclass(frozen=True)
 class ManifestRow:
@@ -68,6 +77,50 @@ def parse_rank_thread_pairs(text: str, field_name: str) -> list[tuple[int, int]]
     if not pairs:
         raise ValueError(f"{field_name} cannot be empty")
     return pairs
+
+
+def validate_resource_limits(
+    openmp_threads: list[int],
+    mpi_rank_values: list[int],
+    combined_pairs: list[tuple[int, int]],
+    weak_hybrid_pairs: list[tuple[int, int]],
+    mpi_thread_values: list[int],
+) -> None:
+    if max(openmp_threads) > MAX_CPUS_PER_TASK:
+        raise ValueError(
+            f"OpenMP threads exceed max cpus-per-task={MAX_CPUS_PER_TASK}: "
+            f"{openmp_threads}"
+        )
+    if max(mpi_rank_values) > MAX_NODES:
+        raise ValueError(
+            f"MPI ranks/nodes exceed max nodes={MAX_NODES}: {mpi_rank_values}"
+        )
+    for threads in mpi_thread_values:
+        if threads > MAX_CPUS_PER_TASK:
+            raise ValueError(
+                f"MPI OpenMP threads exceed max cpus-per-task={MAX_CPUS_PER_TASK}: "
+                f"{threads}"
+            )
+    for field_name, pairs in (
+        ("combined_strong_pairs", combined_pairs),
+        ("weak_hybrid_pairs", weak_hybrid_pairs),
+    ):
+        for ranks, threads in pairs:
+            total_cores = ranks * threads
+            if ranks > MAX_NODES:
+                raise ValueError(
+                    f"{field_name}: {ranks} ranks exceed max nodes={MAX_NODES}"
+                )
+            if threads > MAX_CPUS_PER_TASK:
+                raise ValueError(
+                    f"{field_name}: {threads} threads exceed max "
+                    f"cpus-per-task={MAX_CPUS_PER_TASK}"
+                )
+            if total_cores > MAX_TOTAL_CORES:
+                raise ValueError(
+                    f"{field_name}: {ranks}x{threads}={total_cores} exceeds "
+                    f"max total cores={MAX_TOTAL_CORES}"
+                )
 
 
 def load_manifest(path: Path) -> dict[int, ManifestRow]:
@@ -138,13 +191,21 @@ def main() -> int:
     parser.add_argument("--launcher", choices=["auto", "mpirun", "srun"], default="mpirun")
 
     parser.add_argument("--strong-n", type=int, default=16000)
-    parser.add_argument("--weak-base-n", type=int, default=2000)
-    parser.add_argument("--openmp-threads", default="1,2,4,8,16,32")
-    parser.add_argument("--mpi-ranks", default="1,2,4")
+    parser.add_argument("--weak-base-n", type=int, default=1000)
+    parser.add_argument("--openmp-threads", default=DEFAULT_OPENMP_THREADS)
+    parser.add_argument("--mpi-ranks", default=DEFAULT_MPI_RANKS)
     parser.add_argument(
         "--hybrid-pairs",
-        default="1x32,2x16,4x8",
-        help="Comma-separated rank-thread pairs (e.g. 1x32,2x16,4x8)",
+        default=DEFAULT_COMBINED_STRONG_PAIRS,
+        help=(
+            "Combined strong-scaling curve as RxT pairs. Default: "
+            "1x1,1x2,1x4,1x8,1x16,1x32,2x32,4x32"
+        ),
+    )
+    parser.add_argument(
+        "--weak-hybrid-pairs",
+        default=DEFAULT_WEAK_HYBRID_PAIRS,
+        help="Weak hybrid RxT pairs (default: 1x32,2x32,4x32)",
     )
 
     parser.add_argument("--seq-repeats", type=int, default=5)
@@ -152,20 +213,25 @@ def main() -> int:
     parser.add_argument("--quality-repeats", type=int, default=10)
     parser.add_argument("--cuda-repeats", type=int, default=5)
 
-    parser.add_argument("--runtime-s", type=int, default=0)
+    parser.add_argument("--runtime-s", type=int, default=300)
     parser.add_argument("--stagnation-epochs", type=int, default=500)
     parser.add_argument("--min-rel-improvement", type=str, default="0.001")
 
-    parser.add_argument("--mpi-strong-omp-threads", type=int, default=1)
-    parser.add_argument("--mpi-weak-omp-threads", type=int, default=1)
+    parser.add_argument("--mpi-strong-omp-threads", type=int, default=32)
+    parser.add_argument("--mpi-weak-omp-threads", type=int, default=32)
     parser.add_argument("--quality-clients", default="2000,8000,16000")
     parser.add_argument("--quality-openmp-threads", type=int, default=32)
     parser.add_argument("--quality-mpi-ranks", type=int, default=4)
-    parser.add_argument("--quality-mpi-threads", type=int, default=1)
-    parser.add_argument("--quality-hybrid", default="4x8")
+    parser.add_argument("--quality-mpi-threads", type=int, default=32)
+    parser.add_argument("--quality-hybrid", default="4x32")
 
     parser.add_argument("--cuda-variant", default="v6")
-    parser.add_argument("--cuda-clients", default="500,1000,2000,4000,8000,16000,32000")
+    parser.add_argument("--cuda-clients", default="500,1000,2000,4000,8000,16000,32000,64000")
+    parser.add_argument(
+        "--cuda-cpu-comparison-clients",
+        default="500,1000,2000,4000,8000,16000,32000",
+        help="CPU sizes used only for SEQ/OpenMP vs CUDA comparisons",
+    )
 
     parser.add_argument("--skip-build", action="store_true")
     parser.add_argument("--skip-cuda", action="store_true")
@@ -181,13 +247,34 @@ def main() -> int:
 
     if args.only_cuda_sections and args.skip_cuda:
         raise ValueError("--only-cuda-sections cannot be combined with --skip-cuda")
+    if args.runtime_s <= 0 or args.runtime_s > MAX_RUNTIME_S:
+        raise ValueError(f"runtime-s must be in the range 1..{MAX_RUNTIME_S}")
 
     openmp_threads = parse_int_csv(args.openmp_threads, "openmp_threads")
     mpi_ranks = parse_int_csv(args.mpi_ranks, "mpi_ranks")
     hybrid_pairs = parse_rank_thread_pairs(args.hybrid_pairs, "hybrid_pairs")
+    weak_hybrid_pairs = parse_rank_thread_pairs(
+        args.weak_hybrid_pairs, "weak_hybrid_pairs"
+    )
     quality_clients = parse_int_csv(args.quality_clients, "quality_clients")
     cuda_clients = parse_int_csv(args.cuda_clients, "cuda_clients")
+    cuda_cpu_comparison_clients = parse_int_csv(
+        args.cuda_cpu_comparison_clients, "cuda_cpu_comparison_clients"
+    )
     quality_hybrid_pair = parse_rank_thread_pairs(args.quality_hybrid, "quality_hybrid")[0]
+    validate_resource_limits(
+        openmp_threads,
+        [*mpi_ranks, args.quality_mpi_ranks, quality_hybrid_pair[0]],
+        hybrid_pairs,
+        weak_hybrid_pairs,
+        [
+            args.mpi_strong_omp_threads,
+            args.mpi_weak_omp_threads,
+            args.quality_openmp_threads,
+            args.quality_mpi_threads,
+            quality_hybrid_pair[1],
+        ],
+    )
 
     if not args.results_root:
         tag = dt.datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -210,8 +297,16 @@ def main() -> int:
 
     if args.only_cuda_sections:
         ensure_present("cuda_clients(cuda manifest)", cuda_clients, cuda_available)
-        ensure_present("cuda_clients(seq manifest)", cuda_clients, seq_available)
-        ensure_present("cuda_clients(mpi manifest)", cuda_clients, mpi_available)
+        ensure_present(
+            "cuda_cpu_comparison_clients(seq manifest)",
+            cuda_cpu_comparison_clients,
+            seq_available,
+        )
+        ensure_present(
+            "cuda_cpu_comparison_clients(mpi manifest)",
+            cuda_cpu_comparison_clients,
+            mpi_available,
+        )
         if not args.skip_quality:
             ensure_present("quality_clients(cuda manifest)", quality_clients, cuda_available)
     else:
@@ -223,7 +318,9 @@ def main() -> int:
         if not args.skip_weak:
             weak_openmp_clients = [args.weak_base_n * t for t in openmp_threads]
             weak_mpi_clients = [args.weak_base_n * r for r in mpi_ranks]
-            weak_hybrid_clients = [args.weak_base_n * r for r, _ in hybrid_pairs]
+            weak_hybrid_clients = [
+                args.weak_base_n * r for r, _ in weak_hybrid_pairs
+            ]
             ensure_present("weak_openmp_clients", weak_openmp_clients, mpi_available)
             ensure_present("weak_mpi_clients", weak_mpi_clients, mpi_available)
             ensure_present("weak_hybrid_clients", weak_hybrid_clients, mpi_available)
@@ -276,7 +373,7 @@ def main() -> int:
                 args.dry_run,
             )
 
-        # 3) Strong MPI (pure-MPI style with fixed OMP threads)
+        # 3) Strong MPI: 1/2/4 ranks, fixed 32 OpenMP threads per rank.
         for r in mpi_ranks:
             run_make(
                 "solve_mpi",
@@ -296,7 +393,7 @@ def main() -> int:
                 args.dry_run,
             )
 
-        # 4) Strong Hybrid (1x32, 2x16, 4x8 by default)
+        # 4) Combined strong curve: 1..32 cores on one node, then 64/128.
         for r, t in hybrid_pairs:
             run_make(
                 "solve_mpi",
@@ -358,8 +455,7 @@ def main() -> int:
                     args.dry_run,
                 )
 
-            for r, t in hybrid_pairs:
-                # Practical choice: scale with ranks, keeping the requested (r, t) combinations.
+            for r, t in weak_hybrid_pairs:
                 n_val = args.weak_base_n * r
                 run_make(
                     "solve_mpi",
@@ -397,12 +493,13 @@ def main() -> int:
             args.dry_run,
         )
 
+        comparison_clients_csv = clients_csv(cuda_cpu_comparison_clients)
         run_make(
             "solve_seq",
             {
                 **base_vars,
                 **solve_dirs(root, "exp_seq_vs_cuda_practical"),
-                "SOLVE_CLIENTS": cuda_clients_csv,
+                "SOLVE_CLIENTS": comparison_clients_csv,
                 "SOLVE_SEQ_REPEATS": str(args.cuda_repeats),
                 "SOLVE_SEQ_RUNTIME_S": str(args.runtime_s),
                 "SOLVE_SEQ_STAGNATION_EPOCHS": str(args.stagnation_epochs),
@@ -416,7 +513,7 @@ def main() -> int:
             {
                 **base_vars,
                 **solve_dirs(root, "exp_openmp_vs_cuda_practical"),
-                "SOLVE_CLIENTS": cuda_clients_csv,
+                "SOLVE_CLIENTS": comparison_clients_csv,
                 "SOLVE_MPI_RANKS": "1",
                 "SOLVE_MPI_OMP_THREADS": str(args.quality_openmp_threads),
                 "SOLVE_MPI_LAUNCHER": args.launcher,

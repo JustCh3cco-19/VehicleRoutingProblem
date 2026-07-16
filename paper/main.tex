@@ -1,0 +1,78 @@
+\documentclass[10pt,a4paper,twocolumn]{article}
+\usepackage[a4paper,margin=0.95in]{geometry}
+
+% Typography and layout
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{microtype}
+\usepackage{setspace}
+\usepackage{titlesec}
+
+% Core packages
+\usepackage{amsmath,amssymb}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{listings}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{placeins}
+\usepackage{balance}
+\usepackage{tikz-cd}
+\usepackage{hyperref}
+\usepackage{enumitem}
+\captionsetup{hypcap=false}
+
+% Paper-style spacing
+\setstretch{1.04}
+\setlength{\parindent}{1em}
+\setlength{\parskip}{0.25em}
+\setlength{\abovecaptionskip}{6pt}
+\setlength{\belowcaptionskip}{2pt}
+\setlength{\columnsep}{18pt}
+\setlist{topsep=3pt,itemsep=2pt,parsep=0pt,partopsep=0pt}
+\titlespacing*{\section}{0pt}{1.3ex plus .2ex minus .2ex}{0.6ex}
+\titlespacing*{\subsection}{0pt}{1.1ex plus .2ex minus .2ex}{0.4ex}
+\titlespacing*{\subsubsection}{0pt}{1.0ex plus .2ex minus .2ex}{0.3ex}
+\allowdisplaybreaks
+\raggedbottom
+\emergencystretch=1.5em
+\hfuzz=12pt
+\hbadness=10000
+\vbadness=10000
+
+\lstset{
+  basicstyle=\ttfamily\footnotesize,
+  breaklines=true,
+  breakatwhitespace=false,
+  columns=fullflexible,
+  keepspaces=true,
+  showstringspaces=false,
+  frame=single,
+  xleftmargin=0.25em,
+  xrightmargin=0.25em
+}
+
+\title{\textbf{Parallelization of an ACO Solver for the Constrained Vehicle Routing Problem}}
+\author{Francesco Zompanti (2012601)}
+\date{}
+
+\begin{document}
+\twocolumn[
+\begin{@twocolumnfalse}
+\maketitle
+\begin{abstract}
+I present sequential, OpenMP--MPI, and CUDA implementations of an Ant Colony Optimization solver for the Constrained Vehicle Routing Problem.  The final campaign uses three repetitions per point and validates every saved route.  On 100 fixed epochs at $n=32{,}000$, OpenMP reaches $2.76\times$ speedup at 32 threads, whereas the measured four-node MPI configuration is slower than its 32-worker baseline.  The complete weak curve retains $87\%$ efficiency at 128 workers relative to one.  CUDA reaches $n=64{,}000$, but unequal search budgets prevent a cross-backend speedup claim.  The limited strong-scaling efficiency and inconsistent printed costs in seven multi-rank outputs are reported explicitly.
+\end{abstract}
+
+\vspace{1em}
+\end{@twocolumnfalse}
+]
+
+\input{sections/introduction}
+\input{sections/openmp_mpi}
+\input{sections/cuda}
+\input{sections/performance_comparison}
+
+\end{document}

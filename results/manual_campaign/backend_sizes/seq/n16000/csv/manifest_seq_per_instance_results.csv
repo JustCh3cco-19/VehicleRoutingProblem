@@ -1,0 +1,4 @@
+name,profile,instance_path,n,K,m,solver_seed,instance_seed,layout_id,run_id,status,elapsed_s,max_rss_gb,best_cost,error
+n16000_k16_s19005,generated,instances/test_aligned/n16000_k16_s19005.vrp,16000,16,8,1234,19005,grid100,1,ok,310.00,6.682617,88153.363,
+n16000_k16_s19005,generated,instances/test_aligned/n16000_k16_s19005.vrp,16000,16,8,1235,19005,grid100,2,ok,310.31,6.682129,87871.013,
+n16000_k16_s19005,generated,instances/test_aligned/n16000_k16_s19005.vrp,16000,16,8,1236,19005,grid100,3,ok,309.93,6.682617,89251.113,

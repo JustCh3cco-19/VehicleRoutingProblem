@@ -1,0 +1,118 @@
+CUDA Solver starting... (N=2000, K=8, M=256)
+[progress][cuda] epoca=1 | epoche_rimanenti_prima_stop=500 | tempo_trascorso=0.0s | tempo_rimanente=300.0s | best_cost=7321.730
+[progress][cuda] epoca=5 | epoche_rimanenti_prima_stop=500 | tempo_trascorso=0.0s | tempo_rimanente=300.0s | best_cost=7309.310
+[progress][cuda] epoca=6 | epoche_rimanenti_prima_stop=500 | tempo_trascorso=0.0s | tempo_rimanente=300.0s | best_cost=7291.085
+[progress][cuda] epoca=7 | epoche_rimanenti_prima_stop=500 | tempo_trascorso=0.1s | tempo_rimanente=299.9s | best_cost=7007.561
+[progress][cuda] epoca=8 | epoche_rimanenti_prima_stop=500 | tempo_trascorso=0.1s | tempo_rimanente=299.9s | best_cost=6879.105
+[progress][cuda] epoca=9 | epoche_rimanenti_prima_stop=500 | tempo_trascorso=0.1s | tempo_rimanente=299.9s | best_cost=6638.603
+[progress][cuda] epoca=10 | epoche_rimanenti_prima_stop=500 | tempo_trascorso=0.1s | tempo_rimanente=299.9s | best_cost=6373.249
+[progress][cuda] epoca=11 | epoche_rimanenti_prima_stop=500 | tempo_trascorso=0.1s | tempo_rimanente=299.9s | best_cost=6119.502
+[progress][cuda] epoca=12 | epoche_rimanenti_prima_stop=500 | tempo_trascorso=0.1s | tempo_rimanente=299.9s | best_cost=5931.392
+[progress][cuda] epoca=13 | epoche_rimanenti_prima_stop=500 | tempo_trascorso=0.1s | tempo_rimanente=299.9s | best_cost=5860.330
+[progress][cuda] epoca=14 | epoche_rimanenti_prima_stop=500 | tempo_trascorso=0.1s | tempo_rimanente=299.9s | best_cost=5762.711
+[progress][cuda] epoca=17 | epoche_rimanenti_prima_stop=500 | tempo_trascorso=0.1s | tempo_rimanente=299.9s | best_cost=5649.742
+[progress][cuda] epoca=20 | epoche_rimanenti_prima_stop=497 | tempo_trascorso=0.1s | tempo_rimanente=299.9s | best_cost=5649.742
+[progress][cuda] epoca=26 | epoche_rimanenti_prima_stop=500 | tempo_trascorso=0.2s | tempo_rimanente=299.8s | best_cost=5569.786
+[progress][cuda] epoca=30 | epoche_rimanenti_prima_stop=496 | tempo_trascorso=0.2s | tempo_rimanente=299.8s | best_cost=5569.786
+[progress][cuda] epoca=39 | epoche_rimanenti_prima_stop=500 | tempo_trascorso=0.2s | tempo_rimanente=299.8s | best_cost=5450.355
+[progress][cuda] epoca=40 | epoche_rimanenti_prima_stop=499 | tempo_trascorso=0.2s | tempo_rimanente=299.8s | best_cost=5450.355
+[progress][cuda] epoca=50 | epoche_rimanenti_prima_stop=489 | tempo_trascorso=0.3s | tempo_rimanente=299.7s | best_cost=5450.355
+[progress][cuda] epoca=60 | epoche_rimanenti_prima_stop=479 | tempo_trascorso=0.3s | tempo_rimanente=299.7s | best_cost=5450.355
+[progress][cuda] epoca=65 | epoche_rimanenti_prima_stop=500 | tempo_trascorso=0.3s | tempo_rimanente=299.7s | best_cost=5386.932
+[progress][cuda] epoca=70 | epoche_rimanenti_prima_stop=495 | tempo_trascorso=0.4s | tempo_rimanente=299.6s | best_cost=5386.932
+[progress][cuda] epoca=80 | epoche_rimanenti_prima_stop=485 | tempo_trascorso=0.4s | tempo_rimanente=299.6s | best_cost=5386.932
+[progress][cuda] epoca=90 | epoche_rimanenti_prima_stop=475 | tempo_trascorso=0.5s | tempo_rimanente=299.5s | best_cost=5386.932
+[progress][cuda] epoca=100 | epoche_rimanenti_prima_stop=465 | tempo_trascorso=0.5s | tempo_rimanente=299.5s | best_cost=5386.932
+[progress][cuda] epoca=110 | epoche_rimanenti_prima_stop=455 | tempo_trascorso=0.5s | tempo_rimanente=299.5s | best_cost=5386.932
+[progress][cuda] epoca=120 | epoche_rimanenti_prima_stop=445 | tempo_trascorso=0.6s | tempo_rimanente=299.4s | best_cost=5386.932
+[progress][cuda] epoca=130 | epoche_rimanenti_prima_stop=435 | tempo_trascorso=0.6s | tempo_rimanente=299.4s | best_cost=5386.932
+[progress][cuda] epoca=140 | epoche_rimanenti_prima_stop=425 | tempo_trascorso=0.7s | tempo_rimanente=299.3s | best_cost=5386.932
+[progress][cuda] epoca=150 | epoche_rimanenti_prima_stop=415 | tempo_trascorso=0.7s | tempo_rimanente=299.3s | best_cost=5386.932
+[progress][cuda] epoca=152 | epoche_rimanenti_prima_stop=500 | tempo_trascorso=0.7s | tempo_rimanente=299.3s | best_cost=5363.432
+[progress][cuda] epoca=160 | epoche_rimanenti_prima_stop=492 | tempo_trascorso=0.8s | tempo_rimanente=299.2s | best_cost=5363.432
+[progress][cuda] epoca=170 | epoche_rimanenti_prima_stop=482 | tempo_trascorso=0.8s | tempo_rimanente=299.2s | best_cost=5363.432
+[progress][cuda] epoca=180 | epoche_rimanenti_prima_stop=472 | tempo_trascorso=0.8s | tempo_rimanente=299.2s | best_cost=5363.432
+[progress][cuda] epoca=190 | epoche_rimanenti_prima_stop=462 | tempo_trascorso=0.9s | tempo_rimanente=299.1s | best_cost=5363.432
+[progress][cuda] epoca=199 | epoche_rimanenti_prima_stop=453 | tempo_trascorso=0.9s | tempo_rimanente=299.1s | best_cost=5361.047
+[progress][cuda] epoca=200 | epoche_rimanenti_prima_stop=452 | tempo_trascorso=0.9s | tempo_rimanente=299.1s | best_cost=5361.047
+[progress][cuda] epoca=210 | epoche_rimanenti_prima_stop=442 | tempo_trascorso=1.0s | tempo_rimanente=299.0s | best_cost=5361.047
+[progress][cuda] epoca=220 | epoche_rimanenti_prima_stop=432 | tempo_trascorso=1.0s | tempo_rimanente=299.0s | best_cost=5361.047
+[progress][cuda] epoca=230 | epoche_rimanenti_prima_stop=422 | tempo_trascorso=1.1s | tempo_rimanente=298.9s | best_cost=5361.047
+[progress][cuda] epoca=231 | epoche_rimanenti_prima_stop=500 | tempo_trascorso=1.1s | tempo_rimanente=298.9s | best_cost=5335.037
+[progress][cuda] epoca=240 | epoche_rimanenti_prima_stop=491 | tempo_trascorso=1.1s | tempo_rimanente=298.9s | best_cost=5335.037
+[progress][cuda] epoca=243 | epoche_rimanenti_prima_stop=500 | tempo_trascorso=1.1s | tempo_rimanente=298.9s | best_cost=5328.149
+[progress][cuda] epoca=250 | epoche_rimanenti_prima_stop=493 | tempo_trascorso=1.2s | tempo_rimanente=298.8s | best_cost=5328.149
+[progress][cuda] epoca=260 | epoche_rimanenti_prima_stop=483 | tempo_trascorso=1.2s | tempo_rimanente=298.8s | best_cost=5328.149
+[progress][cuda] epoca=270 | epoche_rimanenti_prima_stop=473 | tempo_trascorso=1.2s | tempo_rimanente=298.8s | best_cost=5328.149
+[progress][cuda] epoca=280 | epoche_rimanenti_prima_stop=500 | tempo_trascorso=1.3s | tempo_rimanente=298.7s | best_cost=5320.442
+[progress][cuda] epoca=290 | epoche_rimanenti_prima_stop=490 | tempo_trascorso=1.3s | tempo_rimanente=298.7s | best_cost=5320.442
+[progress][cuda] epoca=300 | epoche_rimanenti_prima_stop=480 | tempo_trascorso=1.4s | tempo_rimanente=298.6s | best_cost=5320.442
+[progress][cuda] epoca=310 | epoche_rimanenti_prima_stop=470 | tempo_trascorso=1.4s | tempo_rimanente=298.6s | best_cost=5320.442
+[progress][cuda] epoca=320 | epoche_rimanenti_prima_stop=460 | tempo_trascorso=1.5s | tempo_rimanente=298.5s | best_cost=5320.442
+[progress][cuda] epoca=330 | epoche_rimanenti_prima_stop=450 | tempo_trascorso=1.5s | tempo_rimanente=298.5s | best_cost=5320.442
+[progress][cuda] epoca=332 | epoche_rimanenti_prima_stop=448 | tempo_trascorso=1.5s | tempo_rimanente=298.5s | best_cost=5319.824
+[progress][cuda] epoca=340 | epoche_rimanenti_prima_stop=440 | tempo_trascorso=1.6s | tempo_rimanente=298.4s | best_cost=5319.824
+[progress][cuda] epoca=347 | epoche_rimanenti_prima_stop=500 | tempo_trascorso=1.6s | tempo_rimanente=298.4s | best_cost=5294.980
+[progress][cuda] epoca=350 | epoche_rimanenti_prima_stop=497 | tempo_trascorso=1.6s | tempo_rimanente=298.4s | best_cost=5294.980
+[progress][cuda] epoca=358 | epoche_rimanenti_prima_stop=500 | tempo_trascorso=1.6s | tempo_rimanente=298.4s | best_cost=5265.716
+[progress][cuda] epoca=360 | epoche_rimanenti_prima_stop=498 | tempo_trascorso=1.6s | tempo_rimanente=298.4s | best_cost=5265.716
+[progress][cuda] epoca=370 | epoche_rimanenti_prima_stop=488 | tempo_trascorso=1.7s | tempo_rimanente=298.3s | best_cost=5265.716
+[progress][cuda] epoca=380 | epoche_rimanenti_prima_stop=478 | tempo_trascorso=1.7s | tempo_rimanente=298.3s | best_cost=5265.716
+[progress][cuda] epoca=390 | epoche_rimanenti_prima_stop=468 | tempo_trascorso=1.8s | tempo_rimanente=298.2s | best_cost=5265.716
+[progress][cuda] epoca=400 | epoche_rimanenti_prima_stop=458 | tempo_trascorso=1.8s | tempo_rimanente=298.2s | best_cost=5265.716
+[progress][cuda] epoca=410 | epoche_rimanenti_prima_stop=448 | tempo_trascorso=1.9s | tempo_rimanente=298.1s | best_cost=5265.716
+[progress][cuda] epoca=420 | epoche_rimanenti_prima_stop=438 | tempo_trascorso=1.9s | tempo_rimanente=298.1s | best_cost=5265.716
+[progress][cuda] epoca=430 | epoche_rimanenti_prima_stop=428 | tempo_trascorso=2.0s | tempo_rimanente=298.0s | best_cost=5265.716
+[progress][cuda] epoca=440 | epoche_rimanenti_prima_stop=418 | tempo_trascorso=2.0s | tempo_rimanente=298.0s | best_cost=5265.716
+[progress][cuda] epoca=450 | epoche_rimanenti_prima_stop=408 | tempo_trascorso=2.0s | tempo_rimanente=298.0s | best_cost=5265.716
+[progress][cuda] epoca=460 | epoche_rimanenti_prima_stop=398 | tempo_trascorso=2.1s | tempo_rimanente=297.9s | best_cost=5265.716
+[progress][cuda] epoca=470 | epoche_rimanenti_prima_stop=388 | tempo_trascorso=2.1s | tempo_rimanente=297.9s | best_cost=5265.716
+[progress][cuda] epoca=480 | epoche_rimanenti_prima_stop=378 | tempo_trascorso=2.2s | tempo_rimanente=297.8s | best_cost=5265.716
+[progress][cuda] epoca=490 | epoche_rimanenti_prima_stop=368 | tempo_trascorso=2.2s | tempo_rimanente=297.8s | best_cost=5265.716
+[progress][cuda] epoca=500 | epoche_rimanenti_prima_stop=358 | tempo_trascorso=2.3s | tempo_rimanente=297.7s | best_cost=5265.716
+[progress][cuda] epoca=510 | epoche_rimanenti_prima_stop=348 | tempo_trascorso=2.3s | tempo_rimanente=297.7s | best_cost=5265.716
+[progress][cuda] epoca=520 | epoche_rimanenti_prima_stop=338 | tempo_trascorso=2.3s | tempo_rimanente=297.7s | best_cost=5265.716
+[progress][cuda] epoca=530 | epoche_rimanenti_prima_stop=328 | tempo_trascorso=2.4s | tempo_rimanente=297.6s | best_cost=5265.716
+[progress][cuda] epoca=540 | epoche_rimanenti_prima_stop=318 | tempo_trascorso=2.4s | tempo_rimanente=297.6s | best_cost=5265.716
+[progress][cuda] epoca=550 | epoche_rimanenti_prima_stop=308 | tempo_trascorso=2.5s | tempo_rimanente=297.5s | best_cost=5265.716
+[progress][cuda] epoca=560 | epoche_rimanenti_prima_stop=298 | tempo_trascorso=2.5s | tempo_rimanente=297.5s | best_cost=5265.716
+[progress][cuda] epoca=570 | epoche_rimanenti_prima_stop=288 | tempo_trascorso=2.6s | tempo_rimanente=297.4s | best_cost=5265.716
+[progress][cuda] epoca=580 | epoche_rimanenti_prima_stop=278 | tempo_trascorso=2.6s | tempo_rimanente=297.4s | best_cost=5265.716
+[progress][cuda] epoca=590 | epoche_rimanenti_prima_stop=268 | tempo_trascorso=2.6s | tempo_rimanente=297.4s | best_cost=5265.716
+[progress][cuda] epoca=600 | epoche_rimanenti_prima_stop=258 | tempo_trascorso=2.7s | tempo_rimanente=297.3s | best_cost=5265.716
+[progress][cuda] epoca=610 | epoche_rimanenti_prima_stop=248 | tempo_trascorso=2.7s | tempo_rimanente=297.3s | best_cost=5265.716
+[progress][cuda] epoca=620 | epoche_rimanenti_prima_stop=238 | tempo_trascorso=2.8s | tempo_rimanente=297.2s | best_cost=5265.716
+[progress][cuda] epoca=630 | epoche_rimanenti_prima_stop=228 | tempo_trascorso=2.8s | tempo_rimanente=297.2s | best_cost=5265.716
+[progress][cuda] epoca=640 | epoche_rimanenti_prima_stop=218 | tempo_trascorso=2.9s | tempo_rimanente=297.1s | best_cost=5265.716
+[progress][cuda] epoca=650 | epoche_rimanenti_prima_stop=208 | tempo_trascorso=2.9s | tempo_rimanente=297.1s | best_cost=5265.716
+[progress][cuda] epoca=660 | epoche_rimanenti_prima_stop=198 | tempo_trascorso=2.9s | tempo_rimanente=297.1s | best_cost=5265.716
+[progress][cuda] epoca=670 | epoche_rimanenti_prima_stop=188 | tempo_trascorso=3.0s | tempo_rimanente=297.0s | best_cost=5265.716
+[progress][cuda] epoca=680 | epoche_rimanenti_prima_stop=178 | tempo_trascorso=3.0s | tempo_rimanente=297.0s | best_cost=5265.716
+[progress][cuda] epoca=690 | epoche_rimanenti_prima_stop=168 | tempo_trascorso=3.1s | tempo_rimanente=296.9s | best_cost=5265.716
+[progress][cuda] epoca=700 | epoche_rimanenti_prima_stop=158 | tempo_trascorso=3.1s | tempo_rimanente=296.9s | best_cost=5265.716
+[progress][cuda] epoca=710 | epoche_rimanenti_prima_stop=148 | tempo_trascorso=3.2s | tempo_rimanente=296.8s | best_cost=5265.716
+[progress][cuda] epoca=720 | epoche_rimanenti_prima_stop=138 | tempo_trascorso=3.2s | tempo_rimanente=296.8s | best_cost=5265.716
+[progress][cuda] epoca=730 | epoche_rimanenti_prima_stop=128 | tempo_trascorso=3.2s | tempo_rimanente=296.8s | best_cost=5265.716
+[progress][cuda] epoca=740 | epoche_rimanenti_prima_stop=118 | tempo_trascorso=3.3s | tempo_rimanente=296.7s | best_cost=5265.716
+[progress][cuda] epoca=750 | epoche_rimanenti_prima_stop=108 | tempo_trascorso=3.3s | tempo_rimanente=296.7s | best_cost=5265.716
+[progress][cuda] epoca=760 | epoche_rimanenti_prima_stop=98 | tempo_trascorso=3.4s | tempo_rimanente=296.6s | best_cost=5265.716
+[progress][cuda] epoca=770 | epoche_rimanenti_prima_stop=88 | tempo_trascorso=3.4s | tempo_rimanente=296.6s | best_cost=5265.716
+[progress][cuda] epoca=780 | epoche_rimanenti_prima_stop=78 | tempo_trascorso=3.5s | tempo_rimanente=296.5s | best_cost=5265.716
+[progress][cuda] epoca=790 | epoche_rimanenti_prima_stop=68 | tempo_trascorso=3.5s | tempo_rimanente=296.5s | best_cost=5265.716
+[progress][cuda] epoca=800 | epoche_rimanenti_prima_stop=58 | tempo_trascorso=3.5s | tempo_rimanente=296.5s | best_cost=5265.716
+[progress][cuda] epoca=810 | epoche_rimanenti_prima_stop=48 | tempo_trascorso=3.6s | tempo_rimanente=296.4s | best_cost=5265.716
+[progress][cuda] epoca=820 | epoche_rimanenti_prima_stop=38 | tempo_trascorso=3.6s | tempo_rimanente=296.4s | best_cost=5265.716
+[progress][cuda] epoca=830 | epoche_rimanenti_prima_stop=28 | tempo_trascorso=3.7s | tempo_rimanente=296.3s | best_cost=5265.716
+[progress][cuda] epoca=840 | epoche_rimanenti_prima_stop=18 | tempo_trascorso=3.7s | tempo_rimanente=296.3s | best_cost=5265.716
+[progress][cuda] epoca=850 | epoche_rimanenti_prima_stop=8 | tempo_trascorso=3.8s | tempo_rimanente=296.2s | best_cost=5265.716
+[progress][cuda] epoca=858 | epoche_rimanenti_prima_stop=0 | tempo_trascorso=3.8s | tempo_rimanente=0.0s | best_cost=5265.716
+Route 1:
+Route 2: 1124 1022 774 1482 1272 697 994 593 385 1145 810 1853 1203 1273 1018 1082 217 999 1844 1381 591 874 1678 354 11 1302 899 1323 266 390 1150 1276 409 1849 579 1581 125 826 1603 1452 454 1051 1656 132 1801 1686 309 1655 705 440 93 1854 232 1827 890 1352 480 850 1257 1322 1251 1023 1215 262 771 986 1745 450 293 446 641 764 1645 1155 62 1431 1143 1576 1962 464 888 935 1052 651 921 295 779 1976 1007 240 1380 302 1238 1003 4 27 103 1092 577 1361 827 1982 931 260 1747 851 1326 311 1487 326 545 904 173 1512 550 1974 1038 1586 1938 1260 1835 1740 1413 1337 1638 1373 678 797 1364 1516 721 775 668 967 1684 857 143 531 670 1320 96 778 1285 1577 241 952 1766 917 1653 1030 694 1063 382 206 736 285 49 1310 331 1396 214 881 1552 1611 1727 1790 1049 645 1777 658 1530 447 981 1312 1075 415 340 1589 1595 1436 433 209 201 614 211 1539 43 1759 1078 1308 413 1518 288 1585 957 544 976 1647 1716 106
+Route 3: 820 22 238 1889 735 1891 1809 878 689 559 1401 823 1422 487 783 1548 345 1248 733 1297 506 712 1943 543 1036 431 666 1451 1665 812 1935 1542 1090 1698 1229 682 1599 852 1240 621 2 525 224 1483 1358 741 264 768 198 483 1243 1662 1503 1130 1481 1356 230 256 1227 1474 728 158 1912 568 1026 67 1053 936 1822 1693 165 298 157 838 138 848 172 554 581 1857 1679 365 1925 65 258 1515 1668 825 197 386 1644 1654 616 144 1525 471 1070 147 611 1211 33 348 461 1649 1888 1591 1949 1580 535 1885 975 177 1476 944 1159 1289 1815 1106 189 1923 16 1468 1409 1000 282 322 1295 1622 1140 492 233 1950 1997 840 17 932 1973 1712 150 958 875 598 491 136 1942 1916 107 305 1277 432 452 1758 202 590 622 1970 1198 961 1132 1556 1388 711 267 1709 1232 1386 789 277 346 1222 1011 76 522 371 1872 1128 1305 1763 1421 626 894 1710 1748 862 1441 1957 490 31 1192 1025 488 569 863 402 681 145 130 1522 199 20 227 1972 868 1148 902 1788 1955 1527 236 542 1634 366 460 553 1204 344 1870 1167 1027 494 78 674 462 1856 1920 1407 1252 1929 920 949 225 1793 1738 1437 442 1367 466 1572 780 411 455 1172 1826 918 1671 869 1304 941 830 1841 1265 1535 1898 249 19 1627 788 3 911 220 510 1094 1183 301 660 465 170 121 1604 1964 1166 739 1884 934 403 879 847 1449 1643 1158 817 1131 900 1623 730 1986 317 507 620 753 1338 1107 310 1904 1225 1559 1110 1123 1545 1095
+Route 4: 895 1505 1127 299 1618 1798 94 1099 512 650 1537 980 1465 128 263 237 1233 656 304 1733 893 186 191 1447 1523 1455 297 289 754 1862 85 1615 142 661 1005 1467 716 1239 939 1284 1359 1470 243 992 1930 300 1741 200 292 1231 1811 134 1749 272 179 1701 336 709 400 1111 119 1160 215 1385 46 171 105 383 977 343 896 1860 815 539 763 685 1410 169 589 1778 1557 1739 1806 1521 1661 178 541 1067 1136 657 1760 71 418 956 1946 111 1121 1382 1736 1360 1006 1235 746 858 1340 1602 1368 707 1596 1726 821 1756 131 55 1061 28 1828 77 993 1274 1584 60 565 1959 700 1346 1549 1393 1147 950 427 90 1122 766 960 1646 1169 1460 749 1590 353 1298 1802 523 160 1937 648 859 495 699 1194 257 363 109 1398 988 1391 1876 476 148 683 1279 1699 1411 1473 606 1782 416 1163 1895 1173 1170 1983 1666 532 1475 575 608 719 1113 445 1271 1430 1096 1453 1705 1214 1269 687 695 1504 587 73 607 880 796 1221 1419 271 1142 1571 1924 338 1392 1650 1084 1984 945 92 1818 1119 580 1626 1174 1137 334 72 970 1954 137 52 1224 1605 546 1874 1 979 161 837 486 1066 634 9 1999 725 887 1207 1936 673 1021 1157 2000 280 776 425 187 1339 1966 729 364 846 1088 1517 947 1694 422 514 1582 1348 891 207 482 677 1813 628 922 1951 692 1711 800 1375 843 799 618 1688 526 983 996 1762 479 470 1952 279 434 1480 503 758 750 1588 1420 153 253 35 1291 1188 807 451 1270 713 1416
+Route 5: 562 938 1062 842 367 561 1814 268 438 948 1403 156 1947 1659 174 1286 48 1723 1637 1365 29 1933 927 1254 928 828 1387 909 1734 990 1040 1479 1625 865 1301 1329 1632 1493 1965 833 984 412 1785 527 737 5 1687 1882 573 1850 537 722 181 1185 1606 702 1932 866 1463 1871 113 1757 183 745 30 1492 100 53 1907 1890 473 50 1324 478 1834 457 519 1855 940 1184 273 704 567 1450 1151 1780 58 1275 536 1704 1041 399 659 374 1245 89 518 275 1153 306 1457 1218 1592 1069 643 1189 1561 1715 1250 731 1200 1439 1520 978 570 1877 328 1004 777 726 1438 974 693 1601 86 831 10 1089 816 1883 1985 814 1519 252 1628 69 1663 1060 638 1551 1547 1819 747 15 686 1804 982 1961 1309 1560 1928 724 995 1168 1287 910 744 435 1764 882 384 1673 294 1773 1681 1138 727 632 646 1676 47 1842 497 1444 1887 1867 1064 154 903 34 1639 502 1775 706 1290 576 1908 54 375 1485 205 1085 855 395 1280 1362 629 1246 1228 906 1394 352 234 1583 6 392 1195 1852 1838 1345 1176 1725 377 791 1342 339 1443 1864 1635 538 1115 690 1497 630 804 167 1103 12 1024 1350 1511 1633 175 194 319 475 1129 1015 325 1800 110 782 615 1031 806 23 601 1104 203 1264 516 410 68 1566 698 1575 1978 1598 1412 122 989 1370 610 584 968 333 1219 1213 1206 962 228 1797 832 320 1507 1940 32 70 180 1035 971 1351 1914 1330 133 942 398 755 1448 597 372 1732 1180 1631 1042 790 720 303 1313 21
+Route 6: 759 117 805 714 308 603 329 1486 765 1196 1706 1779 1319 924 684 1803 286 1179 703 1117 1335 1573 484 83 675 1879 822 889 1753 972 1770 798 324 1980 449 533 767 321 1001 226 439 1608 414 1847 1331 1971 710 18 923 1462 1953 1377 332 1435 37 1900 560 973 1417 436 80 1175 1861 1514 743 1074 1349 563 14 1283 1700 231 1620 854 1502 182 1948 356 1059 1186 429 244 1774 1317 877 192 88 1796 1805 1378 361 254 168 448 1794 1249 342 453 672 1808 1541 586 358 1426 481 290 1979 1558 1680 1843 1926 1669 1553 919 208 1220 991 216 1296 370 1369 1823 664 908 1267 1009 844 314 1977 1327 841 1355 654 1993 1102 964 315 547 1752 1944 1156 795 1768 369 1707 1306 1821 1783 1126 1307 1456 313 1253 1208 1509 1609 1772 36 613 600 612 871 1869 742 379 459 1432 549 1829 1055 1574 773 245 1255 1193 1281 864 930 1998 1472 734 1729 407 772 635 1629 1513 296 1685 839 1532 1658 1433 1048 701 1967 188 1913 1968 901 1181 24 605 1429 61 625 405 915 781 1765 444 38 1212 1057 1343 1640 963 1708 270 1402 1667 1859 1100 873 969 1612 1241 1073 1812 913 1114 1578 872 1262 637 1799 1919 1405 1787 242 691 284 219 1045 1963 1911 102 1534 1529 428 477 496 582 335 1642 1321 1002 1187 1899 196 1336 1636 222 193 548 1614 732 861 1488 1792 255 1570 1703 1990 1690 381 1683 259 1868 1247 1016 530 1569 1390 327 1674 135 330 59 1610 1161 1728 819 397 785 212 617 769 1989 468
+Route 7: 1120 1083 529 1831 517 740 762 1406 1675 1992 1282 99 391 1028 1981 1909 1164 1423 1344 696 341 786 1880 1494 723 40 1165 540 1754 905 671 104 360 1442 1259 1660 1190 520 1641 787 7 1866 98 1278 515 1742 1133 1077 1478 1288 1389 1043 1689 166 347 680 1593 1664 1902 1498 129 1737 1540 602 401 359 1550 1379 528 1464 81 426 378 1087 1807 676 430 1144 1182 1418 1050 1058 1624 396 149 552 1425 1109 437 898 1840 1223 1910 583 1341 1607 1017 813 1722 1477 1915 1735 351 916 578 1261 1202 1568 631 1428 925 1714 1458 458 959 845 417 511 1776 760 357 1987 39 951 663 1353 770 84 1384 870 1533 1795 1893 185 140 596 1256 1921 954 1445 223 1332 965 1076 1918 818 1325 588 1112 424 41 1268 564 1594 56 1731 1816 265 1459 1846 1226 860 114 489 1894 1210 1047 1068 803 688 1033 1587 1651 291 1293 1427 1730 127 184 1135 1616 126 1454 1789 566 1071 594 498 1562 1524 752 849 1154 829 1761 793 1837 521 1044 350 51 1713 151 1149 1836 1510 1311 649 1400 571 1565 1579 667 1839 1958 1266 493 1234 1139 665 885 79 1404 485 287 1101 926 1767 708 443 278 1162 853 1863 876 1941 585 946 499 640 362 1491 1363 155 1258 1991 1702 204 653 1081 1408 1621 123 1717 1508 261 213 892 116 662 627 1383 884 1897 1817 1969 1781 368 1873 1354 1600 1125 97 1469 1010 406 423 738 557 809 556 1619 592 966 1141 1209 572 834 1294 1657 404 1217 1917 1875 1751 751 669 718 1216 1820
+Route 8: 1065 748 1376 1414 1878 1496 1086 1554 1440 1939 1108 1333 1744 95 1316 66 1721 1201 1236 987 784 679 1334 1178 159 1434 163 474 1495 1029 1371 112 1347 1597 757 195 408 1824 1922 1695 1526 794 914 1746 26 1555 250 63 124 1988 467 524 1197 1931 108 387 1366 1784 152 389 867 283 1769 1506 642 1328 1682 1244 376 647 500 1536 221 1014 1771 1374 1054 1896 715 74 886 1372 1199 595 985 953 251 1415 75 907 802 82 1851 1046 1543 1995 1093 1315 1960 1471 929 1079 141 1116 1546 1008 513 1848 1905 504 1098 1318 120 1903 1237 1424 349 472 897 87 574 1718 955 101 761 997 239 1865 1303 1845 393 1177 210 64 619 1886 835 555 1032 316 1648 801 636 1397 57 836 373 1786 1056 190 1446 1697 1500 25 318 1563 323 551 599 509 456 998 534 756 604 388 1484 1399 1242 1825 943 505 1171 45 1833 1901 1975 652 933 115 1670 1531 1564 1755 1630 1037 312 912 1134 1672 463 1490 1956 218 1696 469 856 307 276 235 1300 1567 639 419 633 1299 394 1020 1461 1499 337 501 1692 229 355 42 1072 1489 1466 644 1652 1080 1743 1501 246 176 508 1881 380 1146 558 1927 717 1230 162 164 1906 274 1719 1528 441 655 1039 1314 1830 139 1858 1105 609 1613 1791 1191 8 1091 824 118 1357 883 1395 248 1724 1152 1544 811 13 421 1019 1205 1538 1012 808 1097 269 792 624 1691 146 1945 1677 1810 91 281 1617 1750 1720 1263 1013 420 623 1832 1996 44 1994 937 1934 247 1892 1118 1292 1034
+Cost: 5265.716
+best cost: 5265.716

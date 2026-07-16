@@ -1,0 +1,27 @@
+\section{CUDA Implementation}
+
+The CUDA backend changes both representation and work mapping to fit a single GPU.  The host parser transfers an $O(n)$ array of \texttt{float2} coordinates, and device code computes Euclidean distances on demand.  This avoids the additional dense distance matrix used by the CPU implementations.  The pheromone matrix remains dense but is log-quantized to one byte per edge, reducing its storage from four or eight bytes per entry to one.
+
+\subsection{Warp-per-ant construction}
+
+One warp cooperates on each ant.  Its lanes score candidate customers, use warp reductions and prefix operations for probabilistic selection, and fall back to a global scan when the candidate list is exhausted.  Visited state is represented by hierarchical bit masks.  Route construction and cost evaluation remain on the device, while only summaries and a selected final solution need to cross the host--device boundary.
+
+The mapping trades additional lane cooperation for regular GPU execution.  Candidate arrays are contiguous, and warp shuffles exchange values without block-wide barriers.  Evaporation applies saturated subtraction to the quantized pheromone matrix.  Deposit kernels update packed 8-bit values through a 32-bit \texttt{atomicCAS} loop, since native byte-wide atomics are unavailable for this operation.
+
+\subsection{Rejected CUDA designs}
+
+The first GPU design exposed four main problems:
+\begin{itemize}[leftmargin=*,nosep]
+    \item \textbf{Warp divergence:} assigning one ant to each CUDA thread made neighboring lanes follow different paths because of stochastic decisions, unequal route lengths, and occasional global fallback scans.
+    \item \textbf{Non-coalesced access:} separate contiguous route and visited buffers for each ant caused neighboring threads to access distant addresses.
+    \item \textbf{Quadratic memory pressure:} dense floating-point distance and pheromone matrices imposed $O(n^2)$ capacity and bandwidth costs that limited the instance size.
+    \item \textbf{Atomic contention:} allowing every ant to scatter pheromone deposits concentrated atomic updates on popular edges.
+\end{itemize}
+
+The retained design addresses these problems with warp-per-ant cooperation, step-interleaved route storage, coordinate-based distance evaluation, one-byte pheromone values, and deposits restricted to the selected iteration and global best solutions.  These choices trade the rejected divergence and memory pressure for repeated distance arithmetic, quantization error, packed-word atomic updates, and fewer independent ants per fixed number of GPU threads.
+
+\subsection{Capacity and trade-offs}
+
+For $n=64{,}000$, a byte pheromone matrix contains about $4.1$ billion entries, whereas a float matrix would require about 16.4~GB.  Coordinate-based distance evaluation also removes a second quadratic array.  The design therefore prioritizes capacity as well as throughput, at the cost of quantization error and repeated distance arithmetic.
+
+The evaluation reports only the available end-to-end measurements and explicitly distinguishes stagnation stops from the 300~s limit.  No occupancy or memory-bandwidth claim is made without compatible profiling evidence.

@@ -1,0 +1,130 @@
+\section{Introduction}
+
+I study the \textbf{Constrained Vehicle Routing Problem} (CVRP) solved through \textbf{Ant Colony Optimization} (ACO), focusing on the implementation choices needed for shared-memory, distributed-memory, and GPU execution.
+
+\subsection{Problem formulation}
+
+We consider a constrained vehicle routing problem on a complete graph $G=(V,E)$, where $V=\{0,1,\dots,n\}$ is the set of nodes and node $0$ denotes the depot. The set of customers is therefore $C=\{1,\dots,n\}$. Each arc $(i,j) \in E$ is associated with a travel cost $c_{ij} \ge 0$, derived in my instances from the Euclidean distance between nodes. A fleet of at most $K$ vehicles is available, and each vehicle has capacity $Q$. In the instances handled by my solver, customer demands are unitary, that is, $q_i=1$ for every $i \in C$, while $q_0=0$.
+
+A feasible solution is a set of depot-to-depot routes such that each customer is visited exactly once and the total demand served by each route does not exceed the vehicle capacity. Let $x_{ij}^k$ be a binary decision variable equal to $1$ if vehicle $k$ traverses arc $(i,j)$ and $0$ otherwise. A compact mathematical formulation can be written as follows:
+
+\[
+\min \sum_{k=1}^{K} \sum_{i \in V} \sum_{j \in V,\, j \ne i} c_{ij} x_{ij}^k
+\]
+
+subject to
+
+\[
+\sum_{k=1}^{K} \sum_{j \in V,\, j \ne i} x_{ij}^k = 1
+\qquad \forall i \in C
+\]
+
+\[
+\sum_{j \in C} x_{0j}^k \le 1,
+\qquad
+\sum_{i \in C} x_{i0}^k \le 1
+\qquad \forall k=1,\dots,K
+\]
+
+\[
+\sum_{j \in V,\, j \ne i} x_{ij}^k - \sum_{j \in V,\, j \ne i} x_{ji}^k = 0
+\qquad \forall i \in V,\; \forall k=1,\dots,K
+\]
+
+\[
+\sum_{i \in C} q_i \sum_{j \in V,\, j \ne i} x_{ij}^k \le Q
+\qquad \forall k=1,\dots,K
+\]
+
+with
+\[
+x_{ij}^k \in \{0,1\}
+\qquad \forall i,j \in V,\; i \ne j,\; \forall k=1,\dots,K.
+\]
+
+The objective minimizes the total travel cost of all routes. The first constraint ensures that every customer is served exactly once. The second enforces that each vehicle can leave from and return to the depot at most once. The third is the standard flow-conservation constraint, while the fourth encodes the vehicle-capacity limit. In the specific setting of my project, since all customer demands are equal to one, the capacity constraint can also be interpreted as a bound on the maximum number of customers assigned to each route.
+
+\subsection{Sequential baseline analysis}
+
+The sequential baseline follows a standard ACO structure with two practical additions: bounded pheromone updates and a repair-oriented route construction phase that preserves feasibility when some customers remain unassigned after the first pass.
+
+\begin{algorithm}[H]
+\caption{Sequential ACO baseline}
+\footnotesize
+\begin{algorithmic}[1]
+\State \textbf{Input:} $n$, $K$, $Q$, $m$, $c$, $(\alpha,\beta,\rho,\tau_0)$, seed
+\State initialize pheromone matrix $\tau$ and heuristic data
+\If{$m \le 0$}
+    \State $m \leftarrow \Call{ChooseAutoTotalAnts}{n}$
+\EndIf
+\State $S^{\star} \leftarrow \varnothing$; $f^{\star} \leftarrow +\infty$
+\State $\tau_{\max} \leftarrow \tau_0$; $\tau_{\min} \leftarrow 0.05\tau_0$
+\For{$t \gets 0,1,2,\dots$ until timeout or stagnation}
+    \State update candidate scores from $\tau$
+    \State $S^{\mathrm{iter}} \leftarrow \varnothing$; $f^{\mathrm{iter}} \leftarrow +\infty$
+    \For{$a \gets 1$ to $m$}
+        \State build and evaluate one ant solution
+        \If{$f_a < f^{\mathrm{iter}}$}
+            \State $S^{\mathrm{iter}} \leftarrow S_a$; $f^{\mathrm{iter}} \leftarrow f_a$
+        \EndIf
+    \EndFor
+    \If{$f^{\mathrm{iter}}$ improves $f^{\star}$}
+        \State update $S^{\star}$, $f^{\star}$, and pheromone bounds
+        \State reset stagnation counters
+    \Else
+        \State increment stagnation counters
+    \EndIf
+    \State evaporate pheromone on all arcs
+    \State reinforce pheromone with $S^{\mathrm{iter}}$ and $S^{\star}$
+    \State clamp $\tau$ to $[\tau_{\min},\tau_{\max}]$
+    \If{short-term stagnation is reached}
+        \State mix $\tau$ with the initial level $\tau_0$
+    \EndIf
+\EndFor
+\State \Return $S^{\star}, f^{\star}$
+\end{algorithmic}
+\normalsize
+\end{algorithm}
+
+\begin{algorithm}[H]
+\caption{Simplified feasible ant construction}
+\footnotesize
+\begin{algorithmic}[1]
+\Function{BuildAntSolution}{$K,Q,c,\tau$}
+    \State initialize empty solution, visited set, and remaining customers $r \leftarrow n$
+    \For{$k \gets 1$ to $K$}
+        \State start route $R_k$ at depot $0$ with load $\ell_k \leftarrow 0$
+        \While{$r > (K-k)Q$ and $\ell_k < Q$}
+            \State choose the next customer by the ACO rule
+            \If{the choice is invalid or already visited}
+                \State replace it with the nearest unvisited customer
+            \EndIf
+            \If{no feasible customer exists}
+                \State \textbf{break}
+            \EndIf
+            \State append the customer to $R_k$, mark it visited, and decrement $r$
+        \EndWhile
+        \State close $R_k$ by returning to depot $0$
+    \EndFor
+    \If{$r > 0$}
+        \State reopen routes from $K$ down to $1$
+        \State greedily insert nearest unvisited customers while capacity remains
+        \State close the modified routes again at the depot
+    \EndIf
+    \State \Return the constructed solution
+\EndFunction
+\end{algorithmic}
+\normalsize
+\end{algorithm}
+
+In implementation terms, this pseudo-code is realized through four main components. The instance parser reads TSPLIB-style EUC\_2D CVRP inputs, extracts the number of vehicles and the route capacity, validates the unit-demand assumption, and builds the complete distance matrix. The matrix and solution modules provide the aligned dense storage and the route-based solution representation. The ACO support routines manage random-number generation, candidate scoring, candidate selection, and route-construction data. Finally, the optimization loop coordinates ant generation, solution evaluation, best-solution tracking, pheromone bounding, and stagnation recovery.
+
+This structured description is especially useful for the rest of the report, because it isolates the computational kernels that dominate execution time and therefore become the natural targets for optimization and parallelization: ant solution construction, probabilistic next-customer selection, route-cost evaluation, and pheromone management.
+\subsection{Problem and algorithmic challenges}
+
+The project combines combinatorial optimization and constrained route construction, which introduces several challenges:
+\begin{itemize}
+    \item the search space grows rapidly with the number of customers;
+    \item the constructive phase must preserve feasibility while still exploring competitive solutions;
+    \item the algorithm repeatedly evaluates many probabilistic choices and route costs, making performance strongly dependent on memory access patterns and implementation efficiency.
+\end{itemize}

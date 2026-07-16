@@ -1,0 +1,4 @@
+name,profile,instance_path,n,K,m,solver_seed,instance_seed,layout_id,run_id,status,elapsed_s,best_cost,error
+n64000_k63_s19007,generated_cuda,instances/test_aligned/n64000_k63_s19007.vrp,64000,63,256,1234,19007,grid100,1,ok,302.63,29790.893,
+n64000_k63_s19007,generated_cuda,instances/test_aligned/n64000_k63_s19007.vrp,64000,63,256,1235,19007,grid100,2,ok,302.49,30042.824,
+n64000_k63_s19007,generated_cuda,instances/test_aligned/n64000_k63_s19007.vrp,64000,63,256,1236,19007,grid100,3,ok,301.85,29989.912,
