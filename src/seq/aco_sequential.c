@@ -1,5 +1,6 @@
 #include "aco.h"
 
+#include "aco_config.h"
 #include "matrix.h"
 #include "solution.h"
 
@@ -699,17 +700,29 @@ static void build_ant_solution(SeqWorkspace *ws, const SeqShared *shared, int K,
  * @param max_stagnation_epochs Function parameter.
  * @param min_rel_improvement Function parameter.
  */
-static void aco_vrp_run_with_timer(int n, int K, int vehicle_capacity_customers,
-                                   int m, double **c, double alpha,
-                                   double beta, double rho, double tau0,
-                                   double Q, unsigned int seed,
-                                   Solution *best_solution, double *best_cost,
-                                   double max_runtime_sec,
-                                   int max_stagnation_epochs,
-                                   double min_rel_improvement) {
+static AcoStatus aco_vrp_run_with_config(int n, int K,
+                                         int vehicle_capacity_customers, int m,
+                                         double **c, double alpha, double beta,
+                                         double rho, double tau0, double Q,
+                                         unsigned int seed,
+                                         Solution *best_solution,
+                                         double *best_cost,
+                                         const AcoRuntimeConfig *config) {
   int total_m = m;
+  double max_runtime_sec = config ? config->timeout_seconds : 0.0;
+  int max_stagnation_epochs = config ? config->stagnation_epochs : 0;
+  double min_rel_improvement =
+      config ? config->min_rel_improvement : 1e-3;
+  double progress_interval_sec =
+      config ? config->progress_interval_seconds : 10.0;
+
+  if (n <= 0 || K <= 0 || !c || !best_solution || !best_cost) {
+    return ACO_ERR_INVALID_INPUT;
+  }
+
   if (total_m <= 0) {
-    total_m = choose_auto_total_ants(n);
+    total_m = (config && config->ants > 0) ? config->ants
+                                           : choose_auto_total_ants(n);
   }
   if (min_rel_improvement <= 0.0) {
     min_rel_improvement = 1e-3;
@@ -735,7 +748,7 @@ static void aco_vrp_run_with_timer(int n, int K, int vehicle_capacity_customers,
     if (shared_ok) {
       seq_shared_free(&shared);
     }
-    return;
+    return ACO_ERR_ALLOCATION;
   }
 
   for (int i = 0; i <= n; ++i) {
@@ -766,6 +779,8 @@ static void aco_vrp_run_with_timer(int n, int K, int vehicle_capacity_customers,
   double tau_max = tau0;
   double tau_min = tau0 * 0.05;
   double start_wall = wall_time_seconds();
+  double next_progress_wall =
+      (progress_interval_sec > 0.0) ? start_wall + progress_interval_sec : 0.0;
   int no_improve_epochs = 0;
 
   for (int iter = 0;; ++iter) {
@@ -894,6 +909,7 @@ static void aco_vrp_run_with_timer(int n, int K, int vehicle_capacity_customers,
   seq_shared_free(&shared);
   solution_free(iter_best);
   matrix_free(tau);
+  return (*best_cost < DBL_MAX) ? ACO_OK : ACO_ERR_NO_SOLUTION;
 }
 
 /**
@@ -911,16 +927,17 @@ static void aco_vrp_run_with_timer(int n, int K, int vehicle_capacity_customers,
  * @param best_solution Output best solution.
  * @param best_cost Output best cost.
  */
-void aco_vrp(int n, int K, int m, double **c, double alpha,
-             double beta, double rho, double tau0, double Q,
-             unsigned int seed, Solution *best_solution, double *best_cost) {
+AcoStatus aco_vrp(int n, int K, int m, double **c, double alpha, double beta,
+                  double rho, double tau0, double Q, unsigned int seed,
+                  Solution *best_solution, double *best_cost) {
   int vehicle_capacity_customers =
       (K > 0) ? (int)(((long long)120 * (long long)n +
                        (long long)100 * (long long)K - 1) /
                       ((long long)100 * (long long)K))
               : n;
-  aco_vrp_with_capacity(n, K, vehicle_capacity_customers, m, c, alpha,
-                        beta, rho, tau0, Q, seed, best_solution, best_cost);
+  return aco_vrp_with_capacity(n, K, vehicle_capacity_customers, m, c, alpha,
+                               beta, rho, tau0, Q, seed, best_solution,
+                               best_cost);
 }
 
 /**
@@ -939,18 +956,16 @@ void aco_vrp(int n, int K, int m, double **c, double alpha,
  * @param best_solution Output best solution.
  * @param best_cost Output best cost.
  */
-void aco_vrp_with_capacity(int n, int K, int vehicle_capacity_customers, int m,
-                           double **c, double alpha, double beta,
-                           double rho, double tau0, double Q,
-                           unsigned int seed, Solution *best_solution,
-                           double *best_cost) {
-  double max_runtime_sec = 0.0;
-  int max_stagnation_epochs = 0;
-  double min_rel_improvement = 1e-3;
-  load_timer_directives(&max_runtime_sec, &max_stagnation_epochs,
-                        &min_rel_improvement);
-  aco_vrp_run_with_timer(n, K, vehicle_capacity_customers, m, c, alpha,
-                         beta, rho, tau0, Q, seed, best_solution, best_cost,
-                         max_runtime_sec, max_stagnation_epochs,
-                         min_rel_improvement);
+AcoStatus aco_vrp_with_capacity(int n, int K, int vehicle_capacity_customers,
+                                int m, double **c, double alpha, double beta,
+                                double rho, double tau0, double Q,
+                                unsigned int seed, Solution *best_solution,
+                                double *best_cost) {
+  AcoRuntimeConfig config;
+  aco_runtime_config_load_env(&config);
+  config.ants = m;
+  config.seed = seed;
+  return aco_vrp_run_with_config(n, K, vehicle_capacity_customers, m, c, alpha,
+                                 beta, rho, tau0, Q, seed, best_solution,
+                                 best_cost, &config);
 }

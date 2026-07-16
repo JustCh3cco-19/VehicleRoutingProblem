@@ -187,7 +187,7 @@ def main() -> int:
         default="",
         help="Root output dir. Default: results/practical_campaign/<timestamp>",
     )
-    parser.add_argument("--manifest-dir", default="instances/test_aligned")
+    parser.add_argument("--manifest-dir", default="instances/generated_benchmark")
     parser.add_argument("--launcher", choices=["auto", "mpirun", "srun"], default="mpirun")
 
     parser.add_argument("--strong-n", type=int, default=16000)

@@ -70,9 +70,6 @@ results/solve_manifest/
 
 __pycache__/
 
-
-design.md
-
 src/vehicle_routing_problem.egg-info/*
 
 uv.lock
@@ -83,8 +80,6 @@ uv.lock
 .venv/
 
 # Local raw datasets / dumps
-francesco_data/
-iacopo_data/
 *.tar.gz
 
 # Generated merged analysis artifacts

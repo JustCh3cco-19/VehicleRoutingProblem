@@ -11,7 +11,7 @@ mpi_m="${SOLVE_MPI_M:-0}"
 fixed_epochs="${SOLVE_MPI_FIXED_EPOCHS:-0}"
 runtime_s="${SOLVE_MPI_RUNTIME_S:-0}"
 stag_iters="${SOLVE_MPI_STAGNATION_EPOCHS:-0}"
-improve_rel_pct="${SOLVE_MPI_MIN_REL_IMPROVEMENT:-0.001}"
+improve_rel_pct="${SOLVE_MPI_MIN_REL_IMPROVEMENT:-0.1}"
 mpi_ranks="${SOLVE_MPI_RANKS:-2}"
 omp_threads="${SOLVE_MPI_OMP_THREADS:-2}"
 launcher_pref="${SOLVE_MPI_LAUNCHER:-auto}"
@@ -39,7 +39,7 @@ fi
 if [ "$repeats" -lt 1 ]; then
   repeats=1
 fi
-improve_rel="$(awk "BEGIN { printf \"%.12g\", (${improve_rel_pct}) / 100.0 }")"
+improve_rel="$improve_rel_pct"
 
 launcher_kind="mpirun"
 launcher_cmd=(mpirun -np "$mpi_ranks")

@@ -2,7 +2,7 @@
 
 # Ants Granularity Experiment
 BIN="./aco_vrp_v2_openmp_mpi.out"
-INSTANCE="instances/test_aligned/n2000_k8_s19002.vrp"
+INSTANCE="instances/generated_benchmark/n2000_k8_s19002.vrp"
 K=8
 SEED=1234
 EPOCHS=20

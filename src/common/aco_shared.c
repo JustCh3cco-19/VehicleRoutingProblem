@@ -5,6 +5,22 @@
 #include <stdlib.h>
 #include <string.h>
 
+const char *aco_status_string(AcoStatus status) {
+  switch (status) {
+  case ACO_OK:
+    return "ok";
+  case ACO_ERR_INVALID_INPUT:
+    return "invalid input";
+  case ACO_ERR_ALLOCATION:
+    return "allocation failure";
+  case ACO_ERR_NO_SOLUTION:
+    return "no solution";
+  case ACO_ERR_BACKEND:
+    return "backend failure";
+  default:
+    return "unknown status";
+  }
+}
 
 /**
  * @brief Executes `fast_pow_nonneg`.

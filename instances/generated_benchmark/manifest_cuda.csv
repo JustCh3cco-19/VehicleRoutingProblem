@@ -1,0 +1,10 @@
+profile,name,instance_path,n,K,m,solver_seed,instance_seed,layout_id,capacity_formula
+generated_cuda,n500_k8_s19000,instances/generated_benchmark/n500_k8_s19000.vrp,500,8,256,1234,19000,grid100,ceil((1+20/100)*n/K)
+generated_cuda,n1000_k8_s19001,instances/generated_benchmark/n1000_k8_s19001.vrp,1000,8,256,1234,19001,grid100,ceil((1+20/100)*n/K)
+generated_cuda,n2000_k8_s19002,instances/generated_benchmark/n2000_k8_s19002.vrp,2000,8,256,1234,19002,grid100,ceil((1+20/100)*n/K)
+generated_cuda,n4000_k8_s19003,instances/generated_benchmark/n4000_k8_s19003.vrp,4000,8,256,1234,19003,grid100,ceil((1+20/100)*n/K)
+generated_cuda,n8000_k8_s19004,instances/generated_benchmark/n8000_k8_s19004.vrp,8000,8,256,1234,19004,grid100,ceil((1+20/100)*n/K)
+generated_cuda,n16000_k16_s19005,instances/generated_benchmark/n16000_k16_s19005.vrp,16000,16,256,1234,19005,grid100,ceil((1+20/100)*n/K)
+generated_cuda,n32000_k32_s19006,instances/generated_benchmark/n32000_k32_s19006.vrp,32000,32,256,1234,19006,grid100,ceil((1+20/100)*n/K)
+generated_cuda,n64000_k63_s19007,instances/generated_benchmark/n64000_k63_s19007.vrp,64000,63,256,1234,19007,grid100,ceil((1+20/100)*n/K)
+generated_cuda,n100000_k98_s19008,instances/generated_benchmark/n100000_k98_s19008.vrp,100000,98,256,1234,19008,grid100,ceil((1+20/100)*n/K)

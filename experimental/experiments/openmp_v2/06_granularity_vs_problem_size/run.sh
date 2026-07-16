@@ -7,7 +7,7 @@ SEED=1234
 
 # Problems
 SIZES=("2000" "8000" "16000")
-INSTANCES=("instances/test_aligned/n2000_k8_s19002.vrp" "instances/test_aligned/n8000_k8_s19004.vrp" "instances/test_aligned/n16000_k16_s19005.vrp")
+INSTANCES=("instances/generated_benchmark/n2000_k8_s19002.vrp" "instances/generated_benchmark/n8000_k8_s19004.vrp" "instances/generated_benchmark/n16000_k16_s19005.vrp")
 K_VALS=("8" "8" "16")
 
 # Ants per core ratios to test (for 24 cores)

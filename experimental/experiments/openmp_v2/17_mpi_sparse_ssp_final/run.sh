@@ -3,7 +3,7 @@
 # Sparse SSP Final Experiment
 BIN_SYNC="./sparse_sync.out"
 BIN_SSP="./sparse_ssp.out"
-INSTANCE="instances/test_aligned/n16000_k16_s19005.vrp"
+INSTANCE="instances/generated_benchmark/n16000_k16_s19005.vrp"
 K=16
 M=1536
 SEED=1234

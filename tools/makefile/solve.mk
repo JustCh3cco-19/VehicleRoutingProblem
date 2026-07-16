@@ -98,6 +98,18 @@ solve_all: solve_pyvrp solve_seq solve_cuda solve_mpi
 	@echo "solve CSV files are in $(SOLVE_CSV_DIR)"
 	@echo "solve route files are in $(SOLVE_SOLUTIONS_DIR)"
 
+smoke:
+	@bash tools/bash/smoke_test.sh all
+
+smoke_seq:
+	@bash tools/bash/smoke_test.sh seq
+
+smoke_mpi:
+	@bash tools/bash/smoke_test.sh mpi
+
+smoke_cuda:
+	@bash tools/bash/smoke_test.sh cuda
+
 solve_memory_growth_non_cuda:
 	@$(MAKE) solve_seq SOLVE_CLIENTS="$(if $(SOLVE_CLIENTS),$(SOLVE_CLIENTS),4000,8000,12000,16000,20000,24000,28000,32000)" SOLVE_SEQ_REPEATS="$(SOLVE_MEMORY_GROWTH_REPEATS)"
 	@$(MAKE) solve_mpi SOLVE_CLIENTS="$(if $(SOLVE_CLIENTS),$(SOLVE_CLIENTS),4000,8000,12000,16000,20000,24000,28000,32000)" SOLVE_MPI_REPEATS="$(SOLVE_MEMORY_GROWTH_REPEATS)"

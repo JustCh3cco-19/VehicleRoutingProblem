@@ -14,7 +14,7 @@ Given a depot and `n` customers with unit demand, CVRP requires building `K` rou
 - satisfy vehicle capacity constraints,
 - minimize total travel cost.
 
-Instances are provided in `.vrp` (TSPLIB-like) format and generated/filtered in `instances/test_aligned`.
+Instances are provided in `.vrp` (TSPLIB-like) format and generated/filtered in `instances/generated_benchmark`.
 
 ## 2. Algorithmic Approach
 
@@ -85,10 +85,13 @@ make generate_problems
 ```
 
 Main outputs:
-- `instances/test_aligned/*.vrp`
-- `instances/test_aligned/manifest.csv`
-- `instances/test_aligned/manifest_openmp_mpi.csv`
-- `instances/test_aligned/manifest_cuda.csv`
+- `instances/generated_benchmark/*.vrp`
+- `instances/generated_benchmark/manifest.csv`
+- `instances/generated_benchmark/manifest_openmp_mpi.csv`
+- `instances/generated_benchmark/manifest_cuda.csv`
+
+Detailed generation guide:
+- [instance_generation.md](docs/usage/instance_generation.md)
 
 ## 7. Solver Execution
 
@@ -105,7 +108,7 @@ Useful variables (passed via `--make-args` in batch jobs):
 - `SOLVE_*_REPEATS`
 - `SOLVE_*_RUNTIME_S`
 - `SOLVE_*_STAGNATION_EPOCHS`
-- `SOLVE_*_MIN_REL_IMPROVEMENT`
+- `SOLVE_*_MIN_REL_IMPROVEMENT` (percentuale: `0.1` = 0.1%, `10` = 10%)
 
 ## 8. Experiments (Strong/Weak/Quality)
 
@@ -162,9 +165,7 @@ Regenerate plots from aggregated CSV files:
 python3 tools/python/plot_merged_by_run_backend.py
 ```
 
-Output:
-- `merged_by_run_backend/plots/*.png`
-- `merged_by_run_backend/plots/README.md`
+Typical generated output should be stored under `results/`.
 
 ## 11. Methodological Notes
 

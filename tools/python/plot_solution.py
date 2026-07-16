@@ -335,7 +335,7 @@ def main() -> int:
     )
     parser.add_argument(
         "--instances-dir",
-        default="instances/test_aligned",
+        default="instances/generated_benchmark",
         help="Directory istanze usata con --all-runs",
     )
     args = parser.parse_args()

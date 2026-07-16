@@ -9,7 +9,7 @@ REPEATS=1 # Singola run per velocità, ma epoche fisse per stabilità
 
 # Instances and their K
 SIZES=("2000" "4000" "8000" "16000")
-INSTANCES=("instances/test_aligned/n2000_k8_s19002.vrp" "instances/test_aligned/n4000_k8_s19003.vrp" "instances/test_aligned/n8000_k8_s19004.vrp" "instances/test_aligned/n16000_k16_s19005.vrp")
+INSTANCES=("instances/generated_benchmark/n2000_k8_s19002.vrp" "instances/generated_benchmark/n4000_k8_s19003.vrp" "instances/generated_benchmark/n8000_k8_s19004.vrp" "instances/generated_benchmark/n16000_k16_s19005.vrp")
 K_VALS=("8" "8" "8" "16")
 
 # Strategies

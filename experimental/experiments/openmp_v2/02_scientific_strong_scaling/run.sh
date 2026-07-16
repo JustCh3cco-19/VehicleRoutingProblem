@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Configuration
-INSTANCE="instances/test_aligned/n2000_k8_s19002.vrp"
+INSTANCE="instances/generated_benchmark/n2000_k8_s19002.vrp"
 K=8
 M=768
 SEED=1234
@@ -22,7 +22,7 @@ echo "----------------------------------------------------"
 
 # Paths relative to project root
 BIN="./aco_vrp_v2_openmp_mpi.out"
-INSTANCE="instances/test_aligned/n2000_k8_s19002.vrp"
+INSTANCE="instances/generated_benchmark/n2000_k8_s19002.vrp"
 
 T1_MS=0
 THREAD_COUNTS=(1 2 4 8 12 16 20 24)

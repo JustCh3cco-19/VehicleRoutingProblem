@@ -45,7 +45,7 @@ def main() -> int:
 
     bench_cmd = [
         sys.executable,
-        "scripts/benchmark_scaling.py",
+        "tools/python/benchmark_scaling.py",
         "--repeats",
         str(args.repeats),
         "--warmups",
@@ -88,7 +88,7 @@ def main() -> int:
     run(
         [
             sys.executable,
-            "scripts/plot_scaling_results.py",
+            "tools/python/plot_scaling_results.py",
             "--summary",
             f"{args.output_dir}/scaling_summary.csv",
             "--raw",
