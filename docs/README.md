@@ -1,35 +1,27 @@
 # Documentation
 
-The project documentation is grouped by topic:
+This directory is the authoritative location for project documentation.
 
-All LaTeX documents can be compiled from the repository root with:
+## Start here
 
-```bash
-make pdfs
-```
+- [Repository structure](repository_structure.md): source, tooling, data, and generated artifacts.
+- [Build and run](build.md): dependencies, build targets, direct execution, and manifest runs.
+- [Implementations](implementations.md): supported sequential, OpenMP, MPI, hybrid, and CUDA modes.
+- [Instances](instances.md): generated CVRP instances and manifest formats.
 
-Generated PDFs and LaTeX intermediates can be removed with `make clean_pdfs`.
+## Experiments and outputs
 
-## Backend overview
+- [Experiments](experiments.md): maintained Make targets and practical campaigns.
+- [Cluster usage](cluster_usage.md): Slurm submission, resource limits, and monitoring.
+- [Benchmarking](benchmarking.md): result collection, summaries, validation, and plots.
+- [Tooling audit](tooling_audit.md): status and responsibility of every tool under `tools/`.
+- [Results](results.md): output locations and the tracked paper dataset.
+- [Troubleshooting](troubleshooting.md): common build and workflow failures.
 
-- [Sequential, OpenMP--MPI and CUDA explanation](backends/spiegazione_backend.pdf)
-- [LaTeX source](backends/spiegazione_backend.tex)
+## Reports and historical material
 
-## OpenMP and MPI
+- [Paper](paper.md): LaTeX sources, generated tables, figures, and build commands.
+- [Historical experiments](historical_experiments.md): prototypes under `experimental/` and their compatibility status.
 
-- [OpenMP--MPI roadmap](openmp-mpi/RoadmapOpenMP_MPI.md)
-- [V3 collaborative approach failure analysis](openmp-mpi/v3_failure_analysis.md)
-
-## CUDA
-
-- [Academic implementation notes](cuda/cuda_v6_academic_paper.md)
-- [Quality assurance](cuda/cuda_v6_qa.md)
-- [Scaling report](cuda/cuda_v6_scaling_report.md)
-
-## Experiments
-
-- [Practical experiment campaign](experiments/practical_experiment_campaign.md)
-
-## Operations
-
-- [Slurm cluster commands](operations/slurm_cluster_commands.md)
+Run `make help` for the complete Make target and variable reference. Run
+`make pdfs` to rebuild the paper PDF.

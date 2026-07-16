@@ -53,8 +53,7 @@ clean:
 		src/*.o src/seq/*.o src/openmp-mpi/*.o src/common/*.o src/cuda/*.o \
 		src/cuda/*.ptx src/cuda/*.cubin src/cuda/*.fatbin \
 		tests/*.o tests/*.out \
-		$(COVERAGE_FILES) \
-		report/*.aux report/*.log report/*.out
+		$(COVERAGE_FILES)
 
 debug:
 	$(MAKE) EXTRA_FLAGS=-DDEBUG

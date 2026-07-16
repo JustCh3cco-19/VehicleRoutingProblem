@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -uo pipefail
 
+: "${SOLVE_CSV_DIR:?SOLVE_CSV_DIR is required}"
+: "${SOLVE_SOLUTIONS_DIR:?SOLVE_SOLUTIONS_DIR is required}"
+: "${SOLVE_MANIFEST:?SOLVE_MANIFEST is required}"
+
 csv="${SOLVE_CSV_DIR}/manifest_pyvrp_per_instance_results.csv"
 sol_dir="${SOLVE_SOLUTIONS_DIR}/pyvrp"
 manifest="${SOLVE_MANIFEST}"
@@ -10,11 +14,37 @@ runtime_s="${SOLVE_PYVRP_RUNTIME_S:-10}"
 seed="${SOLVE_PYVRP_SEED:-1234}"
 py_bin="${PYTHON_BIN:-python3}"
 
-if [ -x "VRP/bin/python" ]; then
-  py_bin="VRP/bin/python"
+if [ ! -f "$manifest" ]; then
+  echo "[ERROR] PyVRP manifest not found: $manifest" >&2
+  exit 2
+fi
+if ! command -v "$py_bin" >/dev/null 2>&1 && [ ! -x "$py_bin" ]; then
+  echo "[ERROR] Python interpreter not found: $py_bin" >&2
+  exit 2
+fi
+if [ ! -x /usr/bin/time ]; then
+  echo "[ERROR] required executable not found: /usr/bin/time" >&2
+  exit 2
+fi
+if [[ ! "$runtime_s" =~ ^[1-9][0-9]*$ ]] || [ "$runtime_s" -gt 300 ]; then
+  echo "[ERROR] SOLVE_PYVRP_RUNTIME_S must be an integer between 1 and 300" >&2
+  exit 2
+fi
+if [[ ! "$seed" =~ ^[0-9]+$ ]]; then
+  echo "[ERROR] SOLVE_PYVRP_SEED must be a non-negative integer" >&2
+  exit 2
+fi
+if [[ ! "$limit" =~ ^[0-9]+$ ]]; then
+  echo "[ERROR] SOLVE_LIMIT must be a non-negative integer" >&2
+  exit 2
 fi
 
 header="name,profile,instance_path,n,K,m,solver_seed,instance_seed,layout_id,status,elapsed_s,max_rss_gb,best_cost,error"
+
+if [ -s "$csv" ] && [ "$(head -n1 "$csv")" != "$header" ]; then
+  echo "[ERROR] incompatible PyVRP CSV header: $csv" >&2
+  exit 2
+fi
 
 # Prepare output CSV in advance, keeping existing rows for n values that are
 # not part of the current execution. New rows are then appended live.
@@ -48,10 +78,6 @@ if [ -z "$selected_instances" ]; then
 fi
 total_runs="$selected_instances"
 done_runs=0
-run_duration_sum="0.0"
-run_duration_count=0
-run_rss_sum_gb="0.0"
-run_rss_count=0
 declare -A n_duration_sum
 declare -A n_duration_count
 declare -A n_rss_sum_gb
@@ -87,8 +113,6 @@ tail -n +2 "$manifest" \
       end_ns="$(date +%s%N)"
       elapsed="$(awk "BEGIN {printf \"%.6f\", ($end_ns-$start_ns)/1000000000}")"
       if printf '%s' "$elapsed" | grep -Eq '^[0-9]+([.][0-9]+)?$'; then
-        run_duration_sum="$(awk "BEGIN {printf \"%.6f\", (${run_duration_sum}) + (${elapsed})}")"
-        run_duration_count=$((run_duration_count + 1))
         n_duration_sum[$n]="$(awk "BEGIN {printf \"%.6f\", (${n_duration_sum[$n]:-0}) + (${elapsed})}")"
         n_duration_count[$n]=$(( ${n_duration_count[$n]:-0} + 1 ))
       fi
@@ -98,8 +122,6 @@ tail -n +2 "$manifest" \
       if [ -n "$rss_kb" ]; then
         rss_gb="$(awk "BEGIN {printf \"%.6f\", (${rss_kb})/1048576.0}")"
         if printf '%s' "$rss_gb" | grep -Eq '^[0-9]+([.][0-9]+)?$'; then
-          run_rss_sum_gb="$(awk "BEGIN {printf \"%.6f\", (${run_rss_sum_gb}) + (${rss_gb})}")"
-          run_rss_count=$((run_rss_count + 1))
           n_rss_sum_gb[$n]="$(awk "BEGIN {printf \"%.6f\", (${n_rss_sum_gb[$n]:-0}) + (${rss_gb})}")"
           n_rss_count[$n]=$(( ${n_rss_count[$n]:-0} + 1 ))
         fi
@@ -108,10 +130,10 @@ tail -n +2 "$manifest" \
       if [ "$rc" -eq 0 ]; then
         cost="$(printf '%s\n' "$out" | sed -n 's/^best_cost=//p' | tail -n1)"
         [ -n "$cost" ] || cost=""
-        echo "$name,$profile,$instance_path,$n,$K,$m,$solver_seed,$instance_seed,$layout_id,ok,$elapsed,$rss_gb,$cost," >> "$csv"
+        echo "$name,$profile,$instance_path,$n,$K,$m,$seed,$instance_seed,$layout_id,ok,$elapsed,$rss_gb,$cost," >> "$csv"
       else
         err="$(printf '%s' "$out" | tr '\n' ' ' | tr ',' ';')"
-        echo "$name,$profile,$instance_path,$n,$K,$m,$solver_seed,$instance_seed,$layout_id,error,$elapsed,$rss_gb,,$err" >> "$csv"
+        echo "$name,$profile,$instance_path,$n,$K,$m,$seed,$instance_seed,$layout_id,error,$elapsed,$rss_gb,,$err" >> "$csv"
       fi
       echo "[pyvrp] run_effettiva: elapsed_s=${elapsed:-n/a} mem_gb=${rss_gb:-n/a} status=$([ "$rc" -eq 0 ] && echo ok || echo error)"
       echo

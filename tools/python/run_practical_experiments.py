@@ -129,11 +129,24 @@ def load_manifest(path: Path) -> dict[int, ManifestRow]:
     by_n: dict[int, ManifestRow] = {}
     with path.open("r", newline="", encoding="utf-8") as f:
         reader = csv.DictReader(f)
+        required = {"name", "instance_path", "n", "K", "m", "solver_seed"}
+        missing_columns = required - set(reader.fieldnames or [])
+        if missing_columns:
+            raise ValueError(
+                f"manifest {path} is missing columns: {sorted(missing_columns)}"
+            )
         for row in reader:
             n = int(row["n"])
+            if n in by_n:
+                raise ValueError(f"manifest {path} contains duplicate n={n}")
+            instance_path = Path(row["instance_path"])
+            if not instance_path.is_file():
+                raise FileNotFoundError(
+                    f"manifest {path} references missing instance: {instance_path}"
+                )
             by_n[n] = ManifestRow(
                 name=row["name"],
-                instance_path=row["instance_path"],
+                instance_path=str(instance_path),
                 n=n,
                 k=int(row["K"]),
                 m=int(row["m"]),
@@ -225,7 +238,6 @@ def main() -> int:
     parser.add_argument("--quality-mpi-threads", type=int, default=32)
     parser.add_argument("--quality-hybrid", default="4x32")
 
-    parser.add_argument("--cuda-variant", default="v6")
     parser.add_argument("--cuda-clients", default="500,1000,2000,4000,8000,16000,32000,64000")
     parser.add_argument(
         "--cuda-cpu-comparison-clients",
@@ -249,6 +261,19 @@ def main() -> int:
         raise ValueError("--only-cuda-sections cannot be combined with --skip-cuda")
     if args.runtime_s <= 0 or args.runtime_s > MAX_RUNTIME_S:
         raise ValueError(f"runtime-s must be in the range 1..{MAX_RUNTIME_S}")
+    if args.strong_n <= 0 or args.weak_base_n <= 0:
+        raise ValueError("strong-n and weak-base-n must be positive")
+    if args.stagnation_epochs < 0:
+        raise ValueError("stagnation-epochs must be non-negative")
+    for name in ("seq_repeats", "scaling_repeats", "quality_repeats", "cuda_repeats"):
+        if getattr(args, name) <= 0:
+            raise ValueError(f"{name.replace('_', '-')} must be positive")
+    try:
+        min_rel_improvement = float(args.min_rel_improvement)
+    except ValueError as exc:
+        raise ValueError("min-rel-improvement must be a number") from exc
+    if min_rel_improvement <= 0:
+        raise ValueError("min-rel-improvement must be positive")
 
     openmp_threads = parse_int_csv(args.openmp_threads, "openmp_threads")
     mpi_ranks = parse_int_csv(args.mpi_ranks, "mpi_ranks")
@@ -289,7 +314,7 @@ def main() -> int:
 
     seq_by_n = load_manifest(manifest_seq)
     mpi_by_n = load_manifest(manifest_mpi)
-    cuda_by_n = load_manifest(manifest_cuda)
+    cuda_by_n = load_manifest(manifest_cuda) if not args.skip_cuda else {}
 
     mpi_available = set(mpi_by_n.keys())
     seq_available = set(seq_by_n.keys())
@@ -311,7 +336,8 @@ def main() -> int:
             ensure_present("quality_clients(cuda manifest)", quality_clients, cuda_available)
     else:
         ensure_present("strong_n", [args.strong_n], mpi_available)
-        ensure_present("quality_clients", quality_clients, seq_available & mpi_available)
+        if not args.skip_quality:
+            ensure_present("quality_clients", quality_clients, seq_available & mpi_available)
         if not args.skip_cuda:
             ensure_present("cuda_clients", cuda_clients, cuda_available)
 
@@ -329,14 +355,15 @@ def main() -> int:
         "RESULTS_ROOT": str(root),
         "SOLVE_MANIFEST": str(manifest_seq),
         "SOLVE_MANIFEST_MPI": str(manifest_mpi),
-        "SOLVE_MANIFEST_CUDA": str(manifest_cuda),
     }
+    if not args.skip_cuda:
+        base_vars["SOLVE_MANIFEST_CUDA"] = str(manifest_cuda)
 
     if not args.skip_build:
         run_make("seq", base_vars, args.dry_run)
         run_make("openmp_mpi", base_vars, args.dry_run)
         if not args.skip_cuda:
-            run_make("cuda", {**base_vars, "CUDA_VARIANT": args.cuda_variant}, args.dry_run)
+            run_make("cuda", base_vars, args.dry_run)
 
     if not args.only_cuda_sections:
         # 1) Sequential baseline
@@ -484,7 +511,6 @@ def main() -> int:
                 **base_vars,
                 **solve_dirs(root, "exp_cuda_size_sweep_practical"),
                 "SOLVE_CLIENTS": cuda_clients_csv,
-                "SOLVE_CUDA_VARIANT": args.cuda_variant,
                 "SOLVE_CUDA_REPEATS": str(args.cuda_repeats),
                 "SOLVE_CUDA_RUNTIME_S": str(args.runtime_s),
                 "SOLVE_CUDA_STAGNATION_EPOCHS": str(args.stagnation_epochs),
@@ -608,7 +634,6 @@ def main() -> int:
                 **base_vars,
                 **solve_dirs(root, "exp_quality_cuda"),
                 "SOLVE_CLIENTS": quality_clients_csv,
-                "SOLVE_CUDA_VARIANT": args.cuda_variant,
                 "SOLVE_CUDA_REPEATS": str(args.quality_repeats),
                 "SOLVE_CUDA_RUNTIME_S": str(args.runtime_s),
                 "SOLVE_CUDA_STAGNATION_EPOCHS": str(args.stagnation_epochs),
@@ -625,7 +650,6 @@ def main() -> int:
                 **base_vars,
                 **solve_dirs(root, "exp_quality_cuda"),
                 "SOLVE_CLIENTS": quality_clients_csv,
-                "SOLVE_CUDA_VARIANT": args.cuda_variant,
                 "SOLVE_CUDA_REPEATS": str(args.quality_repeats),
                 "SOLVE_CUDA_RUNTIME_S": str(args.runtime_s),
                 "SOLVE_CUDA_STAGNATION_EPOCHS": str(args.stagnation_epochs),

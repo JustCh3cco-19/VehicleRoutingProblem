@@ -1,19 +1,13 @@
 #!/usr/bin/env python3
 import argparse
-import numpy as np
-import vrplib
-import sys
 import os
-
-try:
-    import pyvrp
-    from pyvrp import Model, stop
-except ImportError:
-    print("Error: pyvrp is not installed. Please run in the created .venv.")
-    sys.exit(1)
+from pathlib import Path
+import sys
 
 def generate_instance(name, num_clients, num_vehicles, grid_size=100, seed=None,
                       capacity_slack_percent=20):
+    import numpy as np
+
     if seed is not None:
         np.random.seed(seed)
     
@@ -48,11 +42,10 @@ def generate_instance(name, num_clients, num_vehicles, grid_size=100, seed=None,
 
 def save_reference_solution(instance_path, output_path, runtime=2.0):
     print(f"Solving instance for {runtime}s to create a reference solution...")
-    
-    instance = vrplib.read_instance(instance_path)
+
     # Load from file to ensure exactly the same distance interpretation.
-    import pyvrp
     from pyvrp import read, Model
+    from pyvrp import stop
     pyvrp_instance = read(instance_path, round_func="none")
     
     model = Model.from_data(pyvrp_instance)
@@ -63,10 +56,10 @@ def save_reference_solution(instance_path, output_path, runtime=2.0):
     
     if not best.is_feasible():
         print("Warning: Could not find a feasible reference solution in the given time.")
-        return
+        return False
     
     # Save in our validation format
-    with open(output_path, 'w') as f:
+    with open(output_path, 'w', encoding="utf-8") as f:
         for i, route in enumerate(best.routes()):
             nodes_str = " ".join(map(str, route.visits()))
             f.write(f"Route {i+1}: {nodes_str}\n")
@@ -74,6 +67,7 @@ def save_reference_solution(instance_path, output_path, runtime=2.0):
     
     print(f"Reference solution saved to {output_path}")
     print(f"Reference Cost: {best.distance()}")
+    return True
 
 def main():
     parser = argparse.ArgumentParser(description="Generate synthetic VRP instances and reference solutions.")
@@ -90,17 +84,39 @@ def main():
 
     args = parser.parse_args()
 
+    if args.clients < 1:
+        parser.error("--clients must be positive")
+    if args.vehicles < 1:
+        parser.error("--vehicles must be positive")
+    if args.grid < 1:
+        parser.error("--grid must be positive")
+    if args.capacity_slack_percent < 0:
+        parser.error("--capacity-slack-percent must be non-negative")
+    if args.runtime <= 0:
+        parser.error("--runtime must be positive")
+    if args.seed is not None and args.seed < 0:
+        parser.error("--seed must be non-negative")
+
     instance = generate_instance(args.name, args.clients, args.vehicles,
                                  args.grid, args.seed,
                                  args.capacity_slack_percent)
 
     # Save instance
+    import vrplib
+
+    Path(args.output).parent.mkdir(parents=True, exist_ok=True)
     vrplib.write_instance(args.output, instance)
     print(f"Problem instance saved to {args.output}")
 
     if args.solve:
         sol_path = os.path.splitext(args.output)[0] + "_solution.txt"
-        save_reference_solution(args.output, sol_path, args.runtime)
+        if not save_reference_solution(args.output, sol_path, args.runtime):
+            return 1
+    return 0
 
 if __name__ == "__main__":
-    main()
+    try:
+        raise SystemExit(main())
+    except ImportError as exc:
+        print(f"Error: missing Python dependency: {exc.name}", file=sys.stderr)
+        raise SystemExit(1)

@@ -5,4 +5,5 @@
 	exp_strong_openmp exp_strong_openmp_n8000_m256 exp_weak_openmp exp_strong_mpi exp_strong_hybrid exp_weak_mpi exp_weak_hybrid exp_all \
 	exp_cuda_scaling_input exp_cuda_scaling_ants exp_seq_for_cuda exp_cuda_all \
 	exp_practical_cpu exp_practical_gpu \
+	run_scaling_tests \
 	pdfs clean_pdfs

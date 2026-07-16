@@ -53,7 +53,7 @@ generate_problems:
 
 generate_clean:
 	@rm -f "$(GEN_INST_DIR)"/n*_k*_s*.vrp
-	@rm -f "$(GEN_INST_DIR)/manifest.csv" "$(GEN_INST_DIR)/manifest_openmp_mpi.csv" "$(GEN_INST_DIR)/manifest_cuda.csv" "$(GEN_INST_DIR)/manifest_cuda_m256.csv"
+	@rm -f "$(GEN_INST_DIR)/manifest.csv" "$(GEN_INST_DIR)/manifest_openmp_mpi.csv" "$(GEN_INST_DIR)/manifest_cuda.csv"
 	@echo "cleaned generated files in $(GEN_INST_DIR)"
 
 generate_problems_big:

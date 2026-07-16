@@ -1,38 +1,64 @@
 #!/usr/bin/env bash
 set -uo pipefail
 
+: "${SOLVE_CSV_DIR:?SOLVE_CSV_DIR is required}"
+: "${SOLVE_SOLUTIONS_DIR:?SOLVE_SOLUTIONS_DIR is required}"
+
 csv="${SOLVE_CSV_DIR}/manifest_cuda_per_instance_results.csv"
 sol_dir="${SOLVE_SOLUTIONS_DIR}/cuda"
 manifest="${SOLVE_MANIFEST_CUDA:-${SOLVE_MANIFEST:-instances/generated_benchmark/manifest_cuda.csv}}"
 clients="${SOLVE_CLIENTS:-}"
 limit="${SOLVE_LIMIT:-0}"
 repeats="${SOLVE_CUDA_REPEATS:-1}"
-runtime_s="${SOLVE_SEQ_RUNTIME_EFFECTIVE:-0}"
-stag_iters="${SOLVE_SEQ_STAGNATION_EPOCHS:-0}"
-improve_rel_raw="${SOLVE_SEQ_MIN_REL_IMPROVEMENT:-0.1}"
-cuda_profile="${SOLVE_CUDA_PROFILE:-0}"
+runtime_s="${SOLVE_CUDA_RUNTIME_S:-300}"
+stag_iters="${SOLVE_CUDA_STAGNATION_EPOCHS:-0}"
+improve_rel="${SOLVE_CUDA_MIN_REL_IMPROVEMENT:-0.1}"
+m_override="${SOLVE_CUDA_M:-0}"
 
-# Prefer CUDA-specific controls when provided; keep seq vars as compatibility fallback.
-if [ -n "${SOLVE_CUDA_RUNTIME_S:-}" ]; then
-  runtime_s="${SOLVE_CUDA_RUNTIME_S}"
+if [ ! -f "$manifest" ]; then
+  echo "[ERROR] CUDA manifest not found: $manifest" >&2
+  exit 2
 fi
-if [ -n "${SOLVE_CUDA_STAGNATION_EPOCHS:-}" ]; then
-  stag_iters="${SOLVE_CUDA_STAGNATION_EPOCHS}"
+if [ ! -x ./aco_vrp_cuda.out ]; then
+  echo "[ERROR] CUDA executable not found: ./aco_vrp_cuda.out (run 'make cuda')" >&2
+  exit 2
 fi
-if [ -n "${SOLVE_CUDA_MIN_REL_IMPROVEMENT:-}" ]; then
-  improve_rel_raw="${SOLVE_CUDA_MIN_REL_IMPROVEMENT}"
+if [ ! -x /usr/bin/time ]; then
+  echo "[ERROR] required executable not found: /usr/bin/time" >&2
+  exit 2
 fi
 
 if [[ ! "$runtime_s" =~ ^[1-9][0-9]*$ ]] || [ "$runtime_s" -gt 300 ]; then
-  echo "[ERROR] SOLVE_CUDA_RUNTIME_S deve essere compreso tra 1 e 300 secondi" >&2
+  echo "[ERROR] SOLVE_CUDA_RUNTIME_S must be an integer between 1 and 300" >&2
   exit 2
 fi
-if [ "$repeats" -lt 1 ]; then
-  repeats=1
+if [[ ! "$stag_iters" =~ ^[0-9]+$ ]]; then
+  echo "[ERROR] SOLVE_CUDA_STAGNATION_EPOCHS must be a non-negative integer" >&2
+  exit 2
 fi
-improve_rel="$improve_rel_raw"
+if [[ ! "$improve_rel" =~ ^[0-9]+([.][0-9]+)?$ ]] || awk "BEGIN {exit !($improve_rel <= 0)}"; then
+  echo "[ERROR] SOLVE_CUDA_MIN_REL_IMPROVEMENT must be a positive number" >&2
+  exit 2
+fi
+if [[ ! "$repeats" =~ ^[1-9][0-9]*$ ]]; then
+  echo "[ERROR] SOLVE_CUDA_REPEATS must be a positive integer" >&2
+  exit 2
+fi
+if [[ ! "$limit" =~ ^[0-9]+$ ]]; then
+  echo "[ERROR] SOLVE_LIMIT must be a non-negative integer" >&2
+  exit 2
+fi
+if [[ ! "$m_override" =~ ^[0-9]+$ ]]; then
+  echo "[ERROR] SOLVE_CUDA_M must be a non-negative integer" >&2
+  exit 2
+fi
 
 header="name,profile,instance_path,n,K,m,solver_seed,instance_seed,layout_id,run_id,status,elapsed_s,best_cost,error"
+
+if [ -s "$csv" ] && [ "$(head -n1 "$csv")" != "$header" ]; then
+  echo "[ERROR] incompatible CUDA CSV header: $csv" >&2
+  exit 2
+fi
 
 # Prepare output CSV in advance, keeping existing rows for n values that are
 # not part of the current execution. New rows are then appended live.
@@ -66,10 +92,6 @@ if [ -z "$selected_instances" ]; then
 fi
 total_runs=$((selected_instances * repeats))
 done_runs=0
-run_duration_sum="0.0"
-run_duration_count=0
-run_rss_sum_gb="0.0"
-run_rss_count=0
 declare -A n_duration_sum
 declare -A n_duration_count
 declare -A n_rss_sum_gb
@@ -79,7 +101,11 @@ tail -n +2 "$manifest" \
   | { if [ -n "$clients" ]; then awk -F, -v list="$clients" 'BEGIN{split(list,a,","); for(i in a) wanted[a[i]]=1} ($4 in wanted)'; else cat; fi; } \
   | { if [ "$limit" -gt 0 ]; then head -n "$limit"; else cat; fi; } \
   | while IFS=, read -r profile name instance_path n K m solver_seed instance_seed layout_id capacity_formula; do
-      for run_id in $(seq 1 "$repeats"); do
+      m_run="$m"
+      if [ "$m_override" -gt 0 ]; then
+        m_run="$m_override"
+      fi
+      for ((run_id = 1; run_id <= repeats; run_id++)); do
         seed_run=$((solver_seed + run_id - 1))
         done_runs=$((done_runs + 1))
         if [ "${n_duration_count[$n]:-0}" -gt 0 ]; then
@@ -104,11 +130,8 @@ tail -n +2 "$manifest" \
         /usr/bin/time -f "%e,%M" -o "$time_file" env \
           ACO_SOLVER_TIMEOUT_SECONDS="$runtime_s" \
           ACO_SOLVER_STAGNATION_EPOCHS="$stag_iters" \
-          ACO_SOLVER_STAGNATION_ITERS="$stag_iters" \
           ACO_SOLVER_MIN_REL_IMPROVEMENT="$improve_rel" \
-          ACO_SOLVER_IMPROVE_EPS="$improve_rel" \
-          ACO_CUDA_PROFILE="$cuda_profile" \
-          ./aco_vrp_cuda.out "$instance_path" "$K" "$m" "$seed_run" 2>&1 \
+          ./aco_vrp_cuda.out "$instance_path" "$K" "$m_run" "$seed_run" 2>&1 \
           | tee "$output_file" \
           | awk '/^\[progress\]/ { print; fflush(); }'
         rc=${PIPESTATUS[0]}
@@ -121,16 +144,13 @@ tail -n +2 "$manifest" \
         rm -f "$time_file"
         [ -n "$elapsed" ] || elapsed=""
         if printf '%s' "$elapsed" | grep -Eq '^[0-9]+([.][0-9]+)?$'; then
-          run_duration_sum="$(awk "BEGIN {printf \"%.6f\", (${run_duration_sum}) + (${elapsed})}")"
-          run_duration_count=$((run_duration_count + 1))
           n_duration_sum[$n]="$(awk "BEGIN {printf \"%.6f\", (${n_duration_sum[$n]:-0}) + (${elapsed})}")"
           n_duration_count[$n]=$(( ${n_duration_count[$n]:-0} + 1 ))
         fi
+        rss_gb=""
         if [ -n "${rss_kb:-}" ]; then
           rss_gb="$(awk "BEGIN {printf \"%.6f\", (${rss_kb})/1048576.0}")"
           if printf '%s' "$rss_gb" | grep -Eq '^[0-9]+([.][0-9]+)?$'; then
-            run_rss_sum_gb="$(awk "BEGIN {printf \"%.6f\", (${run_rss_sum_gb}) + (${rss_gb})}")"
-            run_rss_count=$((run_rss_count + 1))
             n_rss_sum_gb[$n]="$(awk "BEGIN {printf \"%.6f\", (${n_rss_sum_gb[$n]:-0}) + (${rss_gb})}")"
             n_rss_count[$n]=$(( ${n_rss_count[$n]:-0} + 1 ))
           fi
@@ -139,10 +159,10 @@ tail -n +2 "$manifest" \
         printf '%s\n' "$out" > "$sol_file"
         if [ "$rc" -eq 0 ]; then
           cost="$(printf '%s\n' "$out" | sed -n -e 's/^best cost: //p' -e 's/^Final Best Cost: //p' | tail -n1)"
-          echo "$name,$profile,$instance_path,$n,$K,$m,$seed_run,$instance_seed,$layout_id,$run_id,ok,$elapsed,$cost," >> "$csv"
+          echo "$name,$profile,$instance_path,$n,$K,$m_run,$seed_run,$instance_seed,$layout_id,$run_id,ok,$elapsed,$cost," >> "$csv"
         else
           err="$(printf '%s' "$out" | tr '\n' ' ' | tr ',' ';')"
-          echo "$name,$profile,$instance_path,$n,$K,$m,$seed_run,$instance_seed,$layout_id,$run_id,error,$elapsed,,$err" >> "$csv"
+          echo "$name,$profile,$instance_path,$n,$K,$m_run,$seed_run,$instance_seed,$layout_id,$run_id,error,$elapsed,,$err" >> "$csv"
         fi
         if [ "$rc" -eq 0 ]; then
           echo "[cuda][completato] tempo_trascorso=${elapsed:-n/a}s | tempo_rimanente=0s | best_cost=${cost:-n/a} | stato=ok | memoria=${rss_gb:-n/a}GiB"

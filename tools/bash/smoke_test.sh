@@ -1,5 +1,10 @@
-#!/bin/bash
+#!/usr/bin/env bash
 set -euo pipefail
+
+if ! command -v timeout >/dev/null 2>&1; then
+  echo "[ERROR] required command not found: timeout" >&2
+  exit 2
+fi
 
 backend="${1:-mpi}"
 root_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"

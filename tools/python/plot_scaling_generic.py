@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import math
 from pathlib import Path
 from statistics import mean, pstdev
 
@@ -22,7 +23,7 @@ CORE_TICKS = [1, 2, 4, 8, 16, 32, 64, 128]
 
 
 def read_rows(path: Path) -> list[dict[str, str]]:
-    with path.open(newline="") as f:
+    with path.open(newline="", encoding="utf-8") as f:
         return list(csv.DictReader(f))
 
 
@@ -75,14 +76,20 @@ def main() -> int:
     if not rows:
         raise SystemExit("empty CSV")
 
+    if "=" not in args.filter:
+        raise SystemExit("--filter must use key=value syntax")
     key, _, val = args.filter.partition("=")
     if key:
         rows = [r for r in rows if r.get(key) == val]
     if args.filter_prefix:
+        if "=" not in args.filter_prefix:
+            raise SystemExit("--filter-prefix must use key=prefix syntax")
         k, _, v = args.filter_prefix.partition("=")
         if k:
             rows = [r for r in rows if r.get(k, "").startswith(v)]
     if args.filter_contains:
+        if "=" not in args.filter_contains:
+            raise SystemExit("--filter-contains must use key=substring syntax")
         k, _, v = args.filter_contains.partition("=")
         if k:
             rows = [r for r in rows if v in r.get(k, "")]
@@ -97,7 +104,7 @@ def main() -> int:
             e = float(r.get("elapsed_s", ""))
         except ValueError:
             continue
-        if g <= 0:
+        if g <= 0 or not math.isfinite(e) or e <= 0:
             continue
         if args.x == "omp_threads" and g > 32:
             continue
@@ -132,7 +139,7 @@ def main() -> int:
         )
 
     out_csv.parent.mkdir(parents=True, exist_ok=True)
-    with out_csv.open("w", newline="") as f:
+    with out_csv.open("w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(
             f,
             fieldnames=[

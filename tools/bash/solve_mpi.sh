@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -uo pipefail
 
+: "${SOLVE_CSV_DIR:?SOLVE_CSV_DIR is required}"
+: "${SOLVE_SOLUTIONS_DIR:?SOLVE_SOLUTIONS_DIR is required}"
+: "${SOLVE_MANIFEST_MPI:?SOLVE_MANIFEST_MPI is required}"
+
 csv="${SOLVE_CSV_DIR}/manifest_openmp_mpi_per_instance_results.csv"
 sol_dir="${SOLVE_SOLUTIONS_DIR}/mpi"
 manifest="${SOLVE_MANIFEST_MPI}"
@@ -16,8 +20,20 @@ mpi_ranks="${SOLVE_MPI_RANKS:-2}"
 omp_threads="${SOLVE_MPI_OMP_THREADS:-2}"
 launcher_pref="${SOLVE_MPI_LAUNCHER:-auto}"
 
+if [ ! -f "$manifest" ]; then
+  echo "[ERROR] OpenMP/MPI manifest not found: $manifest" >&2
+  exit 2
+fi
+if [ ! -x ./aco_vrp_openmp_mpi.out ]; then
+  echo "[ERROR] OpenMP/MPI executable not found: ./aco_vrp_openmp_mpi.out (run 'make openmp_mpi')" >&2
+  exit 2
+fi
+if [ ! -x /usr/bin/time ]; then
+  echo "[ERROR] required executable not found: /usr/bin/time" >&2
+  exit 2
+fi
 if [[ ! "$runtime_s" =~ ^[1-9][0-9]*$ ]] || [ "$runtime_s" -gt 300 ]; then
-  echo "[ERROR] SOLVE_MPI_RUNTIME_S deve essere compreso tra 1 e 300 secondi" >&2
+  echo "[ERROR] SOLVE_MPI_RUNTIME_S must be an integer between 1 and 300" >&2
   exit 2
 fi
 if [[ ! "$mpi_ranks" =~ ^[1-9][0-9]*$ ]] || [ "$mpi_ranks" -gt 4 ]; then
@@ -36,8 +52,25 @@ if [[ ! "$fixed_epochs" =~ ^[0-9]+$ ]]; then
   echo "[ERROR] SOLVE_MPI_FIXED_EPOCHS deve essere un intero >= 0" >&2
   exit 2
 fi
-if [ "$repeats" -lt 1 ]; then
-  repeats=1
+if [[ ! "$stag_iters" =~ ^[0-9]+$ ]]; then
+  echo "[ERROR] SOLVE_MPI_STAGNATION_EPOCHS must be a non-negative integer" >&2
+  exit 2
+fi
+if [[ ! "$improve_rel_pct" =~ ^[0-9]+([.][0-9]+)?$ ]] || awk "BEGIN {exit !($improve_rel_pct <= 0)}"; then
+  echo "[ERROR] SOLVE_MPI_MIN_REL_IMPROVEMENT must be a positive number" >&2
+  exit 2
+fi
+if [[ ! "$repeats" =~ ^[1-9][0-9]*$ ]]; then
+  echo "[ERROR] SOLVE_MPI_REPEATS must be a positive integer" >&2
+  exit 2
+fi
+if [[ ! "$limit" =~ ^[0-9]+$ ]]; then
+  echo "[ERROR] SOLVE_LIMIT must be a non-negative integer" >&2
+  exit 2
+fi
+if [[ "$launcher_pref" != "auto" && "$launcher_pref" != "mpirun" && "$launcher_pref" != "srun" ]]; then
+  echo "[ERROR] SOLVE_MPI_LAUNCHER must be one of: auto, mpirun, srun" >&2
+  exit 2
 fi
 improve_rel="$improve_rel_pct"
 
@@ -51,6 +84,10 @@ elif [ "$launcher_pref" = "auto" ]; then
     launcher_kind="srun"
     launcher_cmd=(srun --mpi=pmix -n "$mpi_ranks" --cpus-per-task "$omp_threads")
   fi
+fi
+if ! command -v "$launcher_kind" >/dev/null 2>&1; then
+  echo "[ERROR] MPI launcher not found: $launcher_kind" >&2
+  exit 2
 fi
 echo "[mpi] launcher=${launcher_kind}"
 
@@ -68,6 +105,9 @@ else
     echo "$header_v2" > "$tmp_csv"
     tail -n +2 "$csv" | awk 'NF > 0 { print $0 ",,," }' >> "$tmp_csv"
     mv "$tmp_csv" "$csv"
+  elif [ "$first_line" != "$header_v2" ]; then
+    echo "[ERROR] incompatible OpenMP/MPI CSV header: $csv" >&2
+    exit 2
   fi
 fi
 
@@ -80,10 +120,6 @@ if [ -z "$selected_instances" ]; then
 fi
 total_runs=$((selected_instances * repeats))
 done_runs=0
-run_duration_sum="0.0"
-run_duration_count=0
-run_rss_sum_gb="0.0"
-run_rss_count=0
 declare -A n_duration_sum
 declare -A n_duration_count
 declare -A n_rss_sum_gb
@@ -97,7 +133,7 @@ tail -n +2 "$manifest" \
       if [ "$mpi_m" -gt 0 ]; then
         m_run="$mpi_m"
       fi
-      for run_id in $(seq 1 "$repeats"); do
+      for ((run_id = 1; run_id <= repeats; run_id++)); do
         seed_run=$((solver_seed + run_id - 1))
         done_runs=$((done_runs + 1))
         if [ "${n_duration_count[$n]:-0}" -gt 0 ]; then
@@ -138,8 +174,6 @@ tail -n +2 "$manifest" \
         rm -f "$stats_file"
         [ -n "$elapsed" ] || elapsed=""
         if printf '%s' "$elapsed" | grep -Eq '^[0-9]+([.][0-9]+)?$'; then
-          run_duration_sum="$(awk "BEGIN {printf \"%.6f\", (${run_duration_sum}) + (${elapsed})}")"
-          run_duration_count=$((run_duration_count + 1))
           n_duration_sum[$n]="$(awk "BEGIN {printf \"%.6f\", (${n_duration_sum[$n]:-0}) + (${elapsed})}")"
           n_duration_count[$n]=$(( ${n_duration_count[$n]:-0} + 1 ))
         fi
@@ -147,8 +181,6 @@ tail -n +2 "$manifest" \
         if [ -n "$rss_kb" ]; then
           rss_gb="$(awk "BEGIN {printf \"%.6f\", (${rss_kb})/1048576.0}")"
           if printf '%s' "$rss_gb" | grep -Eq '^[0-9]+([.][0-9]+)?$'; then
-            run_rss_sum_gb="$(awk "BEGIN {printf \"%.6f\", (${run_rss_sum_gb}) + (${rss_gb})}")"
-            run_rss_count=$((run_rss_count + 1))
             n_rss_sum_gb[$n]="$(awk "BEGIN {printf \"%.6f\", (${n_rss_sum_gb[$n]:-0}) + (${rss_gb})}")"
             n_rss_count[$n]=$(( ${n_rss_count[$n]:-0} + 1 ))
           fi

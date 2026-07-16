@@ -17,39 +17,57 @@ def gib(x: int) -> float:
     return x / (1024.0 ** 3)
 
 
-def matrix_double_bytes(n: int) -> int:
+def matrix_bytes(n: int, element_bytes: int) -> int:
     side = n + 1
-    row = align_up(side * 8)
+    row = align_up(side * element_bytes)
     data = side * row
     ptrs = side * 8
-    return data + ptrs
+    return 24 + data + ptrs
 
 
-def cand_k(n: int) -> int:
-    if n <= 8:
-        return n
-    if n <= 256:
-        return 16
-    if n <= 4096:
-        return 24
-    return 32
+def read_l3_cache_bytes() -> int:
+    path = Path("/sys/devices/system/cpu/cpu0/cache/index3/size")
+    try:
+        text = path.read_text(encoding="utf-8").strip().upper()
+    except OSError:
+        return 0
+    multiplier = 1
+    if text.endswith("K"):
+        multiplier = 1024
+        text = text[:-1]
+    elif text.endswith("M"):
+        multiplier = 1024**2
+        text = text[:-1]
+    elif text.endswith("G"):
+        multiplier = 1024**3
+        text = text[:-1]
+    try:
+        return int(text) * multiplier
+    except ValueError:
+        return 0
+
+
+def omp_candidate_k(n: int, l3_bytes: int) -> int:
+    if l3_bytes <= 0:
+        return 32
+    value = int((l3_bytes * 0.7) / ((n + 1) * 8.0))
+    return min(512, max(16, value))
 
 
 def stride(cols: int, elem: int) -> int:
     return align_up(cols * elem) // elem
 
 
-def shared_bytes(n: int) -> int:
+def shared_bytes(n: int, candidates: int) -> int:
     rows = n + 1
-    k = cand_k(n)
-    s = stride(k, 4)
+    s = stride(candidates, 4)
     # int candidate + float eta + float score
     return rows * s * 4 + rows * s * 4 + rows * s * 4
 
 
 def solution_bytes(k: int, n: int) -> int:
     cap = n + 2
-    return 24 + k * 16 + k * cap * 4
+    return 24 + k * 16 + align_up(k * cap * 4)
 
 
 def seq_other_bytes(n: int, k: int) -> int:
@@ -57,23 +75,30 @@ def seq_other_bytes(n: int, k: int) -> int:
     route_loads = k * 4
     # ws.sol + iter_best + best_solution
     sols = 3 * solution_bytes(k, n)
-    return shared_bytes(n) + visited + route_loads + sols
+    return shared_bytes(n, n) + visited + route_loads + sols
 
 
-def omp_other_bytes(n: int, k: int, threads: int) -> int:
+def omp_other_bytes(n: int, k: int, threads: int, candidates: int) -> int:
     visited = ((n // 64) + 1) * 8
+    meta = ((((n // 64) + 1) // 64) + 1) * 8
     route_loads = k * 4
-    # per thread: sol + thread_best + visited + route_loads
-    per_thread = 2 * solution_bytes(k, n) + visited + route_loads
+    # per thread: sol + thread_best + hierarchical visited masks + route loads
+    per_thread = 2 * solution_bytes(k, n) + visited + meta + route_loads
     # rank-level iter_best + best_solution + shared tables
-    rank_level = 2 * solution_bytes(k, n) + shared_bytes(n)
+    rank_level = 2 * solution_bytes(k, n) + shared_bytes(n, candidates)
     return threads * per_thread + rank_level
 
 
 def read_manifest(path: Path):
     out = []
-    with path.open(newline="") as f:
+    if not path.is_file():
+        raise FileNotFoundError(f"manifest not found: {path}")
+    with path.open(newline="", encoding="utf-8") as f:
         rd = csv.DictReader(f)
+        required = {"name", "n", "K"}
+        missing = required - set(rd.fieldnames or [])
+        if missing:
+            raise ValueError(f"manifest {path} is missing columns: {sorted(missing)}")
         for r in rd:
             out.append((r["name"], int(r["n"]), int(r["K"])))
     out.sort(key=lambda x: x[1])
@@ -85,9 +110,21 @@ def main():
     ap.add_argument("--manifest-seq", default="instances/generated_benchmark/manifest.csv")
     ap.add_argument("--manifest-openmp", default="instances/generated_benchmark/manifest_openmp_mpi.csv")
     ap.add_argument("--openmp-threads", type=int, default=32)
+    ap.add_argument(
+        "--l3-cache-bytes",
+        type=int,
+        default=0,
+        help="L3 size used by OpenMP candidate tuning; 0 reads local sysfs",
+    )
     ap.add_argument("--out-csv", default="results/analysis/memory_structures_seq_openmp.csv")
     ap.add_argument("--out-png", default="results/analysis/memory_structures_seq_openmp_stacked.png")
     args = ap.parse_args()
+    if args.openmp_threads < 1:
+        ap.error("--openmp-threads must be positive")
+    if args.l3_cache_bytes < 0:
+        ap.error("--l3-cache-bytes must be non-negative")
+
+    l3_bytes = args.l3_cache_bytes or read_l3_cache_bytes()
 
     seq = read_manifest(Path(args.manifest_seq))
     omp = read_manifest(Path(args.manifest_openmp))
@@ -97,19 +134,22 @@ def main():
 
     rows = []
     for name, n, k in seq:
-        c = matrix_double_bytes(n)
-        tau = matrix_double_bytes(n)
+        c = matrix_bytes(n, 8)
+        tau = matrix_bytes(n, 8)
         other = seq_other_bytes(n, k)
-        rows.append(("seq", name, n, k, gib(c), gib(tau), gib(other), gib(c + tau + other)))
+        rows.append(("seq", name, n, k, n, gib(c), gib(tau), gib(other), gib(c + tau + other)))
     for name, n, k in omp:
-        c = matrix_double_bytes(n)
-        tau = matrix_double_bytes(n)
-        other = omp_other_bytes(n, k, args.openmp_threads)
-        rows.append(("openmp", name, n, k, gib(c), gib(tau), gib(other), gib(c + tau + other)))
+        candidates = omp_candidate_k(n, l3_bytes)
+        # The parsed double cost matrix remains alive while the backend builds
+        # and uses its rank-local float copy.
+        c = matrix_bytes(n, 8) + matrix_bytes(n, 4)
+        tau = matrix_bytes(n, 4)
+        other = omp_other_bytes(n, k, args.openmp_threads, candidates)
+        rows.append(("openmp", name, n, k, candidates, gib(c), gib(tau), gib(other), gib(c + tau + other)))
 
-    with out_csv.open("w", newline="") as f:
+    with out_csv.open("w", newline="", encoding="utf-8") as f:
         wr = csv.writer(f)
-        wr.writerow(["backend", "name", "n", "K", "c_gib", "tau_gib", "other_gib", "total_gib"])
+        wr.writerow(["backend", "name", "n", "K", "candidate_k", "c_gib", "tau_gib", "other_gib", "total_gib"])
         wr.writerows(rows)
 
     seq_rows = [r for r in rows if r[0] == "seq"]
@@ -122,9 +162,9 @@ def main():
         (axes[1], f"OpenMP ({args.openmp_threads} threads)", omp_rows),
     ]:
         x = list(range(len(data)))
-        c = [r[4] for r in data]
-        tau = [r[5] for r in data]
-        other = [r[6] for r in data]
+        c = [r[5] for r in data]
+        tau = [r[6] for r in data]
+        other = [r[7] for r in data]
         nvals = [r[2] for r in data]
 
         ax.bar(x, c, label="Cost matrix (c)")

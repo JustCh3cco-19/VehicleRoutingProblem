@@ -25,22 +25,33 @@ gpu_time="00:30:00"
 module_loads=""
 dry_run=0
 
+require_value() {
+  if [ "$#" -lt 2 ] || [ -z "$2" ]; then
+    echo "[ERROR] missing value for $1" >&2
+    exit 2
+  fi
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --tag)
-      tag="${2:-}"
+      require_value "$@"
+      tag="$2"
       shift 2
       ;;
     --cpu-time)
-      cpu_time="${2:-}"
+      require_value "$@"
+      cpu_time="$2"
       shift 2
       ;;
     --gpu-time)
-      gpu_time="${2:-}"
+      require_value "$@"
+      gpu_time="$2"
       shift 2
       ;;
     --module-loads)
-      module_loads="${2:-}"
+      require_value "$@"
+      module_loads="$2"
       shift 2
       ;;
     --dry-run)
@@ -58,6 +69,11 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+if [[ ! "$tag" =~ ^[A-Za-z0-9._-]+$ ]]; then
+  echo "[ERROR] --tag may contain only letters, digits, '.', '_' and '-'" >&2
+  exit 2
+fi
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 submit_solve="${script_dir}/submit_solve.sh"

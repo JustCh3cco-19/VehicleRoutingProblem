@@ -13,9 +13,9 @@ FIGURES := \
 
 .PHONY: all plots clean
 
-all: ../report.pdf
+all: ../../report.pdf
 
-../report.pdf: $(SOURCES) $(FIGURES)
+../../report.pdf: $(SOURCES) $(FIGURES)
 	@set -eu; \
 	build_dir=$$(mktemp -d); \
 	trap 'rm -rf "$$build_dir"' EXIT; \
@@ -24,7 +24,7 @@ all: ../report.pdf
 	cp "$$build_dir/report.pdf" "$@"
 
 plots:
-	cd .. && python3 paper/scripts/analyze_results.py --root .
+	cd ../.. && python3 docs/paper/scripts/analyze_results.py --root .
 
 clean:
-	rm -f main.aux main.log main.out main.toc main.lof main.lot main.pdf report.pdf ../report.pdf
+	rm -f main.aux main.log main.out main.toc main.lof main.lot main.pdf report.pdf ../../report.pdf

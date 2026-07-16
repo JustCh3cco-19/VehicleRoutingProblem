@@ -15,6 +15,17 @@ if [ ! -f "$new_csv" ] || [ ! -s "$new_csv" ]; then
 fi
 
 header="$(head -n1 "$new_csv")"
+if [ "$(awk -F, 'NR == 1 { print NF }' "$new_csv")" -lt 4 ]; then
+  echo "merge_results_csv_by_n: expected at least four CSV columns: $new_csv" >&2
+  exit 1
+fi
+if [ -f "$dest_csv" ] && [ -s "$dest_csv" ] && [ "$(head -n1 "$dest_csv")" != "$header" ]; then
+  echo "merge_results_csv_by_n: CSV headers do not match" >&2
+  exit 1
+fi
+
+dest_dir="$(dirname "$dest_csv")"
+mkdir -p "$dest_dir"
 tmp_out="$(mktemp)"
 trap 'rm -f "$tmp_out"' EXIT
 
@@ -36,4 +47,3 @@ fi
 
 tail -n +2 "$new_csv" >> "$tmp_out"
 mv "$tmp_out" "$dest_csv"
-

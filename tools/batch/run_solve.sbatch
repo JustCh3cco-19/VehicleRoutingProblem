@@ -10,8 +10,8 @@
 
 set -euo pipefail
 
-ROOT_DIR="${ROOT_DIR:-$SLURM_SUBMIT_DIR}"
-TARGET="${TARGET:-solve_all}"
+ROOT_DIR="${ROOT_DIR:-${SLURM_SUBMIT_DIR:-}}"
+TARGET="${TARGET:-solve_seq}"
 MAKE_ARGS_B64="${MAKE_ARGS_B64:-}"
 MODULE_LOADS_B64="${MODULE_LOADS_B64:-}"
 MAKE_ARGS=""
@@ -28,6 +28,10 @@ if [[ -z "${ROOT_DIR}" ]]; then
   echo "[ERROR] ROOT_DIR non impostata e SLURM_SUBMIT_DIR vuota."
   exit 1
 fi
+if [[ ! -d "$ROOT_DIR" ]]; then
+  echo "[ERROR] repository directory not found: $ROOT_DIR" >&2
+  exit 1
+fi
 
 cd "${ROOT_DIR}"
 mkdir -p results/slurm
@@ -41,8 +45,13 @@ if [[ -f "/home/guest/init-hpc.sh" ]]; then
 fi
 
 if [[ -n "${MODULE_LOADS}" ]]; then
+  if ! command -v module >/dev/null 2>&1; then
+    echo "[ERROR] module loads requested, but the 'module' command is unavailable" >&2
+    exit 1
+  fi
   # Esempio: MODULE_LOADS="gcc/13.2 openmpi/4.1 cuda/12.2"
-  for mod in ${MODULE_LOADS}; do
+  read -r -a MODULE_ARGV <<< "$MODULE_LOADS"
+  for mod in "${MODULE_ARGV[@]}"; do
     module load "${mod}"
   done
 fi
@@ -52,4 +61,5 @@ echo "[INFO] target=${TARGET}"
 echo "[INFO] make_args=${MAKE_ARGS}"
 echo "[INFO] cwd=$(pwd)"
 
-make "${TARGET}" ${MAKE_ARGS}
+read -r -a MAKE_ARGV <<< "$MAKE_ARGS"
+make "${TARGET}" "${MAKE_ARGV[@]}"

@@ -82,15 +82,10 @@ def parse_routes(solution_path: Path) -> list[list[int]]:
     return routes
 
 
-def infer_run_folder_name(solution_path: Path, instance_path: Path) -> str:
-    s = solution_path.stem
-    m = re.search(r"(n\d+).*?(run\d+)", s)
-    if m:
-        return f"{m.group(1)}_{m.group(2)}"
-    m2 = re.search(r"(n\d+)", instance_path.stem)
-    if m2:
-        return f"{m2.group(1)}_{s}"
-    return s
+def infer_run_folder_name(solution_path: Path) -> str:
+    # The full stem includes instance, backend, and run identifiers and avoids
+    # collisions when plotting several backends for the same customer count.
+    return re.sub(r"_solution$", "", solution_path.stem)
 
 
 def infer_instance_for_solution(solution_path: Path, instances_dir: Path) -> Path | None:
@@ -120,7 +115,7 @@ def plot_one(
 
     import matplotlib.pyplot as plt
 
-    run_dir = out_dir / infer_run_folder_name(solution_path, instance_path)
+    run_dir = out_dir / infer_run_folder_name(solution_path)
     routes_dir = run_dir / "routes"
     summary_dir = run_dir / "summary"
     routes_dir.mkdir(parents=True, exist_ok=True)
@@ -339,6 +334,8 @@ def main() -> int:
         help="Directory istanze usata con --all-runs",
     )
     args = parser.parse_args()
+    if args.dpi < 1:
+        parser.error("--dpi deve essere positivo")
 
     out_path = Path(args.out)
     out_dir = Path(args.out_dir)
@@ -347,13 +344,19 @@ def main() -> int:
         import matplotlib.pyplot as plt  # noqa: F401
     except Exception as exc:
         raise RuntimeError(
-            "matplotlib non disponibile. Installa con: uv pip install matplotlib"
+            "matplotlib non disponibile. Installa con: python -m pip install matplotlib"
         ) from exc
 
     generated: list[Path] = []
     if args.all_runs:
         instances_dir = Path(args.instances_dir)
+        if not instances_dir.is_dir():
+            raise ValueError(f"Directory istanze non trovata: {instances_dir}")
+        if Path(args.solutions_glob).is_absolute():
+            raise ValueError("--solutions-glob deve essere relativo alla root della repository")
         all_solutions = sorted(Path().glob(args.solutions_glob))
+        if not all_solutions:
+            raise ValueError(f"Nessuna soluzione trovata: {args.solutions_glob}")
         sol_iter = maybe_tqdm(all_solutions, desc="all-runs", unit="solution")
 
         for solution_path in sol_iter:
